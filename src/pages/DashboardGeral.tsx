@@ -306,8 +306,16 @@ const DashboardGeral = () => {
                           <div className="col-span-2 flex items-center gap-2 p-2 rounded-md bg-muted/50">
                             <Banknote className="h-4 w-4 text-muted-foreground shrink-0" />
                             <div>
-                              <p className="text-xs text-muted-foreground">Bilheteria</p>
-                              <p className="text-sm font-semibold">{fmt(kpi.bilheteria)}</p>
+                              <p className="text-xs text-muted-foreground">Bilheteria (+/-)</p>
+                              {(() => {
+                                const spend = metaSpendMap.get(cidade.slug) || 0;
+                                const diff = kpi.bilheteria - spend;
+                                return (
+                                  <p className={`text-sm font-semibold ${diff >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                                    {fmt(diff)}
+                                  </p>
+                                );
+                              })()}
                             </div>
                           </div>
                         </div>
