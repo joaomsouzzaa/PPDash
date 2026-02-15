@@ -37,7 +37,7 @@ const eventosItems = [
 ];
 
 const insideSalesItems = [
-  { title: "Dashboard Inside Sales", url: "/inside-sales", icon: LayoutDashboard },
+  { title: "Dashboard Geral", url: "/inside-sales", icon: LayoutDashboard },
 ];
 
 const analyticsItems = [
