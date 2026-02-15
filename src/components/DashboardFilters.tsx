@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Select,
   SelectContent,
@@ -21,35 +21,33 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
-  const fetchedRef = useRef(false);
+  const lastTokenRef = useRef<string | null>(null);
+  const fetchingRef = useRef(false);
 
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
 
-  useEffect(() => {
+  const doFetch = useCallback(() => {
     const connected = localStorage.getItem("meta_connected") === "true";
     const token = localStorage.getItem("meta_access_token");
     const expired = isTokenExpired();
 
-    if (!connected || !token) {
-      setAdAccounts([]);
-      return;
-    }
-    if (expired) {
+    if (!connected || !token || expired) {
       setAdAccounts([]);
       return;
     }
 
-    // Prevent duplicate fetches within the same mount
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+    // Skip if already fetched with the same token
+    if (lastTokenRef.current === token || fetchingRef.current) return;
+    fetchingRef.current = true;
 
     setLoadingAccounts(true);
     setRateLimited(false);
 
     fetchAdAccounts()
       .then((accounts) => {
+        lastTokenRef.current = token;
         setAdAccounts(accounts);
         if (
           filters.adAccount !== "all" &&
@@ -62,16 +60,35 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         const msg = err?.message || "";
         if (msg.toLowerCase().includes("too many calls") || msg.includes("rate")) {
           setRateLimited(true);
-          console.warn("[DashboardFilters] Rate limited by Meta API. Try again in a few minutes.");
         } else {
           console.warn("[DashboardFilters] Error fetching accounts:", msg);
         }
         setAdAccounts([]);
-        // Allow retry on next mount
-        fetchedRef.current = false;
       })
-      .finally(() => setLoadingAccounts(false));
-  }, []);
+      .finally(() => {
+        fetchingRef.current = false;
+        setLoadingAccounts(false);
+      });
+  }, [filters, onFiltersChange]);
+
+  // Fetch on mount
+  useEffect(() => {
+    doFetch();
+  }, [doFetch]);
+
+  // Re-fetch when user navigates back to this tab (e.g. after reconnecting on Integracoes)
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") doFetch();
+    };
+    const onFocus = () => doFetch();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [doFetch]);
 
   const update = (partial: Partial<Filters>) => {
     onFiltersChange({ ...filters, ...partial });
