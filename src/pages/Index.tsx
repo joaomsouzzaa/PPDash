@@ -112,11 +112,11 @@ const Index = () => {
     loadSpend();
   }, [loadSpend, refreshKey]);
 
-  // Auto-refresh every 10 minutes
+  // Auto-refresh every 10 minutes (was 60s — caused Meta rate limiting)
   useEffect(() => {
     const interval = setInterval(() => {
       setRefreshKey((k) => k + 1);
-    }, 60 * 1000);
+    }, 10 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 

@@ -77,13 +77,25 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
 
   return res.json();
 }
+// In-memory cache for ad accounts (5 min TTL)
+let _adAccountsCache: { data: AdAccount[]; ts: number } | null = null;
+const AD_ACCOUNTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-export async function fetchAdAccounts(): Promise<AdAccount[]> {
+export async function fetchAdAccounts(skipCache = false): Promise<AdAccount[]> {
+  if (!skipCache && _adAccountsCache && Date.now() - _adAccountsCache.ts < AD_ACCOUNTS_CACHE_TTL) {
+    return _adAccountsCache.data;
+  }
   const res = await graphApiFetch<{ data: AdAccount[] }>("/me/adaccounts", {
     fields: "name,account_id,currency",
     limit: "100",
   });
-  return res.data || [];
+  const accounts = res.data || [];
+  _adAccountsCache = { data: accounts, ts: Date.now() };
+  return accounts;
+}
+
+export function clearAdAccountsCache() {
+  _adAccountsCache = null;
 }
 
 function buildTimeRange(dateRange: string): { since: string; until: string } {
