@@ -133,7 +133,7 @@ const VendasEventos = () => {
   const [city, setCity] = useState("all");
   const [statusFilter, setStatusFilter] = useState("aprovada");
   const [page, setPage] = useState(1);
-  const perPage = 10;
+  const [perPage, setPerPage] = useState(10);
 
   // Sort state
   const [sortKey, setSortKey] = useState<SortKey>("data_venda");
@@ -529,9 +529,22 @@ const VendasEventos = () => {
             {/* Pagination */}
             {sortedVendas.length > perPage && (
               <div className="flex items-center justify-between pt-2">
-                <span className="text-sm text-muted-foreground">
-                  Mostrando {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, sortedVendas.length)} de {sortedVendas.length}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">
+                    Mostrando {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, sortedVendas.length)} de {sortedVendas.length}
+                  </span>
+                  <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
+                    <SelectTrigger className="w-[80px] h-8 bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 20, 50, 100].map((n) => (
+                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground">por página</span>
+                </div>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
