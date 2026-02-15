@@ -39,6 +39,7 @@ const Index = () => {
       endDate: savedEndDate ? new Date(savedEndDate) : undefined,
       adAccount: savedAccount || "all",
       city: savedCity || "all",
+      produtos: [],
     };
   });
 
