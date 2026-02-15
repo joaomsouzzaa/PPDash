@@ -48,6 +48,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
@@ -142,6 +143,8 @@ const VendasEventos = () => {
   const [editingVenda, setEditingVenda] = useState<VendaRow | null>(null);
   const [editForm, setEditForm] = useState<Partial<VendaRow>>({});
   const [deletingVenda, setDeletingVenda] = useState<VendaRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: cidades = [] } = useCidades();
@@ -284,6 +287,45 @@ const VendasEventos = () => {
     queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
   };
 
+  const toggleSelectId = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allPageSelected = paginatedVendas.length > 0 && paginatedVendas.every((v) => selectedIds.has(v.id));
+
+  const toggleSelectAll = () => {
+    if (allPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginatedVendas.forEach((v) => next.delete(v.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginatedVendas.forEach((v) => next.add(v.id));
+        return next;
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    const { error } = await supabase.from("vendas").delete().in("id", ids);
+    if (error) {
+      toast.error("Erro ao excluir vendas");
+      return;
+    }
+    toast.success(`${ids.length} venda${ids.length > 1 ? "s" : ""} excluída${ids.length > 1 ? "s" : ""}`);
+    setSelectedIds(new Set());
+    setShowBulkDelete(false);
+    queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -363,11 +405,30 @@ const VendasEventos = () => {
               </span>
             </div>
 
+            {/* Bulk delete banner */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2">
+                <span className="text-sm font-medium">
+                  {selectedIds.size} venda{selectedIds.size > 1 ? "s" : ""} selecionada{selectedIds.size > 1 ? "s" : ""}
+                </span>
+                <Button variant="destructive" size="sm" onClick={() => setShowBulkDelete(true)}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir selecionadas
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Limpar seleção
+                </Button>
+              </div>
+            )}
+
             {/* Table */}
             <div className="rounded-lg border border-border overflow-auto">
               <Table>
                 <TableHeader>
                    <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} />
+                    </TableHead>
                     {sortableHead("Data", "data_venda")}
                     {sortableHead("Comprador", "nome_comprador")}
                     {sortableHead("Produto", "produto")}
@@ -386,7 +447,7 @@ const VendasEventos = () => {
                   {isLoading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 12 }).map((_, j) => (
+                         {Array.from({ length: 13 }).map((_, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -395,13 +456,19 @@ const VendasEventos = () => {
                     ))
                   ) : vendas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
                         Nenhuma venda encontrada no período selecionado.
                       </TableCell>
                     </TableRow>
                   ) : (
                     paginatedVendas.map((v) => (
-                      <TableRow key={v.id}>
+                      <TableRow key={v.id} data-state={selectedIds.has(v.id) ? "selected" : undefined}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(v.id)}
+                            onCheckedChange={() => toggleSelectId(v.id)}
+                          />
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">
                           {new Date(v.data_venda).toLocaleDateString("pt-BR", {
                             day: "2-digit",
@@ -600,6 +667,24 @@ const VendasEventos = () => {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedIds.size} venda{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. As <strong>{selectedIds.size}</strong> vendas selecionadas serão removidas permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir todas
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
