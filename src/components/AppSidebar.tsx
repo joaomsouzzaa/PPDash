@@ -60,7 +60,7 @@ export function AppSidebar() {
           </div>
           <div>
             <h2 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight">
-              AdMetrics
+              ScaleMetrics
             </h2>
             <p className="text-xs text-sidebar-foreground">Dashboard</p>
           </div>
