@@ -31,8 +31,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 const eventosItems = [
-  { title: "Dashboard 1:1", url: "/", icon: LayoutDashboard },
   { title: "Dashboard Geral", url: "/eventos-geral", icon: LayoutDashboard },
+  { title: "Dashboard 1:1", url: "/", icon: LayoutDashboard },
   { title: "Vendas", url: "/vendas-eventos", icon: ShoppingCart },
 ];
 
