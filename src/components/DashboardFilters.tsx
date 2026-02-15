@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { PlusCircle, Pencil } from "lucide-react";
+import { PlusCircle, Pencil, EyeOff } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,6 +13,7 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { AddCidadeDialog } from "@/components/AddCidadeDialog";
 import { EditCidadeDialog } from "@/components/EditCidadeDialog";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
+import { ManageHiddenCidadesDialog } from "@/components/ManageHiddenCidadesDialog";
 import { useCidades, type Cidade } from "@/hooks/useCidades";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -26,6 +27,8 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [addCidadeOpen, setAddCidadeOpen] = useState(false);
   const [editCidade, setEditCidade] = useState<Cidade | null>(null);
+  const [manageHiddenOpen, setManageHiddenOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const queryClient = useQueryClient();
 
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
@@ -61,6 +64,10 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const handleCityChange = (v: string) => {
     if (v === "_add_new") {
       setAddCidadeOpen(true);
+      return;
+    }
+    if (v === "_manage_hidden") {
+      setManageHiddenOpen(true);
       return;
     }
     update({ city: v });
@@ -136,6 +143,12 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
                 Cadastrar nova cidade
               </span>
             </SelectItem>
+            <SelectItem value="_manage_hidden">
+              <span className="flex items-center gap-1.5">
+                <EyeOff className="h-3.5 w-3.5" />
+                Cidades desativadas
+              </span>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -151,6 +164,12 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         onOpenChange={(open) => { if (!open) setEditCidade(null); }}
         cidade={editCidade}
         onCidadeUpdated={() => queryClient.invalidateQueries({ queryKey: ["cidades"] })}
+      />
+      <ManageHiddenCidadesDialog
+        open={manageHiddenOpen}
+        onOpenChange={setManageHiddenOpen}
+        cidades={cidades}
+        onUpdated={() => setRefreshKey((k) => k + 1)}
       />
     </>
   );
