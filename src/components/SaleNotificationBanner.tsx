@@ -53,7 +53,7 @@ export function SaleNotificationBanner() {
   const playDrumSound = useCallback(() => {
     if (audioUrlRef.current) {
       const audio = new Audio(audioUrlRef.current);
-      audio.volume = 0.7;
+      audio.volume = 1.0;
       audio.play().catch(console.error);
     }
   }, []);
