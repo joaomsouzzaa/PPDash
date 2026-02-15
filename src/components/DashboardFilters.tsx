@@ -25,7 +25,24 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
 
+  // Re-check meta connection status on every render to pick up changes from Integracoes page
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
+  const hasToken = !!localStorage.getItem("meta_access_token");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Listen for storage changes (from other tabs) and visibility changes (same tab navigation)
+  useEffect(() => {
+    const onStorage = () => setRefreshKey((k) => k + 1);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") setRefreshKey((k) => k + 1);
+    };
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isMetaConnected) {
@@ -53,7 +70,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         setAdAccounts([]);
       })
       .finally(() => setLoadingAccounts(false));
-  }, [isMetaConnected]);
+  }, [isMetaConnected, hasToken, refreshKey]);
 
   const update = (partial: Partial<Filters>) => {
     onFiltersChange({ ...filters, ...partial });
