@@ -27,9 +27,9 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: "Intense loud celebratory drum ensemble, multiple bass drums and snare drums playing fast energetic rhythmic pattern, tribal festival drumming, very loud and powerful with heavy reverb and impact, like a stadium celebration",
+          text: "Extremely loud chaotic celebration noise, multiple bass drums pounding fast, church bells ringing aggressively, vuvuzela horns blasting nonstop, stadium crowd going crazy, all playing at once making maximum noise, no rhythm just pure loud celebratory chaos",
           duration_seconds: 5,
-          prompt_influence: 0.7,
+          prompt_influence: 0.8,
         }),
       }
     );
