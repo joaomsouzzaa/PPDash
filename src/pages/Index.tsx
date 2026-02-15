@@ -3,8 +3,6 @@ import {
   TrendingUp,
   Users,
   ShoppingCart,
-  MousePointerClick,
-  Eye,
   Target,
   Crown,
   User,
@@ -72,17 +70,17 @@ const Index = () => {
               />
             </div>
 
-            {/* KPI Row 2 - Engagement & Sales */}
+            {/* KPI Row 2 - Sales breakdown */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
-                title="Participantes"
+                title="Total de Participantes"
                 value="246"
                 change="+18 esta semana"
                 changeType="positive"
                 icon={Users}
               />
               <KpiCard
-                title="VIPs"
+                title="Total de VIPs"
                 value="52"
                 change="21% do total"
                 changeType="neutral"
@@ -90,52 +88,18 @@ const Index = () => {
                 iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
               />
               <KpiCard
-                title="Individuais"
+                title="Vendas Individuais"
                 value="118"
                 icon={User}
                 change="64% das vendas"
                 changeType="neutral"
               />
               <KpiCard
-                title="Duplos"
+                title="Vendas de Duplos"
                 value="66"
                 icon={Users2}
                 change="36% das vendas"
                 changeType="neutral"
-              />
-            </div>
-
-            {/* KPI Row 3 - Campaign Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard
-                title="Leads"
-                value="1.842"
-                change="+324 novos"
-                changeType="positive"
-                icon={Users}
-                iconColor="bg-primary/10 text-primary"
-              />
-              <KpiCard
-                title="Impressões"
-                value="284.500"
-                change="+15.8%"
-                changeType="positive"
-                icon={Eye}
-              />
-              <KpiCard
-                title="Cliques"
-                value="12.340"
-                change="CTR: 4.34%"
-                changeType="neutral"
-                icon={MousePointerClick}
-              />
-              <KpiCard
-                title="Alcance"
-                value="198.200"
-                change="+22.1%"
-                changeType="positive"
-                icon={Target}
-                iconColor="bg-accent/10 text-accent"
               />
             </div>
 
