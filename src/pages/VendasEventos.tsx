@@ -128,9 +128,15 @@ type VendaRow = {
 };
 
 const VendasEventos = () => {
-  const [dateRange, setDateRange] = useState("30d");
-  const [startDate, setStartDate] = useState<Date | undefined>();
-  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [dateRange, setDateRange] = useState(() => localStorage.getItem("selected_date_range") || "30d");
+  const [startDate, setStartDate] = useState<Date | undefined>(() => {
+    const saved = localStorage.getItem("selected_start_date");
+    return saved ? new Date(saved) : undefined;
+  });
+  const [endDate, setEndDate] = useState<Date | undefined>(() => {
+    const saved = localStorage.getItem("selected_end_date");
+    return saved ? new Date(saved) : undefined;
+  });
   const [city, setCity] = useState("all");
   const [tipoIngressoFilter, setTipoIngressoFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("aprovada");
@@ -374,6 +380,9 @@ const VendasEventos = () => {
                   setStartDate(s);
                   setEndDate(e);
                   setPage(1);
+                  localStorage.setItem("selected_date_range", preset);
+                  if (s) localStorage.setItem("selected_start_date", s.toISOString()); else localStorage.removeItem("selected_start_date");
+                  if (e) localStorage.setItem("selected_end_date", e.toISOString()); else localStorage.removeItem("selected_end_date");
                 }}
               />
               <Select value={city} onValueChange={(v) => { setCity(v); setPage(1); }}>
