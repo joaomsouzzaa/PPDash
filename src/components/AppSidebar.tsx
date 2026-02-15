@@ -137,19 +137,6 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Configurações da Conta">
-              <NavLink
-                to="/configuracoes"
-                end
-                className="hover:bg-sidebar-accent/80"
-                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
-              >
-                <Settings className="h-4 w-4" />
-                <span>Configurações da Conta</span>
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Gerenciar Plano">
               <NavLink
                 to="/plano"
@@ -172,6 +159,19 @@ export function AppSidebar() {
               >
                 <Users className="h-4 w-4" />
                 <span>Minha Equipe</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Configurações da Conta">
+              <NavLink
+                to="/configuracoes"
+                end
+                className="hover:bg-sidebar-accent/80"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Configurações da Conta</span>
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
