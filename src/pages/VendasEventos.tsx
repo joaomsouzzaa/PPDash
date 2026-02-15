@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { DateRangePicker } from "@/components/DateRangePicker";
@@ -49,8 +49,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
+
+type SortKey = "data_venda" | "nome_comprador" | "produto" | "cidade" | "tipo_ingresso" | "quantidade" | "valor" | "metodo_pagamento" | "status" | "cupom" | "plataforma";
+type SortDir = "asc" | "desc";
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
   if (startDate && endDate) {
@@ -131,6 +134,10 @@ const VendasEventos = () => {
   const [page, setPage] = useState(1);
   const perPage = 10;
 
+  // Sort state
+  const [sortKey, setSortKey] = useState<SortKey>("data_venda");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
   // Edit / Delete state
   const [editingVenda, setEditingVenda] = useState<VendaRow | null>(null);
   const [editForm, setEditForm] = useState<Partial<VendaRow>>({});
@@ -162,9 +169,52 @@ const VendasEventos = () => {
     refetchInterval: 60_000,
   });
 
-  const totalPages = Math.max(1, Math.ceil(vendas.length / perPage));
+  const toggleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }, [sortKey]);
+
+  const sortedVendas = useMemo(() => {
+    const arr = [...vendas];
+    arr.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "number" && typeof bv === "number") return sortDir === "asc" ? av - bv : bv - av;
+      const cmp = String(av).localeCompare(String(bv), "pt-BR", { sensitivity: "base" });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [vendas, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedVendas.length / perPage));
   const currentPage = Math.min(page, totalPages);
-  const paginatedVendas = vendas.slice((currentPage - 1) * perPage, currentPage * perPage);
+  const paginatedVendas = sortedVendas.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
+
+  const sortableHead = (label: string, col: SortKey, className?: string) => (
+    <TableHead className={className}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
+        onClick={() => toggleSort(col)}
+      >
+        {label}
+        <SortIcon col={col} />
+      </button>
+    </TableHead>
+  );
 
   const statusColor = (s: string) => {
     switch (s) {
@@ -309,7 +359,7 @@ const VendasEventos = () => {
                 </SelectContent>
               </Select>
               <span className="text-sm text-muted-foreground ml-auto">
-                {vendas.length} venda{vendas.length !== 1 ? "s" : ""}
+                {sortedVendas.length} venda{sortedVendas.length !== 1 ? "s" : ""}
               </span>
             </div>
 
@@ -317,20 +367,20 @@ const VendasEventos = () => {
             <div className="rounded-lg border border-border overflow-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Comprador</TableHead>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Cidade</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-center">Qtd.</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead>Pagamento</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Cupom</TableHead>
-                    <TableHead>Plataforma</TableHead>
+                   <TableRow>
+                    {sortableHead("Data", "data_venda")}
+                    {sortableHead("Comprador", "nome_comprador")}
+                    {sortableHead("Produto", "produto")}
+                    {sortableHead("Cidade", "cidade")}
+                    {sortableHead("Tipo", "tipo_ingresso")}
+                    {sortableHead("Qtd.", "quantidade", "text-center")}
+                    {sortableHead("Valor", "valor", "text-right")}
+                    {sortableHead("Pagamento", "metodo_pagamento")}
+                    {sortableHead("Status", "status")}
+                    {sortableHead("Cupom", "cupom")}
+                    {sortableHead("Plataforma", "plataforma")}
                     <TableHead className="w-10"></TableHead>
-                  </TableRow>
+                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
@@ -410,10 +460,10 @@ const VendasEventos = () => {
             </div>
 
             {/* Pagination */}
-            {vendas.length > perPage && (
+            {sortedVendas.length > perPage && (
               <div className="flex items-center justify-between pt-2">
                 <span className="text-sm text-muted-foreground">
-                  Mostrando {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, vendas.length)} de {vendas.length}
+                  Mostrando {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, sortedVendas.length)} de {sortedVendas.length}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
