@@ -173,11 +173,8 @@ function detectTipoIngresso(productName: string): string | null {
 }
 
 function extractCidadeFromProduct(productName: string): string | null {
-  // Match patterns like "Workshop Scale - Natal" or "Workshop Scale - São Luís"
+  // Match patterns like "Workshop Scale - Natal )" or "Workshop Scale - São Luís"
   const match = productName.match(/[-–]\s*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*(?:\)|$)/);
   if (match) return match[1].trim();
-  // Also try pattern inside parentheses like "(Workshop Scale - Natal )"
-  const match2 = productName.match(/[-–]\s*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*\)/);
-  if (match2) return match2[1].trim();
   return null;
 }
