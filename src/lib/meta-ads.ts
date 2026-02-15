@@ -15,7 +15,21 @@ function getAccessToken(): string | null {
   return localStorage.getItem("meta_access_token");
 }
 
-function graphApiFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+/** Returns true if the stored token is still valid (not expired). */
+export function isTokenValid(): boolean {
+  const expiresAt = localStorage.getItem("meta_token_expires_at");
+  if (!expiresAt) return false;
+  return Date.now() < Number(expiresAt);
+}
+
+/** Mark Meta as disconnected due to token expiration. */
+export function markTokenExpired() {
+  localStorage.removeItem("meta_connected");
+  localStorage.removeItem("meta_access_token");
+  localStorage.removeItem("meta_token_expires_at");
+}
+
+async function graphApiFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const token = getAccessToken();
   if (!token) return Promise.reject(new Error("Meta não conectado"));
 
@@ -23,13 +37,35 @@ function graphApiFetch<T>(path: string, params: Record<string, string> = {}): Pr
   url.searchParams.set("access_token", token);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
-  return fetch(url.toString()).then(async (res) => {
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `Graph API error ${res.status}`);
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const errMsg = err?.error?.message || `Graph API error ${res.status}`;
+    // Detect expired / invalid token
+    const errCode = err?.error?.code;
+    if (errCode === 190 || res.status === 401) {
+      markTokenExpired();
     }
-    return res.json();
+    throw new Error(errMsg);
+  }
+  return res.json();
+}
+
+/** Exchange a short-lived token for a long-lived one via the backend. */
+export async function exchangeForLongLivedToken(shortLivedToken: string): Promise<{ access_token: string; expires_in: number }> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const res = await fetch(`${supabaseUrl}/functions/v1/exchange-token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ short_lived_token: shortLivedToken }),
   });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Falha ao trocar token");
+  }
+
+  return res.json();
 }
 
 export async function fetchAdAccounts(): Promise<AdAccount[]> {
