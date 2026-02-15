@@ -27,9 +27,9 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: "A single powerful drum hit, like a celebratory bass drum boom with reverb, exciting and triumphant",
-          duration_seconds: 2,
-          prompt_influence: 0.5,
+          text: "Intense loud celebratory drum ensemble, multiple bass drums and snare drums playing fast energetic rhythmic pattern, tribal festival drumming, very loud and powerful with heavy reverb and impact, like a stadium celebration",
+          duration_seconds: 5,
+          prompt_influence: 0.7,
         }),
       }
     );
