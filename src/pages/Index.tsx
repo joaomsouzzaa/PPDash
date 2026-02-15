@@ -211,25 +211,21 @@ const Index = () => {
                 title="Investimento Total"
                 value={loadingSpend ? "Carregando..." : fmt(investimentoDisplay)}
                 icon={DollarSign}
-                iconColor="bg-primary/10 text-primary"
               />
               <KpiCard
                 title="Bilheteria Total"
                 value={fmt(kpi.bilheteriaTotal)}
                 icon={TrendingUp}
-                iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
               />
               <KpiCard
                 title="CAC por Venda"
                 value={fmt(cacVendaDisplay)}
                 icon={Target}
-                iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
               />
               <KpiCard
                 title="CAC por Participante"
                 value={fmt(cacParticipanteDisplay)}
                 icon={Users}
-                iconColor="bg-primary/10 text-primary"
               />
             </div>
 
@@ -244,13 +240,11 @@ const Index = () => {
                 title="Total de VIPs"
                 value={String(kpi.totalVips)}
                 icon={Crown}
-                iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
               />
               <KpiCard
                 title="Projeção de Participantes"
                 value={projecaoParticipantes !== null ? String(projecaoParticipantes) : "—"}
                 icon={BarChart3}
-                iconColor="bg-primary/10 text-primary"
               />
               <KpiCard
                 title="Vendas Individuais"
@@ -266,7 +260,6 @@ const Index = () => {
                 title="Ticket Médio"
                 value={fmt(kpi.ticketMedio)}
                 icon={ShoppingCart}
-                iconColor="bg-accent/10 text-accent"
               />
             </div>
 
@@ -281,13 +274,11 @@ const Index = () => {
                 title="Bilheteria VIP"
                 value={fmt(kpi.bilheteriaVip)}
                 icon={Gift}
-                iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
               />
               <KpiCard
                 title="Bilheteria (+/-)"
                 value={fmt(lucroDisplay)}
                 icon={Banknote}
-                iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
               />
             </div>
 
