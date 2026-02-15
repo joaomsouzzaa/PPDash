@@ -6,19 +6,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
 import type { Filters } from "@/lib/mockData";
 import { fetchAdAccounts, clearAdAccountsCache, type AdAccount, isTokenExpired, isGloballyRateLimited } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { useCidades } from "@/hooks/useCidades";
+import { useProdutos } from "@/hooks/useProdutos";
 
 interface DashboardFiltersProps {
   filters: Filters;
   onFiltersChange: (filters: Filters) => void;
   hideCityFilter?: boolean;
+  showProductFilter?: boolean;
 }
 
-export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = false }: DashboardFiltersProps) {
+export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = false, showProductFilter = false }: DashboardFiltersProps) {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
@@ -27,6 +33,9 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
+
+  const { data: produtos = [], isLoading: loadingProdutos } = useProdutos();
+  const activeProdutos = produtos.filter((p) => p.ativo);
 
   const loadAccounts = () => {
     const connected = localStorage.getItem("meta_connected") === "true";
@@ -133,6 +142,53 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
           )}
         </SelectContent>
       </Select>
+
+      {showProductFilter && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-[240px] justify-between bg-card font-normal">
+              <span className="truncate">
+                {filters.produtos.length === 0
+                  ? "Todos os produtos"
+                  : filters.produtos.length === 1
+                    ? activeProdutos.find((p) => p.slug === filters.produtos[0])?.nome || filters.produtos[0]
+                    : `${filters.produtos.length} produtos`}
+              </span>
+              <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[240px] p-2" align="start">
+            {loadingProdutos ? (
+              <p className="text-sm text-muted-foreground p-2">Carregando...</p>
+            ) : activeProdutos.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">Nenhum produto ativo</p>
+            ) : (
+              <div className="space-y-1">
+                {activeProdutos.map((p) => {
+                  const checked = filters.produtos.includes(p.slug);
+                  return (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => {
+                          const next = checked
+                            ? filters.produtos.filter((s) => s !== p.slug)
+                            : [...filters.produtos, p.slug];
+                          update({ produtos: next });
+                        }}
+                      />
+                      {p.nome}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
 
       {!hideCityFilter && (
         <Select value={filters.city} onValueChange={(v) => update({ city: v })}>

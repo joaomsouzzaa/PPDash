@@ -30,6 +30,7 @@ const InsideSales = () => {
       endDate: undefined,
       adAccount: savedAccount || "all",
       city: savedCity || "all",
+      produtos: [],
     };
   });
 
@@ -124,7 +125,7 @@ const InsideSales = () => {
           </header>
 
           <div className="p-6 space-y-6">
-            <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter />
+            <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showProductFilter />
 
             {/* Row 1: Investimento, Leads, CPL */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

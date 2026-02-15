@@ -4,6 +4,7 @@ export interface Filters {
   endDate: Date | undefined;
   adAccount: string;
   city: string;
+  produtos: string[];
 }
 
 interface SaleRecord {
