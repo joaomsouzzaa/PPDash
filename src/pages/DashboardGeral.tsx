@@ -284,7 +284,7 @@ const DashboardGeral = () => {
                             <Target className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">CAC Participante</p>
-                              <p className="text-sm font-semibold">
+                              <p className="text-sm font-bold">
                                 {kpi.cacParticipante > 0 ? fmt(kpi.cacParticipante) : "—"}
                               </p>
                             </div>
@@ -293,21 +293,21 @@ const DashboardGeral = () => {
                             <Users className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Participantes</p>
-                              <p className="text-sm font-semibold">{kpi.participantes}</p>
+                              <p className="text-sm font-bold">{kpi.participantes}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
                             <Crown className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Total VIPs</p>
-                              <p className="text-sm font-semibold">{kpi.totalVips}</p>
+                              <p className="text-sm font-bold">{kpi.totalVips}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
                             <BarChart3 className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Projeção</p>
-                              <p className="text-sm font-semibold">
+                              <p className="text-sm font-bold">
                                 {kpi.projecao !== null ? kpi.projecao : "—"}
                               </p>
                             </div>
@@ -320,7 +320,7 @@ const DashboardGeral = () => {
                                 const spend = metaSpendMap.get(cidade.slug) || 0;
                                 const diff = kpi.bilheteria - spend;
                                 return (
-                                  <p className={`text-sm font-semibold ${diff >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                                  <p className={`text-sm font-bold ${diff >= 0 ? "text-emerald-500" : "text-destructive"}`}>
                                     {fmt(diff)}
                                   </p>
                                 );
