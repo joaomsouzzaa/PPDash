@@ -39,7 +39,7 @@ const WebhookSection = () => {
           <div>
             <CardTitle className="text-base">Checkout de Vendas</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Cole esta URL nas configurações de webhook da GoExplosion ou Kiwify
+              Cole esta URL nas configurações de webhook do checkout de vendas.
             </p>
           </div>
         </div>
