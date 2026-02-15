@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 
 interface SalesChartProps {
@@ -23,43 +24,60 @@ export function SalesChart({ data }: SalesChartProps) {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="investGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(0, 72%, 51%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(0, 72%, 51%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="#ff2d75" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#ff2d75" stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(152, 69%, 41%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(152, 69%, 41%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="#39ff14" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#39ff14" stopOpacity={0.02} />
               </linearGradient>
+              <filter id="neonGlow">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="hsl(220, 9%, 46%)" />
-            <YAxis tick={{ fontSize: 12 }} stroke="hsl(220, 9%, 46%)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+            <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
+            <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} stroke="hsl(var(--border))" />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(0, 0%, 100%)",
-                border: "1px solid hsl(220, 13%, 91%)",
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
                 fontSize: "13px",
+                color: "hsl(var(--card-foreground))",
               }}
               formatter={(value: number) =>
                 `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               }
             />
+            <Legend
+              formatter={(value: string) => (
+                <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>
+              )}
+            />
             <Area
               type="monotone"
               dataKey="investimento"
-              stroke="hsl(0, 72%, 51%)"
+              stroke="#ff2d75"
               fill="url(#investGrad)"
-              strokeWidth={2}
+              strokeWidth={2.5}
               name="Investimento"
+              filter="url(#neonGlow)"
+              dot={false}
             />
             <Area
               type="monotone"
               dataKey="faturamento"
-              stroke="hsl(152, 69%, 41%)"
+              stroke="#39ff14"
               fill="url(#fatGrad)"
-              strokeWidth={2}
+              strokeWidth={2.5}
               name="Faturamento"
+              filter="url(#neonGlow)"
+              dot={false}
             />
           </AreaChart>
         </ResponsiveContainer>
