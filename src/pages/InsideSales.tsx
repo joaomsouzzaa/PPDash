@@ -67,16 +67,23 @@ const InsideSales = () => {
         setMetaInvestimento(0);
         return;
       }
-      const slug = selectedCidade?.slug;
-      const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate, slug);
-      const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
+
+      // When products are selected, fetch spend per product slug and sum
+      const slugs = filters.produtos.length > 0 ? filters.produtos : [undefined];
+      let totalSpend = 0;
+      await Promise.all(
+        slugs.map(async (slug) => {
+          const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate, slug);
+          totalSpend += results.reduce((sum, r) => sum + r.spend, 0);
+        })
+      );
       setMetaInvestimento(totalSpend);
     } catch {
       setMetaInvestimento(null);
     } finally {
       setLoadingSpend(false);
     }
-  }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate, selectedCidade?.slug]);
+  }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate, filters.produtos]);
 
   useEffect(() => {
     loadSpend();
