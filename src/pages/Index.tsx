@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -17,8 +17,9 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
-import { getFilteredData, fmt, type Filters } from "@/lib/mockData";
+import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
+import { useVendasData } from "@/hooks/useVendasData";
 
 const Index = () => {
   const [filters, setFilters] = useState<Filters>(() => {
@@ -102,11 +103,15 @@ const Index = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const kpi = useMemo(() => getFilteredData(filters), [filters]);
+  const { data: vendasData, isLoading: loadingVendas } = useVendasData(filters);
+  const kpi = vendasData || {
+    investimentoTotal: 0, bilheteriaTotal: 0, cacVenda: 0, cacParticipante: 0,
+    participantes: 0, totalVips: 0, vendasIndividuais: 0, vendasDuplas: 0,
+    ticketMedio: 0, bilheteriaIngressos: 0, bilheteriaVip: 0, lucro: 0, chartData: [],
+  };
 
   const investimentoDisplay = metaInvestimento !== null ? metaInvestimento : kpi.investimentoTotal;
 
-  // Recalculate dependent KPIs when using real investment data
   const totalVendas = kpi.vendasIndividuais + kpi.vendasDuplas;
   const cacVendaDisplay = metaInvestimento !== null && totalVendas > 0
     ? metaInvestimento / totalVendas
