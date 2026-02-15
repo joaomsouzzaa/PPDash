@@ -281,6 +281,7 @@ const VendasEventos = () => {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="aprovada">
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-green-500" />
