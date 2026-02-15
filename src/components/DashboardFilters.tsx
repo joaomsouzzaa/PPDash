@@ -32,6 +32,9 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
     const token = localStorage.getItem("meta_access_token");
     const expired = isTokenExpired();
 
+    // Always clear rate limit on new attempt
+    setRateLimited(false);
+
     console.log("[DashboardFilters] loadAccounts called:", { connected, hasToken: !!token, tokenLen: token?.length, expired, fetching: fetchingRef.current });
 
     if (!connected || !token || expired) {
@@ -43,12 +46,12 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
     fetchingRef.current = true;
 
     setLoadingAccounts(true);
-    setRateLimited(false);
 
     fetchAdAccounts()
       .then((accounts) => {
         console.log("[DashboardFilters] Fetched accounts:", accounts.length);
         setAdAccounts(accounts);
+        setRateLimited(false);
         if (
           filters.adAccount !== "all" &&
           !accounts.some((a) => a.id === filters.adAccount)
@@ -59,7 +62,8 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
       .catch((err) => {
         const msg = err?.message || "";
         console.error("[DashboardFilters] Fetch error:", msg);
-        if (msg.toLowerCase().includes("too many calls") || msg.includes("rate")) {
+        // Only flag as rate-limited for explicit Meta API rate limit messages
+        if (msg.toLowerCase().includes("too many calls") || msg.toLowerCase().includes("rate limit")) {
           setRateLimited(true);
         }
         setAdAccounts([]);
