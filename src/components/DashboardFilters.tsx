@@ -28,7 +28,16 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
     }
     setLoadingAccounts(true);
     fetchAdAccounts()
-      .then((accounts) => setAdAccounts(accounts))
+      .then((accounts) => {
+        setAdAccounts(accounts);
+        // If saved account doesn't exist in fetched list, reset to "all"
+        if (
+          filters.adAccount !== "all" &&
+          !accounts.some((a) => a.id === filters.adAccount)
+        ) {
+          onFiltersChange({ ...filters, adAccount: "all" });
+        }
+      })
       .catch(() => setAdAccounts([]))
       .finally(() => setLoadingAccounts(false));
   }, [isMetaConnected]);
@@ -54,19 +63,18 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todas as contas</SelectItem>
-          {adAccounts.length > 0 ? (
+          {loadingAccounts ? (
+            <SelectItem value="_loading" disabled>Carregando contas...</SelectItem>
+          ) : adAccounts.length > 0 ? (
             adAccounts.map((acc) => (
               <SelectItem key={acc.id} value={acc.id}>
                 {acc.name || `Conta ${acc.account_id}`}
               </SelectItem>
             ))
+          ) : !isMetaConnected ? (
+            <SelectItem value="_none" disabled>Conecte o Meta Ads primeiro</SelectItem>
           ) : (
-            !loadingAccounts && !isMetaConnected && (
-              <>
-                <SelectItem value="acc1">Meta Ads - Conta 1</SelectItem>
-                <SelectItem value="acc2">Meta Ads - Conta 2</SelectItem>
-              </>
-            )
+            <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
           )}
         </SelectContent>
       </Select>
