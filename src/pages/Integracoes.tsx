@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check } from "lucide-react";
+import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,13 +18,14 @@ import {
 } from "@/lib/facebook-sdk";
 import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache, clearRateLimitFlag } from "@/lib/meta-ads";
 
-const WEBHOOK_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
+const WEBHOOK_VENDAS_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
+const WEBHOOK_LEADS_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-leads";
 
 const WebhookSection = () => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(WEBHOOK_URL);
+    await navigator.clipboard.writeText(WEBHOOK_VENDAS_URL);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -47,7 +48,7 @@ const WebhookSection = () => {
       <CardContent className="pt-0 space-y-3">
         <div className="flex items-center gap-2">
           <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono text-foreground break-all select-all">
-            {WEBHOOK_URL}
+            {WEBHOOK_VENDAS_URL}
           </code>
           <Button variant="outline" size="icon" onClick={handleCopy} className="shrink-0">
             {copied ? <Check className="h-4 w-4 text-[hsl(var(--success))]" /> : <Copy className="h-4 w-4" />}
@@ -55,6 +56,47 @@ const WebhookSection = () => {
         </div>
         <p className="text-xs text-muted-foreground">
           Configure este endpoint como URL de webhook/postback nas plataformas de checkout para receber as vendas automaticamente.
+        </p>
+      </CardContent>
+    </Card>
+  );
+};
+
+const CrmWebhookSection = () => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(WEBHOOK_LEADS_URL);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-[hsl(var(--info))]/10 flex items-center justify-center">
+            <Users className="h-5 w-5 text-[hsl(var(--info))]" />
+          </div>
+          <div>
+            <CardTitle className="text-base">CRM — Leads</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Cole esta URL nas configurações de webhook do seu CRM para enviar e receber dados de leads.
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        <div className="flex items-center gap-2">
+          <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono text-foreground break-all select-all">
+            {WEBHOOK_LEADS_URL}
+          </code>
+          <Button variant="outline" size="icon" onClick={handleCopy} className="shrink-0">
+            {copied ? <Check className="h-4 w-4 text-[hsl(var(--success))]" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Envie um POST com os campos: <code className="text-xs">nome</code>, <code className="text-xs">email</code>, <code className="text-xs">telefone</code>, <code className="text-xs">status</code> (lead, mql, sql, reuniao_agendada, reuniao_realizada, venda), <code className="text-xs">utm_medium</code>, <code className="text-xs">produto_slug</code>, <code className="text-xs">cidade</code>. Autenticação via header <code className="text-xs">x-webhook-token</code>.
         </p>
       </CardContent>
     </Card>
@@ -301,6 +343,9 @@ const Integracoes = () => {
 
             {/* Checkout de Vendas */}
             <WebhookSection />
+
+            {/* CRM — Leads */}
+            <CrmWebhookSection />
           </div>
         </main>
       </div>

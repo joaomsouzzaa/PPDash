@@ -38,6 +38,63 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          cidade: string | null
+          created_at: string
+          data_lead: string
+          email: string | null
+          id: string
+          nome: string | null
+          origem: string | null
+          payload: Json | null
+          produto_slug: string | null
+          status: string
+          telefone: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          cidade?: string | null
+          created_at?: string
+          data_lead?: string
+          email?: string | null
+          id?: string
+          nome?: string | null
+          origem?: string | null
+          payload?: Json | null
+          produto_slug?: string | null
+          status?: string
+          telefone?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          cidade?: string | null
+          created_at?: string
+          data_lead?: string
+          email?: string | null
+          id?: string
+          nome?: string | null
+          origem?: string | null
+          payload?: Json | null
+          produto_slug?: string | null
+          status?: string
+          telefone?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: []
+      }
       produtos: {
         Row: {
           ativo: boolean

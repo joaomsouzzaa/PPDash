@@ -2,3 +2,6 @@ project_id = "dobexeqizssojpzuhkfn"
 
 [functions.exchange-token]
 verify_jwt = false
+
+[functions.webhook-leads]
+verify_jwt = false
