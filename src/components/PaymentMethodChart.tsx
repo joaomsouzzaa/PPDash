@@ -21,12 +21,12 @@ const LABEL_MAP: Record<string, string> = {
 };
 
 const COLORS = [
-  "#ff6600",   // fluorescent orange
-  "#bf5af2",   // neon purple
+  "#39ff14",   // neon green (lime)
   "#ff2d75",   // neon pink
-  "#39ff14",   // neon green
   "#00d4ff",   // electric blue
+  "#ff6600",   // fluorescent orange
   "#faff00",   // neon yellow
+  "#bf5af2",   // neon purple
 ];
 
 function formatCurrency(value: number) {
