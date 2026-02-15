@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { SaleNotificationBanner } from "@/components/SaleNotificationBanner";
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
@@ -189,6 +190,7 @@ const Index = () => {
 
   return (
     <SidebarProvider>
+      <SaleNotificationBanner />
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto">
