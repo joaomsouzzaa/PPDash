@@ -14,7 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      vendas: {
+        Row: {
+          cidade: string | null
+          created_at: string
+          data_venda: string
+          email_comprador: string | null
+          id: string
+          id_transacao: string | null
+          nome_comprador: string | null
+          payload: Json | null
+          plataforma: string
+          produto: string | null
+          status: string
+          telefone_comprador: string | null
+          tipo_ingresso: string | null
+          valor: number
+        }
+        Insert: {
+          cidade?: string | null
+          created_at?: string
+          data_venda?: string
+          email_comprador?: string | null
+          id?: string
+          id_transacao?: string | null
+          nome_comprador?: string | null
+          payload?: Json | null
+          plataforma: string
+          produto?: string | null
+          status?: string
+          telefone_comprador?: string | null
+          tipo_ingresso?: string | null
+          valor?: number
+        }
+        Update: {
+          cidade?: string | null
+          created_at?: string
+          data_venda?: string
+          email_comprador?: string | null
+          id?: string
+          id_transacao?: string | null
+          nome_comprador?: string | null
+          payload?: Json | null
+          plataforma?: string
+          produto?: string | null
+          status?: string
+          telefone_comprador?: string | null
+          tipo_ingresso?: string | null
+          valor?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
