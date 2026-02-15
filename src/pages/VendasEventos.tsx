@@ -281,6 +281,7 @@ const VendasEventos = () => {
                     <TableHead>Produto</TableHead>
                     <TableHead>Cidade</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead className="text-center">Qtd</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead>Pagamento</TableHead>
                     <TableHead>Status</TableHead>
@@ -293,7 +294,7 @@ const VendasEventos = () => {
                   {isLoading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 11 }).map((_, j) => (
+                        {Array.from({ length: 12 }).map((_, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -302,7 +303,7 @@ const VendasEventos = () => {
                     ))
                   ) : vendas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                         Nenhuma venda encontrada no período selecionado.
                       </TableCell>
                     </TableRow>
@@ -327,6 +328,7 @@ const VendasEventos = () => {
                         <TableCell className="max-w-[200px] truncate">{v.produto || "—"}</TableCell>
                         <TableCell>{v.cidade || "—"}</TableCell>
                         <TableCell>{v.tipo_ingresso || "—"}</TableCell>
+                        <TableCell className="text-center">{v.quantidade ?? 1}</TableCell>
                         <TableCell className="text-right font-semibold whitespace-nowrap">
                           R$ {Number(v.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                         </TableCell>
