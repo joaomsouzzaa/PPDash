@@ -51,7 +51,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "data_venda" | "nome_comprador" | "produto" | "cidade" | "tipo_ingresso" | "quantidade" | "valor" | "metodo_pagamento" | "status" | "cupom" | "plataforma";
@@ -460,6 +460,22 @@ const VendasEventos = () => {
                 onChange={(e) => { setNomeFilter(e.target.value); setPage(1); }}
                 className="w-[200px] bg-card"
               />
+              {(statusFilter !== "aprovada" || nomeFilter || tipoIngressoFilter.length > 0) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setStatusFilter("aprovada");
+                    setNomeFilter("");
+                    setTipoIngressoFilter([]);
+                    setPage(1);
+                  }}
+                  className="text-muted-foreground"
+                >
+                  <X className="mr-1 h-4 w-4" />
+                  Limpar filtros
+                </Button>
+              )}
               <span className="text-sm text-muted-foreground ml-auto">
                 {sortedVendas.length} venda{sortedVendas.length !== 1 ? "s" : ""}
               </span>
