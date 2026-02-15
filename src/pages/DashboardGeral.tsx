@@ -272,7 +272,7 @@ const DashboardGeral = () => {
                       <CardContent>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                            <Target className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <Target className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">CAC Participante</p>
                               <p className="text-sm font-semibold">
@@ -281,21 +281,21 @@ const DashboardGeral = () => {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <Users className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Participantes</p>
                               <p className="text-sm font-semibold">{kpi.participantes}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                            <Crown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <Crown className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Total VIPs</p>
                               <p className="text-sm font-semibold">{kpi.totalVips}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                            <BarChart3 className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <BarChart3 className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Projeção</p>
                               <p className="text-sm font-semibold">
@@ -304,7 +304,7 @@ const DashboardGeral = () => {
                             </div>
                           </div>
                           <div className="col-span-2 flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                            <Banknote className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <Banknote className="h-4 w-4 text-primary shrink-0" />
                             <div>
                               <p className="text-xs text-muted-foreground">Bilheteria (+/-)</p>
                               {(() => {
