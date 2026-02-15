@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plug, Wifi, WifiOff } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plug, Wifi, WifiOff, Loader2 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +10,71 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useToast } from "@/hooks/use-toast";
+import {
+  loadFacebookSDK,
+  loginWithFacebook,
+  logoutFromFacebook,
+} from "@/lib/facebook-sdk";
 
 const Integracoes = () => {
   const [metaConnected, setMetaConnected] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadFacebookSDK();
+  }, []);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      await loadFacebookSDK();
+      const result = await loginWithFacebook();
+      if (result.status === "connected") {
+        setMetaConnected(true);
+        setUserName(result.userName ?? null);
+        toast({
+          title: "Conectado com sucesso!",
+          description: `Conta "${result.userName}" vinculada.`,
+        });
+      } else {
+        toast({
+          title: "Conexão cancelada",
+          description: "O login com o Facebook foi cancelado ou negado.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Erro ao conectar",
+        description: "Não foi possível conectar com o Meta. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    try {
+      await logoutFromFacebook();
+      setMetaConnected(false);
+      setUserName(null);
+      toast({ title: "Desconectado", description: "Conta Meta desvinculada." });
+    } catch {
+      toast({
+        title: "Erro",
+        description: "Não foi possível desconectar.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SidebarProvider>
@@ -79,22 +140,28 @@ const Integracoes = () => {
                       }`}
                     >
                       {metaConnected
-                        ? "✅ Conta conectada com sucesso"
+                        ? `✅ Conta conectada: ${userName}`
                         : "⚠️ Conta desconectada"}
                     </div>
 
                     <div className="flex gap-3">
                       <Button
-                        onClick={() => setMetaConnected(true)}
-                        disabled={metaConnected}
+                        onClick={handleConnect}
+                        disabled={metaConnected || loading}
                       >
+                        {loading && !metaConnected ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
                         Conectar com Meta
                       </Button>
                       <Button
                         variant="destructive"
-                        onClick={() => setMetaConnected(false)}
-                        disabled={!metaConnected}
+                        onClick={handleDisconnect}
+                        disabled={!metaConnected || loading}
                       >
+                        {loading && metaConnected ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
                         Desconectar
                       </Button>
                     </div>
