@@ -169,9 +169,18 @@ export function DateRangePicker({ preset, startDate, endDate, onApply }: DateRan
 
             <Calendar
               mode="range"
-              selected={range.from && range.to ? { from: range.from, to: range.to } : undefined}
+              selected={range.from ? { from: range.from, to: range.to } : undefined}
               onSelect={(r) => {
-                setRange({ from: r?.from, to: r?.to });
+                if (r?.from && !r?.to) {
+                  // First click — if same day as existing from, treat as single-day selection
+                  if (range.from && r.from.getTime() === range.from.getTime() && !range.to) {
+                    setRange({ from: r.from, to: r.from });
+                  } else {
+                    setRange({ from: r.from, to: undefined });
+                  }
+                } else {
+                  setRange({ from: r?.from, to: r?.to });
+                }
                 setSelectedPreset("custom");
               }}
               numberOfMonths={2}
