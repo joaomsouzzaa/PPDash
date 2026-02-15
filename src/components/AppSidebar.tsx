@@ -29,7 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 const mainItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard Eventos", url: "/", icon: LayoutDashboard },
   { title: "Filtros", url: "/filtros", icon: Filter },
 ];
 
