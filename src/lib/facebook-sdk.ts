@@ -59,7 +59,7 @@ export function loginWithFacebook(): Promise<FBLoginResult> {
           resolve({ status: response.status || "unknown" });
         }
       },
-      { scope: "ads_read,ads_management,business_management" }
+      { scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,instagram_basic" }
     );
   });
 }
