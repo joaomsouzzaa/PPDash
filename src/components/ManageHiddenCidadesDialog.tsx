@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import { Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -6,8 +8,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
+import { EditCidadeDialog } from "@/components/EditCidadeDialog";
 import type { Cidade } from "@/hooks/useCidades";
 
 interface ManageHiddenCidadesDialogProps {
@@ -24,6 +34,7 @@ export function ManageHiddenCidadesDialog({
   onUpdated,
 }: ManageHiddenCidadesDialogProps) {
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [editCidade, setEditCidade] = useState<Cidade | null>(null);
 
   const hiddenCidades = cidades.filter((c) => hiddenIds.includes(c.id));
 
@@ -43,32 +54,65 @@ export function ManageHiddenCidadesDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
-        <DialogHeader>
-          <DialogTitle>Cidades Desativadas</DialogTitle>
-        </DialogHeader>
-        {hiddenCidades.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4">
-            Nenhuma cidade desativada no momento.
-          </p>
-        ) : (
-          <div className="grid gap-3 py-4">
-            {hiddenCidades.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between gap-4 rounded-md border p-3"
-              >
-                <Label className="text-sm font-medium">{c.nome}</Label>
-                <Switch
-                  checked={false}
-                  onCheckedChange={(checked) => toggleCidade(c.id, checked)}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Cidades Desativadas</DialogTitle>
+          </DialogHeader>
+          {hiddenCidades.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              Nenhuma cidade desativada no momento.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cidade</TableHead>
+                  <TableHead>Data do Evento</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead className="text-right">Ativar</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {hiddenCidades.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <span className="flex items-center gap-1.5">
+                        {c.nome}
+                        <span
+                          role="button"
+                          className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted cursor-pointer"
+                          onClick={() => setEditCidade(c)}
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                        </span>
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {format(new Date(c.data_evento), "dd/MM/yyyy")}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{c.slug}</TableCell>
+                    <TableCell className="text-right">
+                      <Switch
+                        checked={false}
+                        onCheckedChange={(checked) => toggleCidade(c.id, checked)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <EditCidadeDialog
+        open={!!editCidade}
+        onOpenChange={(o) => { if (!o) setEditCidade(null); }}
+        cidade={editCidade}
+        onCidadeUpdated={onUpdated}
+      />
+    </>
   );
 }
