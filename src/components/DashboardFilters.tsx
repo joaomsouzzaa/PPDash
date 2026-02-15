@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Pencil } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,8 @@ import type { Filters } from "@/lib/mockData";
 import { fetchAdAccounts, type AdAccount, isTokenExpired } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { AddCidadeDialog } from "@/components/AddCidadeDialog";
-import { useCidades } from "@/hooks/useCidades";
+import { EditCidadeDialog } from "@/components/EditCidadeDialog";
+import { useCidades, type Cidade } from "@/hooks/useCidades";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface DashboardFiltersProps {
@@ -23,6 +24,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [addCidadeOpen, setAddCidadeOpen] = useState(false);
+  const [editCidade, setEditCidade] = useState<Cidade | null>(null);
   const queryClient = useQueryClient();
 
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
@@ -108,7 +110,16 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
             ) : (
               cidades.map((c) => (
                 <SelectItem key={c.id} value={c.slug}>
-                  {c.nome}
+                  <span className="flex items-center justify-between w-full gap-2">
+                    {c.nome}
+                    <Pencil
+                      className="h-3 w-3 text-muted-foreground hover:text-foreground shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditCidade(c);
+                      }}
+                    />
+                  </span>
                 </SelectItem>
               ))
             )}
@@ -126,6 +137,13 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         open={addCidadeOpen}
         onOpenChange={setAddCidadeOpen}
         onCidadeAdded={() => queryClient.invalidateQueries({ queryKey: ["cidades"] })}
+      />
+
+      <EditCidadeDialog
+        open={!!editCidade}
+        onOpenChange={(open) => { if (!open) setEditCidade(null); }}
+        cidade={editCidade}
+        onCidadeUpdated={() => queryClient.invalidateQueries({ queryKey: ["cidades"] })}
       />
     </>
   );
