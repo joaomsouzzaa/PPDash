@@ -161,7 +161,10 @@ const Index = () => {
 
         const eventDate = new Date(selectedCidade.data_evento);
         const today = new Date();
-        const daysRemaining = Math.max(0, differenceInDays(eventDate, today) + 1);
+        // Strip time components to count full calendar days (inclusive)
+        const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const daysRemaining = Math.max(0, differenceInDays(eventDateOnly, todayOnly) + 1);
 
         if (cacParticipanteDisplay <= 0 || dailyBudget <= 0) {
           setProjecaoParticipantes(kpi.participantes);
