@@ -115,7 +115,7 @@ const Index = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setRefreshKey((k) => k + 1);
-    }, 10 * 60 * 1000);
+    }, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
