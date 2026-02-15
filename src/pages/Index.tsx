@@ -21,13 +21,23 @@ import { getFilteredData, fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 
 const Index = () => {
-  const [filters, setFilters] = useState<Filters>({
-    dateRange: "30d",
-    startDate: undefined,
-    endDate: undefined,
-    adAccount: "all",
-    city: "all",
+  const [filters, setFilters] = useState<Filters>(() => {
+    const savedAccount = localStorage.getItem("selected_ad_account");
+    return {
+      dateRange: "30d",
+      startDate: undefined,
+      endDate: undefined,
+      adAccount: savedAccount || "all",
+      city: "all",
+    };
   });
+
+  const handleFiltersChange = (newFilters: Filters) => {
+    if (newFilters.adAccount !== filters.adAccount) {
+      localStorage.setItem("selected_ad_account", newFilters.adAccount);
+    }
+    setFilters(newFilters);
+  };
 
   const [metaInvestimento, setMetaInvestimento] = useState<number | null>(null);
   const [loadingSpend, setLoadingSpend] = useState(false);
@@ -102,7 +112,7 @@ const Index = () => {
           </header>
 
           <div className="p-6 space-y-6">
-            <DashboardFilters filters={filters} onFiltersChange={setFilters} />
+            <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} />
 
             {/* Row 1 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
