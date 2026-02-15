@@ -18,8 +18,12 @@ import {
 } from "@/lib/facebook-sdk";
 
 const Integracoes = () => {
-  const [metaConnected, setMetaConnected] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
+  const [metaConnected, setMetaConnected] = useState(() => {
+    return localStorage.getItem("meta_connected") === "true";
+  });
+  const [userName, setUserName] = useState<string | null>(() => {
+    return localStorage.getItem("meta_user_name");
+  });
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(true);
   const { toast } = useToast();
@@ -36,6 +40,9 @@ const Integracoes = () => {
       if (result.status === "connected") {
         setMetaConnected(true);
         setUserName(result.userName ?? null);
+        localStorage.setItem("meta_connected", "true");
+        localStorage.setItem("meta_user_name", result.userName ?? "");
+        localStorage.setItem("meta_access_token", result.accessToken ?? "");
         toast({
           title: "Conectado com sucesso!",
           description: `Conta "${result.userName}" vinculada.`,
@@ -64,6 +71,9 @@ const Integracoes = () => {
       await logoutFromFacebook();
       setMetaConnected(false);
       setUserName(null);
+      localStorage.removeItem("meta_connected");
+      localStorage.removeItem("meta_user_name");
+      localStorage.removeItem("meta_access_token");
       toast({ title: "Desconectado", description: "Conta Meta desvinculada." });
     } catch {
       toast({
