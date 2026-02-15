@@ -55,47 +55,68 @@ export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
         <CardTitle className="text-base font-semibold">Faturamento por Método de Pagamento</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                innerRadius={70}
-                outerRadius={110}
-                paddingAngle={3}
-                dataKey="value"
-                stroke="none"
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
-                labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number) => [formatCurrency(value), "Faturamento"]}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  color: "hsl(var(--card-foreground))",
-                }}
-              />
-              <Legend
-                formatter={(value: string) => (
-                  <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="flex flex-col lg:flex-row items-center gap-6">
+          {/* Donut Chart */}
+          <div className="h-[300px] w-full lg:w-1/2">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={110}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                  label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+                  labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => [formatCurrency(value), "Faturamento"]}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    color: "hsl(var(--card-foreground))",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Breakdown List */}
+          <div className="w-full lg:w-1/2 space-y-3">
+            {chartData.map((item) => {
+              const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : "0";
+              return (
+                <div key={item.name} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-sm font-medium truncate">{item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-semibold">{formatCurrency(item.value)}</span>
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                      {pct}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="border-t border-border pt-2 mt-2 flex items-center justify-between">
+              <span className="text-sm font-semibold">Total</span>
+              <span className="text-sm font-bold">{formatCurrency(total)}</span>
+            </div>
+          </div>
         </div>
-        <p className="text-center text-sm text-muted-foreground mt-2">
-          Total: {formatCurrency(total)}
-        </p>
       </CardContent>
     </Card>
   );
