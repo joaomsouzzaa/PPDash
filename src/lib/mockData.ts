@@ -1,5 +1,7 @@
 export interface Filters {
   dateRange: string;
+  startDate: Date | undefined;
+  endDate: Date | undefined;
   adAccount: string;
   city: string;
 }
@@ -29,14 +31,30 @@ const rawData: SaleRecord[] = [
   { date: "2026-02-15", city: "ctb", adAccount: "acc1", investimento: 1500, faturamento: 5100, vendasIndividuais: 13, vendasDuplas: 6, vipIndividuais: 3, vipDuplas: 2 },
 ];
 
-function filterByDate(data: SaleRecord[], dateRange: string): SaleRecord[] {
+function filterByDate(data: SaleRecord[], filters: Filters): SaleRecord[] {
+  // If explicit dates are provided, use them
+  if (filters.startDate && filters.endDate) {
+    return data.filter((r) => {
+      const d = new Date(r.date);
+      return d >= filters.startDate! && d <= filters.endDate!;
+    });
+  }
+
   const now = new Date("2026-02-15");
   let cutoff: Date;
 
-  switch (dateRange) {
+  switch (filters.dateRange) {
+    case "today":
+      return data.filter((r) => r.date === "2026-02-15");
+    case "yesterday":
+      return data.filter((r) => r.date === "2026-02-14");
     case "7d":
       cutoff = new Date(now);
       cutoff.setDate(cutoff.getDate() - 7);
+      break;
+    case "14d":
+      cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - 14);
       break;
     case "30d":
       cutoff = new Date(now);
@@ -45,13 +63,16 @@ function filterByDate(data: SaleRecord[], dateRange: string): SaleRecord[] {
     case "this_month":
       cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
       break;
-    case "last_month":
+    case "last_month": {
       const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const end = new Date(now.getFullYear(), now.getMonth(), 0);
       return data.filter((r) => {
         const d = new Date(r.date);
         return d >= start && d <= end;
       });
+    }
+    case "lifetime":
+      return data;
     default:
       cutoff = new Date(now);
       cutoff.setDate(cutoff.getDate() - 30);
@@ -61,7 +82,7 @@ function filterByDate(data: SaleRecord[], dateRange: string): SaleRecord[] {
 }
 
 export function getFilteredData(filters: Filters) {
-  let data = filterByDate(rawData, filters.dateRange);
+  let data = filterByDate(rawData, filters);
   if (filters.adAccount !== "all") {
     data = data.filter((r) => r.adAccount === filters.adAccount);
   }

@@ -23,6 +23,8 @@ import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 const Index = () => {
   const [filters, setFilters] = useState<Filters>({
     dateRange: "30d",
+    startDate: undefined,
+    endDate: undefined,
     adAccount: "all",
     city: "all",
   });

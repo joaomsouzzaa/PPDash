@@ -1,15 +1,4 @@
 import { useState, useEffect } from "react";
-import { CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { pt } from "date-fns/locale";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -19,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
 import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
+import { DateRangePicker } from "@/components/DateRangePicker";
 
 interface DashboardFiltersProps {
   filters: Filters;
@@ -26,7 +16,6 @@ interface DashboardFiltersProps {
 }
 
 export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersProps) {
-  const [date, setDate] = useState<Date | undefined>(new Date());
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
 
@@ -50,44 +39,14 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Select value={filters.dateRange} onValueChange={(v) => update({ dateRange: v })}>
-        <SelectTrigger className="w-[160px] bg-card">
-          <SelectValue placeholder="Período" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="7d">Últimos 7 dias</SelectItem>
-          <SelectItem value="30d">Últimos 30 dias</SelectItem>
-          <SelectItem value="this_month">Este mês</SelectItem>
-          <SelectItem value="last_month">Mês passado</SelectItem>
-          <SelectItem value="custom">Personalizado</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {filters.dateRange === "custom" && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "w-[200px] justify-start text-left font-normal bg-card",
-                !date && "text-muted-foreground"
-              )}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {date ? format(date, "dd/MM/yyyy", { locale: pt }) : "Selecionar data"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={date}
-              onSelect={setDate}
-              initialFocus
-              className="p-3 pointer-events-auto"
-            />
-          </PopoverContent>
-        </Popover>
-      )}
+      <DateRangePicker
+        preset={filters.dateRange}
+        startDate={filters.startDate}
+        endDate={filters.endDate}
+        onApply={(preset, start, end) =>
+          update({ dateRange: preset, startDate: start, endDate: end })
+        }
+      />
 
       <Select value={filters.adAccount} onValueChange={(v) => update({ adAccount: v })}>
         <SelectTrigger className="w-[240px] bg-card">
