@@ -19,7 +19,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
 
-  const isMetaConnected = localStorage.getItem("meta_connected") === "true" && isTokenValid();
+  const isMetaConnected = localStorage.getItem("meta_connected") === "true";
 
   useEffect(() => {
     if (!isMetaConnected) {
