@@ -177,6 +177,9 @@ function detectTipoIngresso(productName: string): string | null {
 }
 
 function extractCidadeFromProduct(productName: string): string | null {
+  // Match "Recife Scale Summit" or similar city-named summits
+  const summitMatch = productName.match(/\((\w[\w\s]*?)\s+Scale\s+Summit\)/i);
+  if (summitMatch) return summitMatch[1].trim();
   // Match patterns like "Workshop Scale - Natal )" or "Workshop Scale - São Luís"
   const match = productName.match(/[-–]\s*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*(?:\)|$)/);
   if (match) return match[1].trim();
