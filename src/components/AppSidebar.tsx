@@ -30,9 +30,9 @@ import {
 import { Button } from "@/components/ui/button";
 
 const eventosItems = [
-  { title: "Dashboard Eventos (1/1)", url: "/", icon: LayoutDashboard },
-  { title: "Dashboard Eventos Geral", url: "/eventos-geral", icon: LayoutDashboard },
-  { title: "Vendas Eventos", url: "/vendas-eventos", icon: ShoppingCart },
+  { title: "Dashboard 1:1", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard Geral", url: "/eventos-geral", icon: LayoutDashboard },
+  { title: "Vendas", url: "/vendas-eventos", icon: ShoppingCart },
 ];
 
 const insideSalesItems = [
