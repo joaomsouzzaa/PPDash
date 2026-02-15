@@ -15,7 +15,7 @@ export function useCidades() {
       const { data, error } = await supabase
         .from("cidades")
         .select("id, nome, slug, data_evento")
-        .order("nome");
+        .order("data_evento", { ascending: true });
 
       if (error) throw error;
       return (data as Cidade[]) || [];
