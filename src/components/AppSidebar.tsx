@@ -29,11 +29,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const mainItems = [
+const eventosItems = [
   { title: "Dashboard Eventos (1/1)", url: "/", icon: LayoutDashboard },
   { title: "Dashboard Eventos Geral", url: "/eventos-geral", icon: LayoutDashboard },
-  { title: "Dashboard Inside Sales", url: "/inside-sales", icon: LayoutDashboard },
   { title: "Vendas Eventos", url: "/vendas-eventos", icon: ShoppingCart },
+];
+
+const insideSalesItems = [
+  { title: "Dashboard Inside Sales", url: "/inside-sales", icon: LayoutDashboard },
 ];
 
 const analyticsItems = [
@@ -76,7 +79,32 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {eventosItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild tooltip={item.title}>
+                    <NavLink
+                      to={item.url}
+                      end
+                      className="hover:bg-sidebar-accent/80"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
+            Inside Sales
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {insideSalesItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
