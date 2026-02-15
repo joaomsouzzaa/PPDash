@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 
 const mainItems = [
   { title: "Dashboard Eventos", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard Eventos Geral", url: "/eventos-geral", icon: LayoutDashboard },
   { title: "Filtros", url: "/filtros", icon: Filter },
 ];
 
