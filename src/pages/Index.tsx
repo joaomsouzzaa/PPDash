@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -18,6 +18,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
 import { getFilteredData, fmt, type Filters } from "@/lib/mockData";
+import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 
 const Index = () => {
   const [filters, setFilters] = useState<Filters>({
@@ -26,7 +27,62 @@ const Index = () => {
     city: "all",
   });
 
+  const [metaInvestimento, setMetaInvestimento] = useState<number | null>(null);
+  const [loadingSpend, setLoadingSpend] = useState(false);
+
+  const isMetaConnected = localStorage.getItem("meta_connected") === "true";
+
+  useEffect(() => {
+    if (!isMetaConnected) {
+      setMetaInvestimento(null);
+      return;
+    }
+
+    const loadSpend = async () => {
+      setLoadingSpend(true);
+      try {
+        let accountIds: string[];
+
+        if (filters.adAccount !== "all") {
+          accountIds = [filters.adAccount];
+        } else {
+          const accounts = await fetchAdAccounts();
+          accountIds = accounts.map((a) => a.id);
+        }
+
+        if (accountIds.length === 0) {
+          setMetaInvestimento(0);
+          return;
+        }
+
+        const results = await fetchAdSpend(accountIds, filters.dateRange);
+        const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
+        setMetaInvestimento(totalSpend);
+      } catch {
+        setMetaInvestimento(null);
+      } finally {
+        setLoadingSpend(false);
+      }
+    };
+
+    loadSpend();
+  }, [isMetaConnected, filters.adAccount, filters.dateRange]);
+
   const kpi = useMemo(() => getFilteredData(filters), [filters]);
+
+  const investimentoDisplay = metaInvestimento !== null ? metaInvestimento : kpi.investimentoTotal;
+
+  // Recalculate dependent KPIs when using real investment data
+  const totalVendas = kpi.vendasIndividuais + kpi.vendasDuplas;
+  const cacVendaDisplay = metaInvestimento !== null && totalVendas > 0
+    ? metaInvestimento / totalVendas
+    : kpi.cacVenda;
+  const cacParticipanteDisplay = metaInvestimento !== null && kpi.participantes > 0
+    ? metaInvestimento / kpi.participantes
+    : kpi.cacParticipante;
+  const lucroDisplay = metaInvestimento !== null
+    ? kpi.bilheteriaTotal - metaInvestimento
+    : kpi.lucro;
 
   return (
     <SidebarProvider>
@@ -50,7 +106,7 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 title="Investimento Total"
-                value={fmt(kpi.investimentoTotal)}
+                value={loadingSpend ? "Carregando..." : fmt(investimentoDisplay)}
                 icon={DollarSign}
                 iconColor="bg-primary/10 text-primary"
               />
@@ -62,13 +118,13 @@ const Index = () => {
               />
               <KpiCard
                 title="CAC por Venda"
-                value={fmt(kpi.cacVenda)}
+                value={fmt(cacVendaDisplay)}
                 icon={Target}
                 iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
               />
               <KpiCard
                 title="CAC por Participante"
-                value={fmt(kpi.cacParticipante)}
+                value={fmt(cacParticipanteDisplay)}
                 icon={Users}
                 iconColor="bg-primary/10 text-primary"
               />
@@ -120,7 +176,7 @@ const Index = () => {
               />
               <KpiCard
                 title="Lucro"
-                value={fmt(kpi.lucro)}
+                value={fmt(lucroDisplay)}
                 icon={Banknote}
                 iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
               />

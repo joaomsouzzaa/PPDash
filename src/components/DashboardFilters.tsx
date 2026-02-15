@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
+import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
 
 interface DashboardFiltersProps {
   filters: Filters;
@@ -26,6 +27,22 @@ interface DashboardFiltersProps {
 
 export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersProps) {
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+
+  const isMetaConnected = localStorage.getItem("meta_connected") === "true";
+
+  useEffect(() => {
+    if (!isMetaConnected) {
+      setAdAccounts([]);
+      return;
+    }
+    setLoadingAccounts(true);
+    fetchAdAccounts()
+      .then((accounts) => setAdAccounts(accounts))
+      .catch(() => setAdAccounts([]))
+      .finally(() => setLoadingAccounts(false));
+  }, [isMetaConnected]);
 
   const update = (partial: Partial<Filters>) => {
     onFiltersChange({ ...filters, ...partial });
@@ -73,13 +90,25 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
       )}
 
       <Select value={filters.adAccount} onValueChange={(v) => update({ adAccount: v })}>
-        <SelectTrigger className="w-[200px] bg-card">
-          <SelectValue placeholder="Conta de Anúncios" />
+        <SelectTrigger className="w-[240px] bg-card">
+          <SelectValue placeholder={loadingAccounts ? "Carregando contas..." : "Conta de Anúncios"} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todas as contas</SelectItem>
-          <SelectItem value="acc1">Meta Ads - Conta 1</SelectItem>
-          <SelectItem value="acc2">Meta Ads - Conta 2</SelectItem>
+          {adAccounts.length > 0 ? (
+            adAccounts.map((acc) => (
+              <SelectItem key={acc.id} value={acc.id}>
+                {acc.name || `Conta ${acc.account_id}`}
+              </SelectItem>
+            ))
+          ) : (
+            !loadingAccounts && !isMetaConnected && (
+              <>
+                <SelectItem value="acc1">Meta Ads - Conta 1</SelectItem>
+                <SelectItem value="acc2">Meta Ads - Conta 2</SelectItem>
+              </>
+            )
+          )}
         </SelectContent>
       </Select>
 
