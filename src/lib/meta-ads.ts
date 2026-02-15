@@ -22,11 +22,21 @@ export function isTokenValid(): boolean {
   return Date.now() < Number(expiresAt);
 }
 
-/** Mark Meta as disconnected due to token expiration. */
+/** Mark token as expired but keep the connection status. */
 export function markTokenExpired() {
-  localStorage.removeItem("meta_connected");
+  localStorage.setItem("meta_token_expired", "true");
   localStorage.removeItem("meta_access_token");
   localStorage.removeItem("meta_token_expires_at");
+}
+
+/** Check if the token has been flagged as expired. */
+export function isTokenExpired(): boolean {
+  return localStorage.getItem("meta_token_expired") === "true";
+}
+
+/** Clear the expired flag (after successful reconnection). */
+export function clearTokenExpired() {
+  localStorage.removeItem("meta_token_expired");
 }
 
 async function graphApiFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {

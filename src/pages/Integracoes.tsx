@@ -16,7 +16,7 @@ import {
   loginWithFacebook,
   logoutFromFacebook,
 } from "@/lib/facebook-sdk";
-import { exchangeForLongLivedToken } from "@/lib/meta-ads";
+import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired } from "@/lib/meta-ads";
 
 const WEBHOOK_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
 
@@ -68,6 +68,7 @@ const Integracoes = () => {
   const [userName, setUserName] = useState<string | null>(() => {
     return localStorage.getItem("meta_user_name");
   });
+  const [tokenExpired, setTokenExpired] = useState(() => isTokenExpired());
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(true);
   const { toast } = useToast();
@@ -82,23 +83,23 @@ const Integracoes = () => {
       await loadFacebookSDK();
       const result = await loginWithFacebook();
       if (result.status === "connected") {
-        // Exchange for long-lived token (~60 days)
         try {
           const longLived = await exchangeForLongLivedToken(result.accessToken!);
           localStorage.setItem("meta_access_token", longLived.access_token);
           const expiresAt = Date.now() + longLived.expires_in * 1000;
           localStorage.setItem("meta_token_expires_at", String(expiresAt));
         } catch {
-          // Fallback: use the short-lived token
           localStorage.setItem("meta_access_token", result.accessToken ?? "");
         }
 
+        clearTokenExpired();
+        setTokenExpired(false);
         setMetaConnected(true);
         setUserName(result.userName ?? null);
         localStorage.setItem("meta_connected", "true");
         localStorage.setItem("meta_user_name", result.userName ?? "");
         toast({
-          title: "Conectado com sucesso!",
+          title: tokenExpired ? "Token renovado!" : "Conectado com sucesso!",
           description: `Conta "${result.userName}" vinculada com token de longa duração.`,
         });
       } else {
@@ -198,25 +199,30 @@ const Integracoes = () => {
                   <CardContent className="pt-0 space-y-4">
                     <div
                       className={`rounded-lg p-4 text-sm font-medium ${
-                        metaConnected
+                        metaConnected && !tokenExpired
                           ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                          : tokenExpired
+                          ? "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
                           : "bg-destructive/10 text-destructive"
                       }`}
                     >
-                      {metaConnected
+                      {metaConnected && !tokenExpired
                         ? `✅ Conta conectada: ${userName}`
+                        : tokenExpired
+                        ? `⚠️ Token expirado — reconecte a conta: ${userName}`
                         : "⚠️ Conta desconectada"}
                     </div>
 
                     <div className="flex gap-3">
                       <Button
                         onClick={handleConnect}
-                        disabled={metaConnected || loading}
+                        disabled={metaConnected && !tokenExpired || loading}
+                        variant={tokenExpired ? "default" : "default"}
                       >
                         {loading && !metaConnected ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         ) : null}
-                        Conectar com Meta
+                        {tokenExpired ? "Reconectar" : "Conectar com Meta"}
                       </Button>
                       <Button
                         variant="destructive"

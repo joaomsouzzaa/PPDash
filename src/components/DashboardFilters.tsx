@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
-import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
+import { fetchAdAccounts, type AdAccount, isTokenExpired } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { AddCidadeDialog } from "@/components/AddCidadeDialog";
 import { useCidades } from "@/hooks/useCidades";
@@ -89,6 +89,8 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
               ))
             ) : !isMetaConnected ? (
               <SelectItem value="_none" disabled>Conecte o Meta Ads primeiro</SelectItem>
+            ) : isTokenExpired() ? (
+              <SelectItem value="_expired" disabled>Token expirado — reconecte nas Integrações</SelectItem>
             ) : (
               <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
             )}
