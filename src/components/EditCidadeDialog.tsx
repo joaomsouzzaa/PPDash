@@ -18,7 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
+import { cn, removeAccents } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Cidade } from "@/hooks/useCidades";
@@ -71,7 +71,7 @@ export function EditCidadeDialog({ open, onOpenChange, cidade, onCidadeUpdated }
         .from("cidades")
         .update({
           nome: nome.trim(),
-          slug: slug.trim().toLowerCase(),
+          slug: removeAccents(slug.trim().toLowerCase()),
           data_evento: dataEvento.toISOString(),
         })
         .eq("id", cidade.id);

@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, removeAccents } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -43,7 +43,7 @@ export function AddCidadeDialog({ open, onOpenChange, onCidadeAdded }: AddCidade
     try {
       const { error } = await supabase.from("cidades").insert({
         nome: nome.trim(),
-        slug: slug.trim().toLowerCase(),
+        slug: removeAccents(slug.trim().toLowerCase()),
         data_evento: dataEvento.toISOString(),
       });
 

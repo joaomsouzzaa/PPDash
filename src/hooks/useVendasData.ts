@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Filters } from "@/lib/mockData";
+import { removeAccents } from "@/lib/utils";
 
 interface VendaRow {
   valor: number;
@@ -80,7 +81,8 @@ export function useVendasData(filters: Filters) {
         .order("data_venda", { ascending: true });
 
       if (filters.city !== "all") {
-        query = query.ilike("cidade", `%${filters.city}%`);
+        const normalizedCity = removeAccents(filters.city);
+        query = query.ilike("cidade", `%${normalizedCity}%`);
       }
 
       const { data, error } = await query;
