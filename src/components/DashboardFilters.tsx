@@ -112,13 +112,17 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
                 <SelectItem key={c.id} value={c.slug}>
                   <span className="flex items-center justify-between w-full gap-2">
                     {c.nome}
-                    <Pencil
-                      className="h-3 w-3 text-muted-foreground hover:text-foreground shrink-0"
-                      onClick={(e) => {
+                    <span
+                      role="button"
+                      className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         setEditCidade(c);
                       }}
-                    />
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground shrink-0" />
+                    </span>
                   </span>
                 </SelectItem>
               ))
