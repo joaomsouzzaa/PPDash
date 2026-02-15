@@ -27,7 +27,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: "Extremely loud chaotic celebration noise, multiple bass drums pounding fast, church bells ringing aggressively, vuvuzela horns blasting nonstop, stadium crowd going crazy, all playing at once making maximum noise, no rhythm just pure loud celebratory chaos",
+          text: "A loud celebratory mix of three instruments playing simultaneously: a big bass drum beating fast, a brass horn trumpet blowing long notes, and a metal bell ringing repeatedly, like a sports stadium victory celebration, very loud and energetic",
           duration_seconds: 5,
           prompt_influence: 0.8,
         }),
