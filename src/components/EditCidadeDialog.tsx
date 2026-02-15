@@ -124,13 +124,6 @@ export function EditCidadeDialog({ open, onOpenChange, cidade, onCidadeUpdated }
               A slug será usada para filtrar campanhas no Meta Ads pelo nome.
             </p>
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-            <div>
-              <Label htmlFor="edit-ativa" className="text-sm font-medium">Exibir no filtro</Label>
-              <p className="text-xs text-muted-foreground">Mostrar esta cidade na lista de filtros</p>
-            </div>
-            <Switch id="edit-ativa" checked={ativa} onCheckedChange={setAtiva} />
-          </div>
           <div className="grid gap-2">
             <Label>Data do Evento</Label>
             <Popover>
@@ -156,6 +149,13 @@ export function EditCidadeDialog({ open, onOpenChange, cidade, onCidadeUpdated }
                 />
               </PopoverContent>
             </Popover>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+            <div>
+              <Label htmlFor="edit-ativa" className="text-sm font-medium">Exibir no filtro</Label>
+              <p className="text-xs text-muted-foreground">Mostrar esta cidade na lista de filtros</p>
+            </div>
+            <Switch id="edit-ativa" checked={ativa} onCheckedChange={setAtiva} />
           </div>
         </div>
         <DialogFooter>
