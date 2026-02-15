@@ -17,12 +17,40 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useCidades } from "@/hooks/useCidades";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
   if (startDate && endDate) {
@@ -76,12 +104,36 @@ function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
   return { start: start.toISOString(), end: now.toISOString() };
 }
 
+type VendaRow = {
+  id: string;
+  data_venda: string;
+  nome_comprador: string | null;
+  email_comprador: string | null;
+  produto: string | null;
+  cidade: string | null;
+  tipo_ingresso: string | null;
+  valor: number;
+  metodo_pagamento: string | null;
+  status: string;
+  cupom: string | null;
+  plataforma: string;
+  telefone_comprador: string | null;
+  documento: string | null;
+  quantidade: number | null;
+};
+
 const VendasEventos = () => {
   const [dateRange, setDateRange] = useState("30d");
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [city, setCity] = useState("all");
 
+  // Edit / Delete state
+  const [editingVenda, setEditingVenda] = useState<VendaRow | null>(null);
+  const [editForm, setEditForm] = useState<Partial<VendaRow>>({});
+  const [deletingVenda, setDeletingVenda] = useState<VendaRow | null>(null);
+
+  const queryClient = useQueryClient();
   const { data: cidades = [] } = useCidades();
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
@@ -114,6 +166,63 @@ const VendasEventos = () => {
       case "cancelada": return "destructive";
       default: return "outline";
     }
+  };
+
+  const openEdit = (v: VendaRow) => {
+    setEditingVenda(v);
+    setEditForm({
+      nome_comprador: v.nome_comprador,
+      email_comprador: v.email_comprador,
+      produto: v.produto,
+      cidade: v.cidade,
+      tipo_ingresso: v.tipo_ingresso,
+      valor: v.valor,
+      metodo_pagamento: v.metodo_pagamento,
+      status: v.status,
+      cupom: v.cupom,
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingVenda) return;
+    const { error } = await supabase
+      .from("vendas")
+      .update({
+        nome_comprador: editForm.nome_comprador,
+        email_comprador: editForm.email_comprador,
+        produto: editForm.produto,
+        cidade: editForm.cidade,
+        tipo_ingresso: editForm.tipo_ingresso,
+        valor: Number(editForm.valor) || 0,
+        metodo_pagamento: editForm.metodo_pagamento,
+        status: editForm.status || "aprovada",
+        cupom: editForm.cupom,
+      })
+      .eq("id", editingVenda.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar venda");
+      return;
+    }
+    toast.success("Venda atualizada com sucesso");
+    setEditingVenda(null);
+    queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
+  };
+
+  const handleDelete = async () => {
+    if (!deletingVenda) return;
+    const { error } = await supabase
+      .from("vendas")
+      .delete()
+      .eq("id", deletingVenda.id);
+
+    if (error) {
+      toast.error("Erro ao excluir venda");
+      return;
+    }
+    toast.success("Venda excluída com sucesso");
+    setDeletingVenda(null);
+    queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
   };
 
   return (
@@ -177,13 +286,14 @@ const VendasEventos = () => {
                     <TableHead>Status</TableHead>
                     <TableHead>Cupom</TableHead>
                     <TableHead>Plataforma</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 10 }).map((_, j) => (
+                        {Array.from({ length: 11 }).map((_, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -192,7 +302,7 @@ const VendasEventos = () => {
                     ))
                   ) : vendas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                         Nenhuma venda encontrada no período selecionado.
                       </TableCell>
                     </TableRow>
@@ -226,6 +336,28 @@ const VendasEventos = () => {
                         </TableCell>
                         <TableCell>{v.cupom || "—"}</TableCell>
                         <TableCell>{v.plataforma}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEdit(v as VendaRow)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setDeletingVenda(v as VendaRow)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -235,6 +367,110 @@ const VendasEventos = () => {
           </div>
         </main>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingVenda} onOpenChange={(open) => !open && setEditingVenda(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Venda</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Nome do Comprador</Label>
+              <Input
+                value={editForm.nome_comprador || ""}
+                onChange={(e) => setEditForm({ ...editForm, nome_comprador: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input
+                value={editForm.email_comprador || ""}
+                onChange={(e) => setEditForm({ ...editForm, email_comprador: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Produto</Label>
+              <Input
+                value={editForm.produto || ""}
+                onChange={(e) => setEditForm({ ...editForm, produto: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Cidade</Label>
+              <Input
+                value={editForm.cidade || ""}
+                onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Tipo de Ingresso</Label>
+              <Input
+                value={editForm.tipo_ingresso || ""}
+                onChange={(e) => setEditForm({ ...editForm, tipo_ingresso: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Valor</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editForm.valor ?? ""}
+                onChange={(e) => setEditForm({ ...editForm, valor: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Método de Pagamento</Label>
+              <Input
+                value={editForm.metodo_pagamento || ""}
+                onChange={(e) => setEditForm({ ...editForm, metodo_pagamento: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Status</Label>
+              <Input
+                value={editForm.status || ""}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label>Cupom</Label>
+              <Input
+                value={editForm.cupom || ""}
+                onChange={(e) => setEditForm({ ...editForm, cupom: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingVenda(null)}>Cancelar</Button>
+            <Button onClick={handleSaveEdit}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deletingVenda} onOpenChange={(open) => !open && setDeletingVenda(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir venda?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. A venda de{" "}
+              <strong>{deletingVenda?.nome_comprador || "comprador desconhecido"}</strong>{" "}
+              no valor de{" "}
+              <strong>
+                R$ {Number(deletingVenda?.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </strong>{" "}
+              será removida permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   );
 };
