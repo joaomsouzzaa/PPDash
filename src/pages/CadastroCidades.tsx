@@ -34,7 +34,8 @@ import { useCidades, type Cidade } from "@/hooks/useCidades";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, EyeOff, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 function normalizeSlug(nome: string): string {
@@ -194,25 +195,18 @@ const CadastroCidades = () => {
                             })}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={isHidden ? "secondary" : "default"}>
-                              {isHidden ? "Desativada" : "Ativa"}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={!isHidden}
+                                onCheckedChange={() => toggleHidden(c)}
+                              />
+                              <span className="text-sm text-muted-foreground">
+                                {isHidden ? "Desativada" : "Ativa"}
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => toggleHidden(c)}
-                                title={isHidden ? "Reativar" : "Desativar"}
-                              >
-                                {isHidden ? (
-                                  <Eye className="h-4 w-4" />
-                                ) : (
-                                  <EyeOff className="h-4 w-4" />
-                                )}
-                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
