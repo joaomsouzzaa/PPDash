@@ -80,7 +80,7 @@ export function useVendasData(filters: Filters) {
         .order("data_venda", { ascending: true });
 
       if (filters.city !== "all") {
-        query = query.eq("cidade", filters.city);
+        query = query.ilike("cidade", `%${filters.city}%`);
       }
 
       const { data, error } = await query;
