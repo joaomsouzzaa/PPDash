@@ -85,20 +85,6 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
                 )}
               </div>
 
-              {/* Side label connector */}
-              <div
-                className="absolute hidden lg:flex items-center gap-2"
-                style={{
-                  right: `calc(50% - ${widthPercent / 2}% - 120px)`,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                }}
-              >
-                <div className="h-[1px] w-8 bg-muted-foreground/30" />
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                  {step.label}
-                </span>
-              </div>
             </div>
           );
         })}
