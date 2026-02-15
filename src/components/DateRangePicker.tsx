@@ -72,10 +72,14 @@ export function DateRangePicker({ preset, startDate, endDate, onApply }: DateRan
     to: endDate,
   });
   const [month, setMonth] = useState<Date>(subMonths(new Date(), 1));
+  const [clickCount, setClickCount] = useState(0);
+  const [pendingFrom, setPendingFrom] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
     if (open) {
       setSelectedPreset(preset);
+      setClickCount(0);
+      setPendingFrom(undefined);
       if (startDate && endDate) {
         setRange({ from: startDate, to: endDate });
       } else {
@@ -170,16 +174,26 @@ export function DateRangePicker({ preset, startDate, endDate, onApply }: DateRan
             <Calendar
               mode="range"
               selected={range.from ? { from: range.from, to: range.to } : undefined}
-              onSelect={(r) => {
-                if (r?.from && !r?.to) {
-                  // 1st click: set start date, wait for 2nd click
-                  setRange({ from: r.from, to: undefined });
+              onSelect={() => {}}
+              onDayClick={(day) => {
+                const newCount = clickCount + 1;
+                if (newCount === 1) {
+                  // 1st click: set start date
+                  setPendingFrom(day);
+                  setRange({ from: day, to: undefined });
+                  setClickCount(1);
                   setSelectedPreset("custom");
-                } else if (r?.from && r?.to) {
-                  // 2nd click: range complete (or same day), apply & close
-                  setRange({ from: r.from, to: r.to });
+                } else {
+                  // 2nd click: set end date (or same day for single-day)
+                  const from = pendingFrom!;
+                  const to = day;
+                  const finalFrom = from <= to ? from : to;
+                  const finalTo = from <= to ? to : from;
+                  setRange({ from: finalFrom, to: finalTo });
                   setSelectedPreset("custom");
-                  onApply("custom", r.from, r.to);
+                  setClickCount(0);
+                  setPendingFrom(undefined);
+                  onApply("custom", finalFrom, finalTo);
                   setOpen(false);
                 }
               }}
