@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
-import { fetchAdAccounts, clearAdAccountsCache, type AdAccount, isTokenExpired } from "@/lib/meta-ads";
+import { fetchAdAccounts, clearAdAccountsCache, type AdAccount, isTokenExpired, isGloballyRateLimited } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { useCidades } from "@/hooks/useCidades";
@@ -62,8 +62,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
       .catch((err) => {
         const msg = err?.message || "";
         console.error("[DashboardFilters] Fetch error:", msg);
-        // Only flag as rate-limited for explicit Meta API rate limit messages
-        if (msg.toLowerCase().includes("too many calls") || msg.toLowerCase().includes("rate limit")) {
+        if (msg.toLowerCase().includes("too many calls") || msg.toLowerCase().includes("rate limit") || msg.includes("cooldown")) {
           setRateLimited(true);
         }
         setAdAccounts([]);

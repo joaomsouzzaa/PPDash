@@ -16,7 +16,7 @@ import {
   loginWithFacebook,
   logoutFromFacebook,
 } from "@/lib/facebook-sdk";
-import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache } from "@/lib/meta-ads";
+import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache, clearRateLimitFlag } from "@/lib/meta-ads";
 
 const WEBHOOK_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
 
@@ -135,6 +135,7 @@ const Integracoes = () => {
       localStorage.removeItem("meta_token_expires_at");
       localStorage.removeItem("meta_token_expired");
       clearAdAccountsCache();
+      clearRateLimitFlag();
 
       // Now reconnect
       await loadFacebookSDK();
