@@ -19,7 +19,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
 import { fmt, type Filters } from "@/lib/mockData";
-import { fetchAdAccounts, fetchAdSpend, fetchDailySpendBySlug } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
 import { useCidades } from "@/hooks/useCidades";
 import { differenceInDays } from "date-fns";
@@ -133,48 +133,25 @@ const Index = () => {
 
   // Calculate projection when we have a selected city with event date
   useEffect(() => {
-    if (!selectedCidade || !isMetaConnected) {
+    if (!selectedCidade || !isMetaConnected || metaInvestimento === null) {
       setProjecaoParticipantes(null);
       return;
     }
 
-    const calcProjection = async () => {
-      try {
-        let accountIds: string[];
-        if (filters.adAccount !== "all") {
-          accountIds = [filters.adAccount];
-        } else {
-          const accounts = await fetchAdAccounts();
-          accountIds = accounts.map((a) => a.id);
-        }
-        if (accountIds.length === 0) {
-          setProjecaoParticipantes(null);
-          return;
-        }
+    const eventDate = new Date(selectedCidade.data_evento);
+    const today = new Date();
+    const daysRemaining = Math.max(0, differenceInDays(eventDate, today));
 
-        const dailySpend = await fetchDailySpendBySlug(
-          accountIds, selectedCidade.slug, filters.dateRange, filters.startDate, filters.endDate
-        );
+    if (cacParticipanteDisplay <= 0 || metaInvestimento <= 0) {
+      setProjecaoParticipantes(kpi.participantes);
+      return;
+    }
 
-        const eventDate = new Date(selectedCidade.data_evento);
-        const today = new Date();
-        const daysRemaining = Math.max(0, differenceInDays(eventDate, today));
-
-        if (cacParticipanteDisplay <= 0 || dailySpend <= 0) {
-          setProjecaoParticipantes(kpi.participantes);
-          return;
-        }
-
-        const dailyNewParticipants = dailySpend / cacParticipanteDisplay;
-        const projected = Math.round(kpi.participantes + dailyNewParticipants * daysRemaining);
-        setProjecaoParticipantes(projected);
-      } catch {
-        setProjecaoParticipantes(null);
-      }
-    };
-
-    calcProjection();
-  }, [selectedCidade, isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate, kpi.participantes, cacParticipanteDisplay]);
+    // Formula: projection = currentParticipants + (totalInvestment / CAC) * daysRemaining
+    const dailyAcquisitionRate = metaInvestimento / cacParticipanteDisplay;
+    const projected = Math.ceil(kpi.participantes + dailyAcquisitionRate * daysRemaining);
+    setProjecaoParticipantes(projected);
+  }, [selectedCidade, isMetaConnected, metaInvestimento, kpi.participantes, cacParticipanteDisplay]);
 
   return (
     <SidebarProvider>
