@@ -163,24 +163,36 @@ export async function fetchAdSpend(
   return results;
 }
 
-/** Fetch daily spend for campaigns matching a slug */
-export async function fetchDailySpendBySlug(
+/** Fetch the sum of daily budgets for active campaigns matching a slug */
+export async function fetchCampaignDailyBudget(
   accountIds: string[],
-  slug: string,
-  dateRange: string,
-  startDate?: Date,
-  endDate?: Date
+  slug: string
 ): Promise<number> {
-  const timeRange = startDate && endDate
-    ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
-    : buildTimeRange(dateRange);
+  let totalDailyBudget = 0;
 
-  const since = new Date(timeRange.since);
-  const until = new Date(timeRange.until);
-  const totalDays = Math.max(1, Math.ceil((until.getTime() - since.getTime()) / 86400000) + 1);
+  await Promise.all(
+    accountIds.map(async (id) => {
+      try {
+        const campaignsRes = await graphApiFetch<{
+          data: Array<{ id: string; name: string; daily_budget?: string; status: string }>;
+        }>(`/${id}/campaigns`, {
+          fields: "id,name,daily_budget,status",
+          limit: "500",
+          filtering: JSON.stringify([
+            { field: "name", operator: "CONTAIN", value: slug },
+          ]),
+        });
 
-  const results = await fetchAdSpend(accountIds, dateRange, startDate, endDate, slug);
-  const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
+        const campaigns = campaignsRes.data || [];
+        for (const c of campaigns) {
+          if (c.status === "ACTIVE" && c.daily_budget) {
+            // daily_budget is returned in cents (smallest currency unit)
+            totalDailyBudget += parseFloat(c.daily_budget) / 100;
+          }
+        }
+      } catch {}
+    })
+  );
 
-  return totalSpend / totalDays;
+  return totalDailyBudget;
 }

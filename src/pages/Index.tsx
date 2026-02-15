@@ -19,7 +19,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
 import { fmt, type Filters } from "@/lib/mockData";
-import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchAdSpend, fetchCampaignDailyBudget } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
 import { useCidades } from "@/hooks/useCidades";
 import { differenceInDays } from "date-fns";
@@ -131,27 +131,49 @@ const Index = () => {
     ? kpi.bilheteriaTotal - metaInvestimento
     : kpi.lucro;
 
-  // Calculate projection when we have a selected city with event date
+  // Calculate projection using campaign's configured daily budget
   useEffect(() => {
-    if (!selectedCidade || !isMetaConnected || metaInvestimento === null) {
+    if (!selectedCidade || !isMetaConnected) {
       setProjecaoParticipantes(null);
       return;
     }
 
-    const eventDate = new Date(selectedCidade.data_evento);
-    const today = new Date();
-    const daysRemaining = Math.max(0, differenceInDays(eventDate, today));
+    const calcProjection = async () => {
+      try {
+        let accountIds: string[];
+        if (filters.adAccount !== "all") {
+          accountIds = [filters.adAccount];
+        } else {
+          const accounts = await fetchAdAccounts();
+          accountIds = accounts.map((a) => a.id);
+        }
+        if (accountIds.length === 0) {
+          setProjecaoParticipantes(null);
+          return;
+        }
 
-    if (cacParticipanteDisplay <= 0 || metaInvestimento <= 0) {
-      setProjecaoParticipantes(kpi.participantes);
-      return;
-    }
+        const dailyBudget = await fetchCampaignDailyBudget(accountIds, selectedCidade.slug);
 
-    // Formula: projection = currentParticipants + (totalInvestment / CAC) * daysRemaining
-    const dailyAcquisitionRate = metaInvestimento / cacParticipanteDisplay;
-    const projected = Math.ceil(kpi.participantes + dailyAcquisitionRate * daysRemaining);
-    setProjecaoParticipantes(projected);
-  }, [selectedCidade, isMetaConnected, metaInvestimento, kpi.participantes, cacParticipanteDisplay]);
+        const eventDate = new Date(selectedCidade.data_evento);
+        const today = new Date();
+        const daysRemaining = Math.max(0, differenceInDays(eventDate, today));
+
+        if (cacParticipanteDisplay <= 0 || dailyBudget <= 0) {
+          setProjecaoParticipantes(kpi.participantes);
+          return;
+        }
+
+        // Formula: projection = currentParticipants + (dailyBudget / CAC) * daysRemaining
+        const dailyNewParticipants = dailyBudget / cacParticipanteDisplay;
+        const projected = Math.ceil(kpi.participantes + dailyNewParticipants * daysRemaining);
+        setProjecaoParticipantes(projected);
+      } catch {
+        setProjecaoParticipantes(null);
+      }
+    };
+
+    calcProjection();
+  }, [selectedCidade, isMetaConnected, filters.adAccount, kpi.participantes, cacParticipanteDisplay]);
 
   return (
     <SidebarProvider>
