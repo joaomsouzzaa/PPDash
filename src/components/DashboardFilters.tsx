@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
-import { fetchAdAccounts, type AdAccount, isTokenExpired } from "@/lib/meta-ads";
+import { fetchAdAccounts, clearAdAccountsCache, type AdAccount, isTokenExpired } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { useCidades } from "@/hooks/useCidades";
