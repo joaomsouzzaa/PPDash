@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { PlusCircle, Pencil, EyeOff } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,12 +9,8 @@ import {
 import type { Filters } from "@/lib/mockData";
 import { fetchAdAccounts, type AdAccount, isTokenExpired } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { AddCidadeDialog } from "@/components/AddCidadeDialog";
-import { EditCidadeDialog } from "@/components/EditCidadeDialog";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
-import { ManageHiddenCidadesDialog } from "@/components/ManageHiddenCidadesDialog";
-import { useCidades, type Cidade } from "@/hooks/useCidades";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCidades } from "@/hooks/useCidades";
 
 interface DashboardFiltersProps {
   filters: Filters;
@@ -25,11 +20,6 @@ interface DashboardFiltersProps {
 export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersProps) {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
-  const [addCidadeOpen, setAddCidadeOpen] = useState(false);
-  const [editCidade, setEditCidade] = useState<Cidade | null>(null);
-  const [manageHiddenOpen, setManageHiddenOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const queryClient = useQueryClient();
 
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
   const hiddenCidades = getHiddenCidades();
@@ -61,116 +51,58 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
     onFiltersChange({ ...filters, ...partial });
   };
 
-  const handleCityChange = (v: string) => {
-    if (v === "_add_new") {
-      setAddCidadeOpen(true);
-      return;
-    }
-    if (v === "_manage_hidden") {
-      setManageHiddenOpen(true);
-      return;
-    }
-    update({ city: v });
-  };
-
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-3">
-        <DateRangePicker
-          preset={filters.dateRange}
-          startDate={filters.startDate}
-          endDate={filters.endDate}
-          onApply={(preset, start, end) =>
-            update({ dateRange: preset, startDate: start, endDate: end })
-          }
-        />
-
-        <Select value={filters.adAccount} onValueChange={(v) => update({ adAccount: v })}>
-          <SelectTrigger className="w-[240px] bg-card">
-            <SelectValue placeholder={loadingAccounts ? "Carregando contas..." : "Conta de Anúncios"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as contas</SelectItem>
-            {loadingAccounts ? (
-              <SelectItem value="_loading" disabled>Carregando contas...</SelectItem>
-            ) : adAccounts.length > 0 ? (
-              adAccounts.map((acc) => (
-                <SelectItem key={acc.id} value={acc.id}>
-                  {acc.name || `Conta ${acc.account_id}`}
-                </SelectItem>
-              ))
-            ) : !isMetaConnected ? (
-              <SelectItem value="_none" disabled>Conecte o Meta Ads primeiro</SelectItem>
-            ) : isTokenExpired() ? (
-              <SelectItem value="_expired" disabled>Token expirado — reconecte nas Integrações</SelectItem>
-            ) : (
-              <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-
-        <Select value={filters.city} onValueChange={handleCityChange}>
-          <SelectTrigger className="w-[240px] bg-card">
-            <SelectValue placeholder="Cidade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as cidades</SelectItem>
-            {loadingCidades ? (
-              <SelectItem value="_loading" disabled>Carregando...</SelectItem>
-            ) : (
-              visibleCidades.map((c) => (
-                <SelectItem key={c.id} value={c.slug}>
-                  <span className="flex items-center justify-between w-full gap-2">
-                    {c.nome}
-                    <span
-                      role="button"
-                      className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setEditCidade(c);
-                      }}
-                    >
-                      <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground shrink-0" />
-                    </span>
-                  </span>
-                </SelectItem>
-              ))
-            )}
-            <SelectItem value="_add_new">
-              <span className="flex items-center gap-1.5">
-                <PlusCircle className="h-3.5 w-3.5" />
-                Cadastrar nova cidade
-              </span>
-            </SelectItem>
-            <SelectItem value="_manage_hidden">
-              <span className="flex items-center gap-1.5">
-                <EyeOff className="h-3.5 w-3.5" />
-                Cidades desativadas
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <AddCidadeDialog
-        open={addCidadeOpen}
-        onOpenChange={setAddCidadeOpen}
-        onCidadeAdded={() => queryClient.invalidateQueries({ queryKey: ["cidades"] })}
+    <div className="flex flex-wrap items-center gap-3">
+      <DateRangePicker
+        preset={filters.dateRange}
+        startDate={filters.startDate}
+        endDate={filters.endDate}
+        onApply={(preset, start, end) =>
+          update({ dateRange: preset, startDate: start, endDate: end })
+        }
       />
 
-      <EditCidadeDialog
-        open={!!editCidade}
-        onOpenChange={(open) => { if (!open) setEditCidade(null); }}
-        cidade={editCidade}
-        onCidadeUpdated={() => queryClient.invalidateQueries({ queryKey: ["cidades"] })}
-      />
-      <ManageHiddenCidadesDialog
-        open={manageHiddenOpen}
-        onOpenChange={setManageHiddenOpen}
-        cidades={cidades}
-        onUpdated={() => setRefreshKey((k) => k + 1)}
-      />
-    </>
+      <Select value={filters.adAccount} onValueChange={(v) => update({ adAccount: v })}>
+        <SelectTrigger className="w-[240px] bg-card">
+          <SelectValue placeholder={loadingAccounts ? "Carregando contas..." : "Conta de Anúncios"} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas as contas</SelectItem>
+          {loadingAccounts ? (
+            <SelectItem value="_loading" disabled>Carregando contas...</SelectItem>
+          ) : adAccounts.length > 0 ? (
+            adAccounts.map((acc) => (
+              <SelectItem key={acc.id} value={acc.id}>
+                {acc.name || `Conta ${acc.account_id}`}
+              </SelectItem>
+            ))
+          ) : !isMetaConnected ? (
+            <SelectItem value="_none" disabled>Conecte o Meta Ads primeiro</SelectItem>
+          ) : isTokenExpired() ? (
+            <SelectItem value="_expired" disabled>Token expirado — reconecte nas Integrações</SelectItem>
+          ) : (
+            <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+
+      <Select value={filters.city} onValueChange={(v) => update({ city: v })}>
+        <SelectTrigger className="w-[240px] bg-card">
+          <SelectValue placeholder="Cidade" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas as cidades</SelectItem>
+          {loadingCidades ? (
+            <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+          ) : (
+            visibleCidades.map((c) => (
+              <SelectItem key={c.id} value={c.slug}>
+                {c.nome}
+              </SelectItem>
+            ))
+          )}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
