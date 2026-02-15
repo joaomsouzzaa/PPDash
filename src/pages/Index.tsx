@@ -39,7 +39,7 @@ const Index = () => {
             <DashboardFilters />
 
             {/* KPI Row 1 - Financial */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <KpiCard
                 title="Investimento Total"
                 value="R$ 12.580"
@@ -63,6 +63,14 @@ const Index = () => {
                 changeType="positive"
                 icon={Target}
                 iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+              />
+              <KpiCard
+                title="CAC por Participante"
+                value="R$ 51,14"
+                change="Investimento / Participantes"
+                changeType="neutral"
+                icon={Users}
+                iconColor="bg-primary/10 text-primary"
               />
               <KpiCard
                 title="Ticket Médio"
