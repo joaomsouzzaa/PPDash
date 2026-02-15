@@ -10,6 +10,7 @@ interface VendaRow {
   cidade: string | null;
   data_venda: string;
   status: string;
+  metodo_pagamento: string | null;
 }
 
 function getDateRange(filters: Filters): { start: string; end: string } {
@@ -108,10 +109,14 @@ function calcularKpis(vendas: VendaRow[]) {
   let vendasDuplas = 0;
   let totalVips = 0;
   let participantes = 0;
+  const pagamentoPorMetodo: Record<string, number> = {};
 
   for (const v of vendas) {
     const valor = Number(v.valor) || 0;
     bilheteriaTotal += valor;
+
+    const metodo = v.metodo_pagamento || "outro";
+    pagamentoPorMetodo[metodo] = (pagamentoPorMetodo[metodo] || 0) + valor;
 
     const duplo = isDuplo(v);
     const vip = isVip(v);
@@ -164,5 +169,6 @@ function calcularKpis(vendas: VendaRow[]) {
     cacParticipante: 0,
     lucro: 0,
     chartData,
+    pagamentoPorMetodo,
   };
 }

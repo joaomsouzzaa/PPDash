@@ -18,6 +18,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
+import { PaymentMethodChart } from "@/components/PaymentMethodChart";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend, fetchCampaignDailyBudget, fetchDailySpendBreakdown } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
@@ -123,6 +124,7 @@ const Index = () => {
     investimentoTotal: 0, bilheteriaTotal: 0, cacVenda: 0, cacParticipante: 0,
     participantes: 0, totalVips: 0, vendasIndividuais: 0, vendasDuplas: 0,
     ticketMedio: 0, bilheteriaIngressos: 0, bilheteriaVip: 0, lucro: 0, chartData: [],
+    pagamentoPorMetodo: {},
   };
 
   const investimentoDisplay = metaInvestimento !== null ? metaInvestimento : kpi.investimentoTotal;
@@ -288,6 +290,9 @@ const Index = () => {
                 iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
               />
             </div>
+
+            {/* Payment Method Donut Chart */}
+            <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
 
             {/* Charts */}
             <SalesChart data={(() => {
