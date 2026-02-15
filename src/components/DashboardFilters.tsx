@@ -110,7 +110,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         </Select>
 
         <Select value={filters.city} onValueChange={handleCityChange}>
-          <SelectTrigger className="w-[180px] bg-card">
+          <SelectTrigger className="w-[240px] bg-card">
             <SelectValue placeholder="Cidade" />
           </SelectTrigger>
           <SelectContent>
