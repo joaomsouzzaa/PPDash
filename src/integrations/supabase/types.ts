@@ -40,15 +40,23 @@ export type Database = {
       }
       leads: {
         Row: {
+          ad_name: string | null
+          area_atuacao: string | null
+          campaign_name: string | null
           cidade: string | null
           created_at: string
           data_lead: string
+          deal_user: string | null
           email: string | null
+          faturamento: string | null
           id: string
+          instagram: string | null
           nome: string | null
           origem: string | null
+          papel: string | null
           payload: Json | null
           produto_slug: string | null
+          situacao_atual: string | null
           status: string
           telefone: string | null
           utm_campaign: string | null
@@ -56,17 +64,26 @@ export type Database = {
           utm_medium: string | null
           utm_source: string | null
           utm_term: string | null
+          whatsapp: string | null
         }
         Insert: {
+          ad_name?: string | null
+          area_atuacao?: string | null
+          campaign_name?: string | null
           cidade?: string | null
           created_at?: string
           data_lead?: string
+          deal_user?: string | null
           email?: string | null
+          faturamento?: string | null
           id?: string
+          instagram?: string | null
           nome?: string | null
           origem?: string | null
+          papel?: string | null
           payload?: Json | null
           produto_slug?: string | null
+          situacao_atual?: string | null
           status?: string
           telefone?: string | null
           utm_campaign?: string | null
@@ -74,17 +91,26 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          whatsapp?: string | null
         }
         Update: {
+          ad_name?: string | null
+          area_atuacao?: string | null
+          campaign_name?: string | null
           cidade?: string | null
           created_at?: string
           data_lead?: string
+          deal_user?: string | null
           email?: string | null
+          faturamento?: string | null
           id?: string
+          instagram?: string | null
           nome?: string | null
           origem?: string | null
+          papel?: string | null
           payload?: Json | null
           produto_slug?: string | null
+          situacao_atual?: string | null
           status?: string
           telefone?: string | null
           utm_campaign?: string | null
@@ -92,6 +118,7 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          whatsapp?: string | null
         }
         Relationships: []
       }

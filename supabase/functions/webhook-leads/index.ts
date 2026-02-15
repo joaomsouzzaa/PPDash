@@ -37,20 +37,30 @@ Deno.serve(async (req) => {
   try {
     const payload = await req.json();
 
+    // Map CRM fields to database columns
     const lead: Record<string, unknown> = {
-      nome: payload.nome || payload.name || payload.full_name || null,
-      email: payload.email || null,
-      telefone: payload.telefone || payload.phone || payload.mobile || null,
+      nome: payload.contact_name || payload.Nome || payload.nome || payload.name || payload.full_name || null,
+      email: payload.contact_email || payload.email || null,
+      telefone: payload.contact_phone || payload.telefone || payload.phone || payload.mobile || null,
       status: mapLeadStatus(payload.status || payload.lead_status || "lead"),
-      utm_source: payload.utm_source || null,
-      utm_medium: payload.utm_medium || null,
-      utm_campaign: payload.utm_campaign || null,
-      utm_content: payload.utm_content || null,
+      utm_source: payload.deal_utm_source || payload["Utm-source"] || payload.utm_source || null,
+      utm_medium: payload.deal_utm_medium || payload.utm_medium || null,
+      utm_campaign: payload.deal_utm_campaign || payload["Utm_campaing"] || payload.utm_campaign || null,
+      utm_content: payload.deal_utm_content || payload.utm_content || null,
       utm_term: payload.utm_term || null,
       produto_slug: payload.produto_slug || payload.product_slug || null,
       cidade: payload.cidade || payload.city || null,
       origem: payload.origem || payload.source || payload.origin || "crm",
-      data_lead: payload.data_lead || payload.created_at || new Date().toISOString(),
+      data_lead: payload.deal_created_at || payload["data da criação"] || payload.data_lead || payload.created_at || new Date().toISOString(),
+      faturamento: payload.contact_scaleformatacao_fatu_1 || payload.faturamento || null,
+      ad_name: payload.deal_ad_name || payload["nome do anúncio"] || null,
+      campaign_name: payload.deal_campaign_name || payload["nome da campanha"] || null,
+      deal_user: payload.deal_user || payload["dono do negócio"] || null,
+      situacao_atual: payload.contact_quais_dessas_situaco || payload["situação atual?"] || payload["situacao atual"] || null,
+      whatsapp: payload.contact_qual_seu_whatsapp || payload.Whatsapp || payload.whatsapp || null,
+      instagram: payload.contact_qual_o_do_instagram || payload.Instagram || payload.instagram || null,
+      area_atuacao: payload.deal_qual_sua_area_de_atu || payload["área de atuação"] || payload.area_atuacao || null,
+      papel: payload.contact_qual_e_o_seu_papel_h || payload["Seu papel hoje?"] || payload.papel || null,
       payload,
     };
 
@@ -59,7 +69,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // If email is provided, check for existing lead to update status
+    // If email is provided, check for existing lead to update
     const email = lead.email as string | null;
     if (email) {
       const { data: existing } = await supabase
@@ -69,22 +79,10 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
+        const { payload: _p, ...updateFields } = lead;
         const { error } = await supabase
           .from("leads")
-          .update({
-            status: lead.status,
-            nome: lead.nome,
-            telefone: lead.telefone,
-            utm_source: lead.utm_source,
-            utm_medium: lead.utm_medium,
-            utm_campaign: lead.utm_campaign,
-            utm_content: lead.utm_content,
-            utm_term: lead.utm_term,
-            produto_slug: lead.produto_slug,
-            cidade: lead.cidade,
-            origem: lead.origem,
-            payload: lead.payload,
-          })
+          .update({ ...updateFields, payload: lead.payload })
           .eq("id", existing.id);
 
         if (error) {
