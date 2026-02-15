@@ -67,8 +67,9 @@ export function ManageHiddenCidadesDialog({
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Cidade</TableHead>
+              <TableRow>
+                  <TableHead>Editar</TableHead>
+                  <TableHead>Nome da Cidade</TableHead>
                   <TableHead>Data do Evento</TableHead>
                   <TableHead>Slug</TableHead>
                   <TableHead className="text-right">Ativar</TableHead>
@@ -78,17 +79,15 @@ export function ManageHiddenCidadesDialog({
                 {hiddenCidades.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>
-                      <span className="flex items-center gap-1.5">
-                        {c.nome}
-                        <span
-                          role="button"
-                          className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted cursor-pointer"
-                          onClick={() => setEditCidade(c)}
-                        >
-                          <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                        </span>
+                      <span
+                        role="button"
+                        className="inline-flex items-center justify-center rounded p-0.5 hover:bg-muted cursor-pointer"
+                        onClick={() => setEditCidade(c)}
+                      >
+                        <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                       </span>
                     </TableCell>
+                    <TableCell>{c.nome}</TableCell>
                     <TableCell>
                       {format(new Date(c.data_evento), "dd/MM/yyyy")}
                     </TableCell>
