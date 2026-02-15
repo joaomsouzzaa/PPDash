@@ -70,7 +70,7 @@ export function AppSidebar() {
       <SidebarContent className="px-2 py-4">
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
-            Menu
+            Eventos
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
