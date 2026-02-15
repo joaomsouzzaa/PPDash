@@ -50,7 +50,8 @@ import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "data_venda" | "nome_comprador" | "produto" | "cidade" | "tipo_ingresso" | "quantidade" | "valor" | "metodo_pagamento" | "status" | "cupom" | "plataforma";
@@ -131,7 +132,7 @@ const VendasEventos = () => {
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [city, setCity] = useState("all");
-  const [tipoIngressoFilter, setTipoIngressoFilter] = useState("all");
+  const [tipoIngressoFilter, setTipoIngressoFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("aprovada");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -190,8 +191,8 @@ const VendasEventos = () => {
   }, [vendas]);
 
   const filteredVendas = useMemo(() => {
-    if (tipoIngressoFilter === "all") return vendas;
-    return vendas.filter((v) => v.tipo_ingresso === tipoIngressoFilter);
+    if (tipoIngressoFilter.length === 0) return vendas;
+    return vendas.filter((v) => v.tipo_ingresso != null && tipoIngressoFilter.includes(v.tipo_ingresso));
   }, [vendas, tipoIngressoFilter]);
 
   const sortedVendas = useMemo(() => {
@@ -380,17 +381,39 @@ const VendasEventos = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={tipoIngressoFilter} onValueChange={(v) => { setTipoIngressoFilter(v); setPage(1); }}>
-                <SelectTrigger className="w-[200px] bg-card">
-                  <SelectValue placeholder="Tipo de Ingresso" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  {tipoIngressoOptions.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-[200px] justify-between bg-card font-normal">
+                    {tipoIngressoFilter.length === 0
+                      ? "Todos os tipos"
+                      : `${tipoIngressoFilter.length} tipo(s)`}
+                    <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-2" align="start">
+                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                    {tipoIngressoOptions.map((t) => (
+                      <label key={t} className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent cursor-pointer">
+                        <Checkbox
+                          checked={tipoIngressoFilter.includes(t)}
+                          onCheckedChange={(checked) => {
+                            setTipoIngressoFilter((prev) =>
+                              checked ? [...prev, t] : prev.filter((x) => x !== t)
+                            );
+                            setPage(1);
+                          }}
+                        />
+                        {t}
+                      </label>
+                    ))}
+                    {tipoIngressoFilter.length > 0 && (
+                      <Button variant="ghost" size="sm" className="mt-1" onClick={() => { setTipoIngressoFilter([]); setPage(1); }}>
+                        Limpar filtro
+                      </Button>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
                 <SelectTrigger className="w-[180px] bg-card">
                   <SelectValue placeholder="Status" />
