@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Filters } from "@/lib/mockData";
 import { removeAccents } from "@/lib/utils";
+import { useCidades } from "@/hooks/useCidades";
 
 interface VendaRow {
   valor: number;
@@ -67,8 +68,10 @@ function getDateRange(filters: Filters): { start: string; end: string } {
 }
 
 export function useVendasData(filters: Filters) {
+  const { data: cidades = [] } = useCidades();
+
   return useQuery({
-    queryKey: ["vendas-kpi", filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.city],
+    queryKey: ["vendas-kpi", filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.city, cidades.length],
     queryFn: async () => {
       const { start, end } = getDateRange(filters);
 
@@ -81,8 +84,15 @@ export function useVendasData(filters: Filters) {
         .order("data_venda", { ascending: true });
 
       if (filters.city !== "all") {
-        const normalizedCity = removeAccents(filters.city).toLowerCase();
-        query = query.filter("cidade", "ilike", `%${normalizedCity}%`);
+        const cidadeRecord = cidades.find((c) => c.slug === filters.city);
+        const slug = removeAccents(filters.city).toLowerCase();
+        const nome = cidadeRecord?.nome || "";
+        // Match by slug (unaccented) OR by original nome (accented)
+        const conditions = [`cidade.ilike.%${slug}%`];
+        if (nome && nome.toLowerCase() !== slug) {
+          conditions.push(`cidade.ilike.%${nome}%`);
+        }
+        query = query.or(conditions.join(","));
       }
 
       const { data, error } = await query;
