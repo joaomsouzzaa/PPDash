@@ -18,49 +18,79 @@ export type Database = {
         Row: {
           cidade: string | null
           created_at: string
+          cupom: string | null
           data_venda: string
+          documento: string | null
           email_comprador: string | null
           id: string
           id_transacao: string | null
+          metodo_pagamento: string | null
           nome_comprador: string | null
           payload: Json | null
           plataforma: string
           produto: string | null
+          produtor: string | null
+          quantidade: number | null
           status: string
           telefone_comprador: string | null
           tipo_ingresso: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
           valor: number
         }
         Insert: {
           cidade?: string | null
           created_at?: string
+          cupom?: string | null
           data_venda?: string
+          documento?: string | null
           email_comprador?: string | null
           id?: string
           id_transacao?: string | null
+          metodo_pagamento?: string | null
           nome_comprador?: string | null
           payload?: Json | null
           plataforma: string
           produto?: string | null
+          produtor?: string | null
+          quantidade?: number | null
           status?: string
           telefone_comprador?: string | null
           tipo_ingresso?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
           valor?: number
         }
         Update: {
           cidade?: string | null
           created_at?: string
+          cupom?: string | null
           data_venda?: string
+          documento?: string | null
           email_comprador?: string | null
           id?: string
           id_transacao?: string | null
+          metodo_pagamento?: string | null
           nome_comprador?: string | null
           payload?: Json | null
           plataforma?: string
           produto?: string | null
+          produtor?: string | null
+          quantidade?: number | null
           status?: string
           telefone_comprador?: string | null
           tipo_ingresso?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
           valor?: number
         }
         Relationships: []

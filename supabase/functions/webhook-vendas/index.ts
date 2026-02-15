@@ -20,40 +20,89 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json();
-
-    // Detectar plataforma pelo formato do payload
     let venda: Record<string, unknown>;
 
-    if (payload.event || payload.webhook_event_type) {
-      // Kiwify format
+    if (payload.OrderId && payload.EventType) {
+      // ===== GoExplosion =====
+      const buyer = payload.Purchase?.Buyer || {};
+      const marketing = payload.Purchase?.MarketingData || {};
+      const totalDetails = payload.Purchase?.TotalDetails || payload.ProductTotalDetails || {};
+      const product = payload.Product || {};
+
+      venda = {
+        plataforma: "goexplosion",
+        id_transacao: payload.OrderId,
+        status: mapStatus(payload.EventType),
+        valor: totalDetails.Total ?? totalDetails.SubTotal ?? 0,
+        quantidade: product.Quantity ?? 1,
+        nome_comprador: buyer.FullName || null,
+        email_comprador: buyer.Email || null,
+        telefone_comprador: buyer.Phone || null,
+        documento: buyer.Document || null,
+        produto: product.Name || null,
+        tipo_ingresso: detectTipoIngresso(product.Name || ""),
+        produtor: product.Producer || null,
+        cidade: buyer.Addresses?.[0]?.City || null,
+        metodo_pagamento: payload.Purchase?.PaymentMethod?.metodoPagamento || null,
+        cupom: totalDetails.CouponName || null,
+        utm_source: marketing.UtmSource || null,
+        utm_medium: marketing.UtmMedium || null,
+        utm_campaign: marketing.UtmCampaign || null,
+        utm_content: marketing.UtmContent || null,
+        utm_term: marketing.UtmTerm || null,
+        data_venda: payload.Purchase?.AuthorizedDate || payload.createdDate || new Date().toISOString(),
+        payload,
+      };
+    } else if (payload.event || payload.webhook_event_type) {
+      // ===== Kiwify =====
       venda = {
         plataforma: "kiwify",
         id_transacao: payload.order_id || payload.Transaction?.id || null,
         status: mapStatus(payload.order_status || payload.event || "aprovada"),
         valor: parseFloat(payload.order_price || payload.Transaction?.amount || "0"),
+        quantidade: 1,
         nome_comprador: payload.Customer?.full_name || payload.customer?.name || null,
         email_comprador: payload.Customer?.email || payload.customer?.email || null,
         telefone_comprador: payload.Customer?.mobile || payload.customer?.phone || null,
+        documento: null,
         produto: payload.Product?.name || payload.product?.name || null,
-        tipo_ingresso: payload.Product?.name || null,
+        tipo_ingresso: detectTipoIngresso(payload.Product?.name || payload.product?.name || ""),
+        produtor: null,
         cidade: null,
+        metodo_pagamento: null,
+        cupom: null,
+        utm_source: null,
+        utm_medium: null,
+        utm_campaign: null,
+        utm_content: null,
+        utm_term: null,
         data_venda: payload.created_at || new Date().toISOString(),
         payload,
       };
     } else {
-      // GoExplosion / formato genérico
+      // ===== Formato genérico =====
       venda = {
-        plataforma: payload.plataforma || "goexplosion",
-        id_transacao: payload.id_transacao || payload.transaction_id || payload.id || null,
+        plataforma: payload.plataforma || "desconhecida",
+        id_transacao: payload.id_transacao || payload.transaction_id || null,
         status: mapStatus(payload.status || "aprovada"),
-        valor: parseFloat(payload.valor || payload.amount || payload.price || "0"),
-        nome_comprador: payload.nome || payload.name || payload.customer_name || null,
-        email_comprador: payload.email || payload.customer_email || null,
+        valor: parseFloat(payload.valor || payload.amount || "0"),
+        quantidade: payload.quantidade || 1,
+        nome_comprador: payload.nome || payload.name || null,
+        email_comprador: payload.email || null,
         telefone_comprador: payload.telefone || payload.phone || null,
-        produto: payload.produto || payload.product || payload.product_name || null,
-        tipo_ingresso: payload.tipo_ingresso || payload.ticket_type || null,
+        documento: null,
+        produto: payload.produto || payload.product || null,
+        tipo_ingresso: payload.tipo_ingresso || null,
+        produtor: null,
         cidade: payload.cidade || payload.city || null,
-        data_venda: payload.data_venda || payload.date || new Date().toISOString(),
+        metodo_pagamento: null,
+        cupom: null,
+        utm_source: null,
+        utm_medium: null,
+        utm_campaign: null,
+        utm_content: null,
+        utm_term: null,
+        data_venda: payload.data_venda || new Date().toISOString(),
         payload,
       };
     }
@@ -90,10 +139,19 @@ Deno.serve(async (req) => {
 });
 
 function mapStatus(status: string): string {
-  const s = status.toLowerCase();
-  if (s.includes("approv") || s.includes("paid") || s.includes("completed") || s === "order_paid") return "aprovada";
+  const s = status.toLowerCase().replace(/_/g, " ");
+  if (s.includes("approved") || s.includes("purchase approved") || s.includes("paid") || s.includes("completed") || s.includes("ready")) return "aprovada";
   if (s.includes("refund")) return "reembolsada";
   if (s.includes("cancel") || s.includes("chargeback")) return "cancelada";
   if (s.includes("pending") || s.includes("waiting")) return "pendente";
   return status;
+}
+
+function detectTipoIngresso(productName: string): string | null {
+  const name = productName.toLowerCase();
+  if (name.includes("vip duplo")) return "vip_duplo";
+  if (name.includes("vip")) return "vip";
+  if (name.includes("duplo") || name.includes("2 pessoas")) return "duplo";
+  if (name.includes("individual") || name.includes("1 pessoa")) return "individual";
+  return null;
 }
