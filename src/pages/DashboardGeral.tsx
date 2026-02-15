@@ -72,9 +72,15 @@ const fmt = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const DashboardGeral = () => {
-  const [dateRange, setDateRange] = useState("30d");
-  const [startDate, setStartDate] = useState<Date | undefined>();
-  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [dateRange, setDateRange] = useState(() => localStorage.getItem("selected_date_range") || "30d");
+  const [startDate, setStartDate] = useState<Date | undefined>(() => {
+    const saved = localStorage.getItem("selected_start_date");
+    return saved ? new Date(saved) : undefined;
+  });
+  const [endDate, setEndDate] = useState<Date | undefined>(() => {
+    const saved = localStorage.getItem("selected_end_date");
+    return saved ? new Date(saved) : undefined;
+  });
 
   const { data: cidades = [] } = useCidades();
   const hiddenCidades = getHiddenCidades();
@@ -230,6 +236,9 @@ const DashboardGeral = () => {
                 setDateRange(preset);
                 setStartDate(s);
                 setEndDate(e);
+                localStorage.setItem("selected_date_range", preset);
+                if (s) localStorage.setItem("selected_start_date", s.toISOString()); else localStorage.removeItem("selected_start_date");
+                if (e) localStorage.setItem("selected_end_date", e.toISOString()); else localStorage.removeItem("selected_end_date");
               }}
             />
 
