@@ -12,6 +12,7 @@ import {
   Sun,
   Users,
   CreditCard,
+  MapPin,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -164,6 +165,19 @@ export function AppSidebar() {
               >
                 <Plug className="h-4 w-4" />
                 <span>Integrações</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Cadastro de Cidades">
+              <NavLink
+                to="/cadastro-cidades"
+                end
+                className="hover:bg-sidebar-accent/80"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <MapPin className="h-4 w-4" />
+                <span>Cadastro de Cidades</span>
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
