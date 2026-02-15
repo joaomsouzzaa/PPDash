@@ -156,7 +156,7 @@ const Index = () => {
 
         const eventDate = new Date(selectedCidade.data_evento);
         const today = new Date();
-        const daysRemaining = Math.max(0, differenceInDays(eventDate, today));
+        const daysRemaining = Math.max(0, differenceInDays(eventDate, today) + 1);
 
         if (cacParticipanteDisplay <= 0 || dailyBudget <= 0) {
           setProjecaoParticipantes(kpi.participantes);
