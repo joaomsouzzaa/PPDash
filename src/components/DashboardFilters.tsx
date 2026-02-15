@@ -12,6 +12,7 @@ import { fetchAdAccounts, type AdAccount, isTokenExpired } from "@/lib/meta-ads"
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { AddCidadeDialog } from "@/components/AddCidadeDialog";
 import { EditCidadeDialog } from "@/components/EditCidadeDialog";
+import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { useCidades, type Cidade } from "@/hooks/useCidades";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -28,6 +29,8 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const queryClient = useQueryClient();
 
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
+  const hiddenCidades = getHiddenCidades();
+  const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
 
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
 
@@ -108,7 +111,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
             {loadingCidades ? (
               <SelectItem value="_loading" disabled>Carregando...</SelectItem>
             ) : (
-              cidades.map((c) => (
+              visibleCidades.map((c) => (
                 <SelectItem key={c.id} value={c.slug}>
                   <span className="flex items-center justify-between w-full gap-2">
                     {c.nome}

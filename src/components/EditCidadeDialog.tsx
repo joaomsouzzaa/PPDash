@@ -17,10 +17,23 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Cidade } from "@/hooks/useCidades";
+
+export function getHiddenCidades(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem("hidden_cidades") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function setHiddenCidades(ids: string[]) {
+  localStorage.setItem("hidden_cidades", JSON.stringify(ids));
+}
 
 interface EditCidadeDialogProps {
   open: boolean;
@@ -34,12 +47,15 @@ export function EditCidadeDialog({ open, onOpenChange, cidade, onCidadeUpdated }
   const [slug, setSlug] = useState("");
   const [dataEvento, setDataEvento] = useState<Date>();
   const [saving, setSaving] = useState(false);
+  const [ativa, setAtiva] = useState(true);
 
   useEffect(() => {
     if (cidade) {
       setNome(cidade.nome);
       setSlug(cidade.slug);
       setDataEvento(new Date(cidade.data_evento));
+      const hidden = getHiddenCidades();
+      setAtiva(!hidden.includes(cidade.id));
     }
   }, [cidade]);
 
@@ -61,6 +77,16 @@ export function EditCidadeDialog({ open, onOpenChange, cidade, onCidadeUpdated }
         .eq("id", cidade.id);
 
       if (error) throw error;
+
+      // Update visibility in localStorage
+      const hidden = getHiddenCidades();
+      if (cidade) {
+        if (ativa) {
+          setHiddenCidades(hidden.filter((id) => id !== cidade.id));
+        } else if (!hidden.includes(cidade.id)) {
+          setHiddenCidades([...hidden, cidade.id]);
+        }
+      }
 
       toast.success("Cidade atualizada com sucesso!");
       onOpenChange(false);
@@ -97,6 +123,13 @@ export function EditCidadeDialog({ open, onOpenChange, cidade, onCidadeUpdated }
             <p className="text-xs text-muted-foreground">
               A slug será usada para filtrar campanhas no Meta Ads pelo nome.
             </p>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+            <div>
+              <Label htmlFor="edit-ativa" className="text-sm font-medium">Exibir no filtro</Label>
+              <p className="text-xs text-muted-foreground">Mostrar esta cidade na lista de filtros</p>
+            </div>
+            <Switch id="edit-ativa" checked={ativa} onCheckedChange={setAtiva} />
           </div>
           <div className="grid gap-2">
             <Label>Data do Evento</Label>
