@@ -29,8 +29,8 @@ export function SalesChart() {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="investGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(230, 80%, 56%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(230, 80%, 56%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="hsl(0, 72%, 51%)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(0, 72%, 51%)" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(152, 69%, 41%)" stopOpacity={0.3} />
@@ -54,7 +54,7 @@ export function SalesChart() {
             <Area
               type="monotone"
               dataKey="investimento"
-              stroke="hsl(230, 80%, 56%)"
+              stroke="hsl(0, 72%, 51%)"
               fill="url(#investGrad)"
               strokeWidth={2}
               name="Investimento"
