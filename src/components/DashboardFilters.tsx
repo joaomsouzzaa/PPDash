@@ -45,18 +45,27 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   }, []);
 
   useEffect(() => {
-    if (!isMetaConnected) {
+    const connected = localStorage.getItem("meta_connected") === "true";
+    const token = localStorage.getItem("meta_access_token");
+    const expired = isTokenExpired();
+    
+    console.log("[DashboardFilters] Meta check:", { connected, hasToken: !!token, tokenLength: token?.length, expired, refreshKey });
+
+    if (!connected || !token) {
+      console.log("[DashboardFilters] Skipping fetch - not connected or no token");
       setAdAccounts([]);
       return;
     }
-    // If token is already flagged as expired, don't even try
-    if (isTokenExpired()) {
+    if (expired) {
+      console.log("[DashboardFilters] Skipping fetch - token expired");
       setAdAccounts([]);
       return;
     }
     setLoadingAccounts(true);
+    console.log("[DashboardFilters] Fetching ad accounts...");
     fetchAdAccounts()
       .then((accounts) => {
+        console.log("[DashboardFilters] Accounts fetched:", accounts.length, accounts.map(a => a.name));
         setAdAccounts(accounts);
         if (
           filters.adAccount !== "all" &&
@@ -66,7 +75,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
         }
       })
       .catch((err) => {
-        console.warn("Erro ao buscar contas de anúncio:", err?.message);
+        console.error("[DashboardFilters] Error fetching accounts:", err?.message);
         setAdAccounts([]);
       })
       .finally(() => setLoadingAccounts(false));
