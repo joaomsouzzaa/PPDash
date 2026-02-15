@@ -17,7 +17,7 @@ import {
   logoutFromFacebook,
 } from "@/lib/facebook-sdk";
 
-const WEBHOOK_URL = "https://scalecompany.lovable.app/api/webhook-vendas";
+const WEBHOOK_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
 
 const WebhookSection = () => {
   const [copied, setCopied] = useState(false);
