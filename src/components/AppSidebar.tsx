@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Plug,
@@ -5,6 +6,11 @@ import {
   BarChart3,
   TrendingUp,
   Settings,
+  LogOut,
+  Moon,
+  Sun,
+  Users,
+  CreditCard,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -18,7 +24,9 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -32,6 +40,14 @@ const analyticsItems = [
 ];
 
 export function AppSidebar() {
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains("dark")
+  );
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
+
   return (
     <Sidebar>
       <SidebarHeader className="p-5 border-b border-sidebar-border">
@@ -100,10 +116,13 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      <SidebarFooter className="border-t border-sidebar-border p-3 space-y-1">
+        <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
+          Configurações
+        </SidebarGroupLabel>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Configurações">
+            <SidebarMenuButton asChild tooltip="Configurações da Conta">
               <NavLink
                 to="/configuracoes"
                 end
@@ -111,11 +130,59 @@ export function AppSidebar() {
                 activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
               >
                 <Settings className="h-4 w-4" />
-                <span>Configurações</span>
+                <span>Configurações da Conta</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Gerenciar Plano">
+              <NavLink
+                to="/plano"
+                end
+                className="hover:bg-sidebar-accent/80"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <CreditCard className="h-4 w-4" />
+                <span>Gerenciar Plano</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Minha Equipe">
+              <NavLink
+                to="/equipe"
+                end
+                className="hover:bg-sidebar-accent/80"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <Users className="h-4 w-4" />
+                <span>Minha Equipe</span>
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+
+        <SidebarSeparator />
+
+        <div className="flex items-center justify-between px-2">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip="Sair" className="hover:bg-sidebar-accent/80">
+                <LogOut className="h-4 w-4" />
+                <span>Sair</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => setIsDark(!isDark)}
+            aria-label="Alternar tema"
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
