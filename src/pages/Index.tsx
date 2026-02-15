@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -41,44 +41,52 @@ const Index = () => {
 
   const [metaInvestimento, setMetaInvestimento] = useState<number | null>(null);
   const [loadingSpend, setLoadingSpend] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
 
-  useEffect(() => {
+  const loadSpend = useCallback(async () => {
     if (!isMetaConnected) {
       setMetaInvestimento(null);
       return;
     }
+    setLoadingSpend(true);
+    try {
+      let accountIds: string[];
 
-    const loadSpend = async () => {
-      setLoadingSpend(true);
-      try {
-        let accountIds: string[];
-
-        if (filters.adAccount !== "all") {
-          accountIds = [filters.adAccount];
-        } else {
-          const accounts = await fetchAdAccounts();
-          accountIds = accounts.map((a) => a.id);
-        }
-
-        if (accountIds.length === 0) {
-          setMetaInvestimento(0);
-          return;
-        }
-
-        const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate);
-        const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
-        setMetaInvestimento(totalSpend);
-      } catch {
-        setMetaInvestimento(null);
-      } finally {
-        setLoadingSpend(false);
+      if (filters.adAccount !== "all") {
+        accountIds = [filters.adAccount];
+      } else {
+        const accounts = await fetchAdAccounts();
+        accountIds = accounts.map((a) => a.id);
       }
-    };
 
-    loadSpend();
+      if (accountIds.length === 0) {
+        setMetaInvestimento(0);
+        return;
+      }
+
+      const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate);
+      const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
+      setMetaInvestimento(totalSpend);
+    } catch {
+      setMetaInvestimento(null);
+    } finally {
+      setLoadingSpend(false);
+    }
   }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate]);
+
+  useEffect(() => {
+    loadSpend();
+  }, [loadSpend, refreshKey]);
+
+  // Auto-refresh every 10 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshKey((k) => k + 1);
+    }, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const kpi = useMemo(() => getFilteredData(filters), [filters]);
 
