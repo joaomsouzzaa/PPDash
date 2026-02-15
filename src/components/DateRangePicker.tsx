@@ -91,6 +91,9 @@ export function DateRangePicker({ preset, startDate, endDate, onApply }: DateRan
       const r = getPresetRange(value);
       setRange({ from: r.from, to: r.to });
       setMonth(subMonths(r.to, 1));
+      // Apply immediately for presets
+      onApply(value, r.from, r.to);
+      setOpen(false);
     }
   };
 
