@@ -198,7 +198,7 @@ const VendasEventos = () => {
     }
     if (nomeFilter.trim()) {
       const term = nomeFilter.trim().toLowerCase();
-      result = result.filter((v) => v.nome_comprador?.toLowerCase().includes(term));
+      result = result.filter((v) => v.nome_comprador?.toLowerCase().includes(term) || v.email_comprador?.toLowerCase().includes(term));
     }
     return result;
   }, [vendas, tipoIngressoFilter, nomeFilter]);
@@ -455,7 +455,7 @@ const VendasEventos = () => {
                 </SelectContent>
               </Select>
               <Input
-                placeholder="Buscar comprador..."
+                placeholder="Nome ou email..."
                 value={nomeFilter}
                 onChange={(e) => { setNomeFilter(e.target.value); setPage(1); }}
                 className="w-[200px] bg-card"
