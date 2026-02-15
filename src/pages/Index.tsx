@@ -57,7 +57,7 @@ const Index = () => {
           return;
         }
 
-        const results = await fetchAdSpend(accountIds, filters.dateRange);
+        const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate);
         const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
         setMetaInvestimento(totalSpend);
       } catch {
@@ -68,7 +68,7 @@ const Index = () => {
     };
 
     loadSpend();
-  }, [isMetaConnected, filters.adAccount, filters.dateRange]);
+  }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate]);
 
   const kpi = useMemo(() => getFilteredData(filters), [filters]);
 

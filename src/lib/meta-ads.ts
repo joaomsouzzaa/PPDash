@@ -75,9 +75,13 @@ function buildTimeRange(dateRange: string): { since: string; until: string } {
 
 export async function fetchAdSpend(
   accountIds: string[],
-  dateRange: string
+  dateRange: string,
+  startDate?: Date,
+  endDate?: Date
 ): Promise<AdSpendResult[]> {
-  const timeRange = buildTimeRange(dateRange);
+  const timeRange = startDate && endDate
+    ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
+    : buildTimeRange(dateRange);
   const timeRangeParam = JSON.stringify(timeRange);
 
   const results = await Promise.all(
