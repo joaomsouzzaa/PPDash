@@ -169,6 +169,10 @@ function detectTipoIngresso(productName: string): string | null {
   if (name.includes("vip")) return "vip";
   if (name.includes("duplo") || name.includes("2 pessoas")) return "duplo";
   if (name.includes("individual") || name.includes("1 pessoa")) return "individual";
+  if (name.includes("diamond")) return "diamond";
+  if (name.includes("gold")) return "gold";
+  if (name.includes("silver")) return "silver";
+  if (name.includes("bronze")) return "bronze";
   return null;
 }
 
