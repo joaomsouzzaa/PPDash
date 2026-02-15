@@ -98,7 +98,7 @@ const Index = () => {
                 changeType="neutral"
               />
               <KpiCard
-                title="Vendas de Duplos"
+                title="Vendas Duplas"
                 value="66"
                 icon={Users2}
                 change="36% das vendas"
@@ -117,7 +117,7 @@ const Index = () => {
             {/* Row 3 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <KpiCard
-                title="Bilheteria de Ingressos Normais"
+                title="Bilheteria Ingressos"
                 value="R$ 32.400"
                 change="Produtos sem VIP"
                 changeType="neutral"
