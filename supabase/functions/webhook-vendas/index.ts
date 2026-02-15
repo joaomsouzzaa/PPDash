@@ -128,6 +128,39 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const status = venda.status as string;
+    const idTransacao = venda.id_transacao as string | null;
+
+    // If it's a cancellation/refund and we have a transaction ID, update existing record
+    if (idTransacao && (status === "cancelada" || status === "reembolsada")) {
+      const { data: existing } = await supabase
+        .from("vendas")
+        .select("id")
+        .eq("id_transacao", idTransacao)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from("vendas")
+          .update({ status, payload: venda.payload })
+          .eq("id_transacao", idTransacao);
+
+        if (error) {
+          console.error("[Webhook Update Error]", { timestamp: new Date().toISOString(), code: error.code, message: error.message });
+          return new Response(JSON.stringify({ error: "Failed to update sale status" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, action: "updated" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Otherwise insert as new record
     const { error } = await supabase.from("vendas").insert(venda);
 
     if (error) {
