@@ -179,7 +179,8 @@ const CadastroCidades = () => {
                     </TableRow>
                   ) : (
                     cidades.map((c) => {
-                      const isHidden = hiddenCidades.includes(c.id);
+                      const isExpired = new Date(c.data_evento) < new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+                      const isHidden = hiddenCidades.includes(c.id) || isExpired;
                       return (
                         <TableRow key={c.id} className={isHidden ? "opacity-50" : ""}>
                           <TableCell className="font-medium">{c.nome}</TableCell>
@@ -192,13 +193,14 @@ const CadastroCidades = () => {
                             })}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
                               <Switch
                                 checked={!isHidden}
                                 onCheckedChange={() => toggleHidden(c)}
+                                disabled={isExpired}
                               />
                               <span className="text-sm text-muted-foreground">
-                                {isHidden ? "Desativada" : "Ativa"}
+                                {isExpired ? "Expirada" : isHidden ? "Desativada" : "Ativa"}
                               </span>
                             </div>
                           </TableCell>

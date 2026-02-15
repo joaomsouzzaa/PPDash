@@ -78,7 +78,8 @@ const DashboardGeral = () => {
 
   const { data: cidades = [] } = useCidades();
   const hiddenCidades = getHiddenCidades();
-  const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
+  const now = new Date();
+  const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id) && new Date(c.data_evento) >= new Date(now.getFullYear(), now.getMonth(), now.getDate()));
 
   const { start, end } = useMemo(
     () => getDateRange(dateRange, startDate, endDate),
