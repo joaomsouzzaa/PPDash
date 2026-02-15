@@ -66,6 +66,20 @@ export function loginWithFacebook(): Promise<FBLoginResult> {
 
 export function logoutFromFacebook(): Promise<void> {
   return new Promise((resolve) => {
-    window.FB.logout(() => resolve());
+    try {
+      if (window.FB) {
+        window.FB.getLoginStatus((statusRes: any) => {
+          if (statusRes.status === "connected") {
+            window.FB.logout(() => resolve());
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        resolve();
+      }
+    } catch {
+      resolve();
+    }
   });
 }
