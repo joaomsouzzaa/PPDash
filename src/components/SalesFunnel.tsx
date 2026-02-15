@@ -18,8 +18,8 @@ const NEON_COLORS = [
   { bg: "from-[#FF2D75] to-[#FF69B4]", glow: "rgba(255,45,117,0.3)", text: "#fff" },
 ];
 
-function calcConversionPercent(current: number | null, previous: number | null): string | null {
-  if (current === null || previous === null || previous === 0) return null;
+function calcConversionPercent(current: number | null, previous: number | null): string {
+  if (current === null || previous === null || previous === 0) return "0%";
   return `${((current / previous) * 100).toFixed(1)}%`;
 }
 
@@ -39,8 +39,9 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
           const isFirst = index === 0;
 
           // Conversion from previous step
+          const showConversion = index > 0;
           const prevStep = index > 0 ? steps[index - 1] : null;
-          const conversionPercent = calcConversionPercent(step.count, prevStep?.count ?? null);
+          const conversionPercent = showConversion ? calcConversionPercent(step.count, prevStep?.count ?? null) : null;
 
           return (
             <div
@@ -86,7 +87,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
               </div>
 
               {/* Conversion percentage on the right */}
-              {conversionPercent && (
+              {showConversion && conversionPercent && (
                 <div
                   className="absolute flex items-center gap-2"
                   style={{
