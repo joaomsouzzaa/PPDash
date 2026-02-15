@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Integracoes from "./pages/Integracoes";
 import VendasEventos from "./pages/VendasEventos";
 import CadastroCidades from "./pages/CadastroCidades";
+import DashboardGeral from "./pages/DashboardGeral";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/vendas-eventos" element={<VendasEventos />} />
+          <Route path="/eventos-geral" element={<DashboardGeral />} />
           <Route path="/integracoes" element={<Integracoes />} />
           <Route path="/cadastro-cidades" element={<CadastroCidades />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
