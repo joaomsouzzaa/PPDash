@@ -113,7 +113,8 @@ export async function fetchAdSpend(
   accountIds: string[],
   dateRange: string,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
+  campaignSlug?: string
 ): Promise<AdSpendResult[]> {
   const timeRange = startDate && endDate
     ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
@@ -123,15 +124,36 @@ export async function fetchAdSpend(
   const results = await Promise.all(
     accountIds.map(async (id) => {
       try {
-        const res = await graphApiFetch<{ data: Array<{ spend: string }> }>(
-          `/${id}/insights`,
-          {
-            fields: "spend",
-            time_range: timeRangeParam,
-          }
-        );
-        const spend = res.data?.[0]?.spend ? parseFloat(res.data[0].spend) : 0;
-        return { accountId: id, accountName: "", spend };
+        if (campaignSlug) {
+          // Fetch campaign-level insights filtered by slug in campaign name
+          const campaignsRes = await graphApiFetch<{ data: Array<{ id: string; name: string }> }>(
+            `/${id}/campaigns`,
+            { fields: "id,name", limit: "500", filtering: JSON.stringify([{ field: "name", operator: "CONTAIN", value: campaignSlug }]) }
+          );
+          const campaigns = campaignsRes.data || [];
+          if (campaigns.length === 0) return { accountId: id, accountName: "", spend: 0 };
+
+          let totalSpend = 0;
+          await Promise.all(
+            campaigns.map(async (c) => {
+              try {
+                const insightRes = await graphApiFetch<{ data: Array<{ spend: string }> }>(
+                  `/${c.id}/insights`,
+                  { fields: "spend", time_range: timeRangeParam }
+                );
+                totalSpend += insightRes.data?.[0]?.spend ? parseFloat(insightRes.data[0].spend) : 0;
+              } catch {}
+            })
+          );
+          return { accountId: id, accountName: "", spend: totalSpend };
+        } else {
+          const res = await graphApiFetch<{ data: Array<{ spend: string }> }>(
+            `/${id}/insights`,
+            { fields: "spend", time_range: timeRangeParam }
+          );
+          const spend = res.data?.[0]?.spend ? parseFloat(res.data[0].spend) : 0;
+          return { accountId: id, accountName: "", spend };
+        }
       } catch {
         return { accountId: id, accountName: "", spend: 0 };
       }
@@ -139,4 +161,26 @@ export async function fetchAdSpend(
   );
 
   return results;
+}
+
+/** Fetch daily spend for campaigns matching a slug */
+export async function fetchDailySpendBySlug(
+  accountIds: string[],
+  slug: string,
+  dateRange: string,
+  startDate?: Date,
+  endDate?: Date
+): Promise<number> {
+  const timeRange = startDate && endDate
+    ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
+    : buildTimeRange(dateRange);
+
+  const since = new Date(timeRange.since);
+  const until = new Date(timeRange.until);
+  const totalDays = Math.max(1, Math.ceil((until.getTime() - since.getTime()) / 86400000) + 1);
+
+  const results = await fetchAdSpend(accountIds, dateRange, startDate, endDate, slug);
+  const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
+
+  return totalSpend / totalDays;
 }

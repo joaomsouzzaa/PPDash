@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      cidades: {
+        Row: {
+          created_at: string
+          data_evento: string
+          id: string
+          nome: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          data_evento: string
+          id?: string
+          nome: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          data_evento?: string
+          id?: string
+          nome?: string
+          slug?: string
+        }
+        Relationships: []
+      }
       vendas: {
         Row: {
           cidade: string | null

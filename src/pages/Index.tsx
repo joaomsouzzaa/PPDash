@@ -11,6 +11,7 @@ import {
   Ticket,
   Gift,
   Banknote,
+  BarChart3,
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -18,8 +19,10 @@ import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
 import { fmt, type Filters } from "@/lib/mockData";
-import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchAdSpend, fetchDailySpendBySlug } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
+import { useCidades } from "@/hooks/useCidades";
+import { differenceInDays } from "date-fns";
 
 const Index = () => {
   const [filters, setFilters] = useState<Filters>(() => {
@@ -57,8 +60,12 @@ const Index = () => {
   const [metaInvestimento, setMetaInvestimento] = useState<number | null>(null);
   const [loadingSpend, setLoadingSpend] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [projecaoParticipantes, setProjecaoParticipantes] = useState<number | null>(null);
 
+  const { data: cidades = [] } = useCidades();
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
+
+  const selectedCidade = cidades.find((c) => c.slug === filters.city);
 
   const loadSpend = useCallback(async () => {
     if (!isMetaConnected) {
@@ -81,7 +88,8 @@ const Index = () => {
         return;
       }
 
-      const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate);
+      const slug = selectedCidade?.slug;
+      const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate, slug);
       const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
       setMetaInvestimento(totalSpend);
     } catch {
@@ -89,7 +97,7 @@ const Index = () => {
     } finally {
       setLoadingSpend(false);
     }
-  }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate]);
+  }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate, selectedCidade?.slug]);
 
   useEffect(() => {
     loadSpend();
@@ -122,6 +130,51 @@ const Index = () => {
   const lucroDisplay = metaInvestimento !== null
     ? kpi.bilheteriaTotal - metaInvestimento
     : kpi.lucro;
+
+  // Calculate projection when we have a selected city with event date
+  useEffect(() => {
+    if (!selectedCidade || !isMetaConnected) {
+      setProjecaoParticipantes(null);
+      return;
+    }
+
+    const calcProjection = async () => {
+      try {
+        let accountIds: string[];
+        if (filters.adAccount !== "all") {
+          accountIds = [filters.adAccount];
+        } else {
+          const accounts = await fetchAdAccounts();
+          accountIds = accounts.map((a) => a.id);
+        }
+        if (accountIds.length === 0) {
+          setProjecaoParticipantes(null);
+          return;
+        }
+
+        const dailySpend = await fetchDailySpendBySlug(
+          accountIds, selectedCidade.slug, filters.dateRange, filters.startDate, filters.endDate
+        );
+
+        const eventDate = new Date(selectedCidade.data_evento);
+        const today = new Date();
+        const daysRemaining = Math.max(0, differenceInDays(eventDate, today));
+
+        if (cacParticipanteDisplay <= 0 || dailySpend <= 0) {
+          setProjecaoParticipantes(kpi.participantes);
+          return;
+        }
+
+        const dailyNewParticipants = dailySpend / cacParticipanteDisplay;
+        const projected = Math.round(kpi.participantes + dailyNewParticipants * daysRemaining);
+        setProjecaoParticipantes(projected);
+      } catch {
+        setProjecaoParticipantes(null);
+      }
+    };
+
+    calcProjection();
+  }, [selectedCidade, isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate, kpi.participantes, cacParticipanteDisplay]);
 
   return (
     <SidebarProvider>
@@ -170,7 +223,7 @@ const Index = () => {
             </div>
 
             {/* Row 2 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
               <KpiCard
                 title="Total de Participantes"
                 value={String(kpi.participantes)}
@@ -181,6 +234,12 @@ const Index = () => {
                 value={String(kpi.totalVips)}
                 icon={Crown}
                 iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+              />
+              <KpiCard
+                title="Projeção de Participantes"
+                value={projecaoParticipantes !== null ? String(projecaoParticipantes) : "—"}
+                icon={BarChart3}
+                iconColor="bg-primary/10 text-primary"
               />
               <KpiCard
                 title="Vendas Individuais"

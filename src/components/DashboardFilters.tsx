@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { PlusCircle } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -7,8 +8,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
-import { fetchAdAccounts, isTokenValid, type AdAccount } from "@/lib/meta-ads";
+import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { AddCidadeDialog } from "@/components/AddCidadeDialog";
+import { useCidades } from "@/hooks/useCidades";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface DashboardFiltersProps {
   filters: Filters;
@@ -18,6 +22,10 @@ interface DashboardFiltersProps {
 export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersProps) {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [addCidadeOpen, setAddCidadeOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: cidades = [], isLoading: loadingCidades } = useCidades();
 
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
 
@@ -30,7 +38,6 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
     fetchAdAccounts()
       .then((accounts) => {
         setAdAccounts(accounts);
-        // If saved account doesn't exist in fetched list, reset to "all"
         if (
           filters.adAccount !== "all" &&
           !accounts.some((a) => a.id === filters.adAccount)
@@ -46,51 +53,78 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
     onFiltersChange({ ...filters, ...partial });
   };
 
+  const handleCityChange = (v: string) => {
+    if (v === "_add_new") {
+      setAddCidadeOpen(true);
+      return;
+    }
+    update({ city: v });
+  };
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <DateRangePicker
-        preset={filters.dateRange}
-        startDate={filters.startDate}
-        endDate={filters.endDate}
-        onApply={(preset, start, end) =>
-          update({ dateRange: preset, startDate: start, endDate: end })
-        }
+    <>
+      <div className="flex flex-wrap items-center gap-3">
+        <DateRangePicker
+          preset={filters.dateRange}
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          onApply={(preset, start, end) =>
+            update({ dateRange: preset, startDate: start, endDate: end })
+          }
+        />
+
+        <Select value={filters.adAccount} onValueChange={(v) => update({ adAccount: v })}>
+          <SelectTrigger className="w-[240px] bg-card">
+            <SelectValue placeholder={loadingAccounts ? "Carregando contas..." : "Conta de Anúncios"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as contas</SelectItem>
+            {loadingAccounts ? (
+              <SelectItem value="_loading" disabled>Carregando contas...</SelectItem>
+            ) : adAccounts.length > 0 ? (
+              adAccounts.map((acc) => (
+                <SelectItem key={acc.id} value={acc.id}>
+                  {acc.name || `Conta ${acc.account_id}`}
+                </SelectItem>
+              ))
+            ) : !isMetaConnected ? (
+              <SelectItem value="_none" disabled>Conecte o Meta Ads primeiro</SelectItem>
+            ) : (
+              <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+
+        <Select value={filters.city} onValueChange={handleCityChange}>
+          <SelectTrigger className="w-[180px] bg-card">
+            <SelectValue placeholder="Cidade" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as cidades</SelectItem>
+            {loadingCidades ? (
+              <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+            ) : (
+              cidades.map((c) => (
+                <SelectItem key={c.id} value={c.slug}>
+                  {c.nome}
+                </SelectItem>
+              ))
+            )}
+            <SelectItem value="_add_new">
+              <span className="flex items-center gap-1.5">
+                <PlusCircle className="h-3.5 w-3.5" />
+                Cadastrar nova cidade
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <AddCidadeDialog
+        open={addCidadeOpen}
+        onOpenChange={setAddCidadeOpen}
+        onCidadeAdded={() => queryClient.invalidateQueries({ queryKey: ["cidades"] })}
       />
-
-      <Select value={filters.adAccount} onValueChange={(v) => update({ adAccount: v })}>
-        <SelectTrigger className="w-[240px] bg-card">
-          <SelectValue placeholder={loadingAccounts ? "Carregando contas..." : "Conta de Anúncios"} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todas as contas</SelectItem>
-          {loadingAccounts ? (
-            <SelectItem value="_loading" disabled>Carregando contas...</SelectItem>
-          ) : adAccounts.length > 0 ? (
-            adAccounts.map((acc) => (
-              <SelectItem key={acc.id} value={acc.id}>
-                {acc.name || `Conta ${acc.account_id}`}
-              </SelectItem>
-            ))
-          ) : !isMetaConnected ? (
-            <SelectItem value="_none" disabled>Conecte o Meta Ads primeiro</SelectItem>
-          ) : (
-            <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
-          )}
-        </SelectContent>
-      </Select>
-
-      <Select value={filters.city} onValueChange={(v) => update({ city: v })}>
-        <SelectTrigger className="w-[180px] bg-card">
-          <SelectValue placeholder="Cidade" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todas as cidades</SelectItem>
-          <SelectItem value="sp">São Paulo</SelectItem>
-          <SelectItem value="rj">Rio de Janeiro</SelectItem>
-          <SelectItem value="bh">Belo Horizonte</SelectItem>
-          <SelectItem value="ctb">Curitiba</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
+    </>
   );
 }
