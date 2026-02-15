@@ -1,1 +1,4 @@
 project_id = "dobexeqizssojpzuhkfn"
+
+[functions.exchange-token]
+verify_jwt = false

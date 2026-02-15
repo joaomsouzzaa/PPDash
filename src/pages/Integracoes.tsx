@@ -16,6 +16,7 @@ import {
   loginWithFacebook,
   logoutFromFacebook,
 } from "@/lib/facebook-sdk";
+import { exchangeForLongLivedToken } from "@/lib/meta-ads";
 
 const WEBHOOK_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
 
@@ -81,14 +82,24 @@ const Integracoes = () => {
       await loadFacebookSDK();
       const result = await loginWithFacebook();
       if (result.status === "connected") {
+        // Exchange for long-lived token (~60 days)
+        try {
+          const longLived = await exchangeForLongLivedToken(result.accessToken!);
+          localStorage.setItem("meta_access_token", longLived.access_token);
+          const expiresAt = Date.now() + longLived.expires_in * 1000;
+          localStorage.setItem("meta_token_expires_at", String(expiresAt));
+        } catch {
+          // Fallback: use the short-lived token
+          localStorage.setItem("meta_access_token", result.accessToken ?? "");
+        }
+
         setMetaConnected(true);
         setUserName(result.userName ?? null);
         localStorage.setItem("meta_connected", "true");
         localStorage.setItem("meta_user_name", result.userName ?? "");
-        localStorage.setItem("meta_access_token", result.accessToken ?? "");
         toast({
           title: "Conectado com sucesso!",
-          description: `Conta "${result.userName}" vinculada.`,
+          description: `Conta "${result.userName}" vinculada com token de longa duração.`,
         });
       } else {
         toast({

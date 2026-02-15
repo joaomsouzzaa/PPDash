@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Filters } from "@/lib/mockData";
-import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
+import { fetchAdAccounts, isTokenValid, type AdAccount } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 
 interface DashboardFiltersProps {
@@ -19,7 +19,7 @@ export function DashboardFilters({ filters, onFiltersChange }: DashboardFiltersP
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
 
-  const isMetaConnected = localStorage.getItem("meta_connected") === "true";
+  const isMetaConnected = localStorage.getItem("meta_connected") === "true" && isTokenValid();
 
   useEffect(() => {
     if (!isMetaConnected) {
