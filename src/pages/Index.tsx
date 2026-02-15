@@ -7,6 +7,10 @@ import {
   Crown,
   User,
   Users2,
+  Receipt,
+  Banknote,
+  Ticket,
+  Gift,
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -45,7 +49,7 @@ const Index = () => {
                 iconColor="bg-primary/10 text-primary"
               />
               <KpiCard
-                title="Faturamento Total"
+                title="Bilheteria Total"
                 value="R$ 48.200"
                 change="+8.3% vs período anterior"
                 changeType="positive"
@@ -53,7 +57,7 @@ const Index = () => {
                 iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
               />
               <KpiCard
-                title="CPA Médio"
+                title="CAC por Venda"
                 value="R$ 68,26"
                 change="-5.2% vs período anterior"
                 changeType="positive"
@@ -67,6 +71,33 @@ const Index = () => {
                 changeType="positive"
                 icon={ShoppingCart}
                 iconColor="bg-accent/10 text-accent"
+              />
+            </div>
+
+            {/* KPI Row 2 - Lucro, Bilheteria Normal, Orderbump */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <KpiCard
+                title="Lucro"
+                value="R$ 35.620"
+                change="Bilheteria - Investimento"
+                changeType="positive"
+                icon={Banknote}
+                iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+              />
+              <KpiCard
+                title="Bilheteria de Ingressos Normais"
+                value="R$ 32.400"
+                change="Produtos sem VIP"
+                changeType="neutral"
+                icon={Ticket}
+              />
+              <KpiCard
+                title="Faturamento Orderbump"
+                value="R$ 15.800"
+                change="Produtos com VIP"
+                changeType="neutral"
+                icon={Gift}
+                iconColor="bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
               />
             </div>
 
