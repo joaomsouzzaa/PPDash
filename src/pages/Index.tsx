@@ -9,6 +9,7 @@ import {
   Users2,
   Ticket,
   Gift,
+  Banknote,
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -37,7 +38,7 @@ const Index = () => {
             <DashboardFilters />
 
             {/* Row 1 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <KpiCard
                 title="Investimento Total"
                 value="R$ 12.580"
@@ -52,6 +53,14 @@ const Index = () => {
                 change="+8.3% vs período anterior"
                 changeType="positive"
                 icon={TrendingUp}
+                iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+              />
+              <KpiCard
+                title="Lucro"
+                value="R$ 35.620"
+                change="Bilheteria - Investimento"
+                changeType="positive"
+                icon={Banknote}
                 iconColor="bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
               />
               <KpiCard
