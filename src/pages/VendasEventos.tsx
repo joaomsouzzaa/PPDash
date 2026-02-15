@@ -127,6 +127,8 @@ const VendasEventos = () => {
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [city, setCity] = useState("all");
+  const [page, setPage] = useState(1);
+  const perPage = 10;
 
   // Edit / Delete state
   const [editingVenda, setEditingVenda] = useState<VendaRow | null>(null);
@@ -158,6 +160,10 @@ const VendasEventos = () => {
     },
     refetchInterval: 60_000,
   });
+
+  const totalPages = Math.max(1, Math.ceil(vendas.length / perPage));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedVendas = vendas.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   const statusColor = (s: string) => {
     switch (s) {
@@ -251,9 +257,10 @@ const VendasEventos = () => {
                   setDateRange(preset);
                   setStartDate(s);
                   setEndDate(e);
+                  setPage(1);
                 }}
               />
-              <Select value={city} onValueChange={setCity}>
+              <Select value={city} onValueChange={(v) => { setCity(v); setPage(1); }}>
                 <SelectTrigger className="w-[240px] bg-card">
                   <SelectValue placeholder="Cidade" />
                 </SelectTrigger>
@@ -308,7 +315,7 @@ const VendasEventos = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    vendas.map((v) => (
+                    paginatedVendas.map((v) => (
                       <TableRow key={v.id}>
                         <TableCell className="whitespace-nowrap">
                           {new Date(v.data_venda).toLocaleDateString("pt-BR", {
@@ -366,6 +373,36 @@ const VendasEventos = () => {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Pagination */}
+            {vendas.length > perPage && (
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-sm text-muted-foreground">
+                  Mostrando {(currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, vendas.length)} de {vendas.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(currentPage - 1)}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm font-medium">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(currentPage + 1)}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
