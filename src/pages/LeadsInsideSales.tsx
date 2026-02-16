@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_source" | "utm_campaign" | "cidade" | "origem" | "deal_user" | "tags";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "origem" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name" | "produto_slug";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -64,6 +64,8 @@ type LeadRow = {
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
   cidade: string | null;
   origem: string | null;
   deal_user: string | null;
@@ -187,7 +189,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, utm_source, utm_medium, utm_campaign, cidade, origem, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, produto_slug")
+        .select("id, data_lead, nome, email, telefone, status, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, origem, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, produto_slug")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
@@ -470,20 +472,32 @@ const LeadsInsideSales = () => {
                     {sortableHead("Nome", "nome")}
                     {sortableHead("Email", "email")}
                     {sortableHead("Telefone", "telefone")}
+                    {sortableHead("WhatsApp", "whatsapp")}
+                    {sortableHead("Instagram", "instagram")}
                     {sortableHead("Status", "status")}
                     {sortableHead("Origem", "origem")}
+                    {sortableHead("Cidade", "cidade")}
+                    {sortableHead("Área de Atuação", "area_atuacao")}
+                    {sortableHead("Papel", "papel")}
+                    {sortableHead("Faturamento", "faturamento")}
+                    {sortableHead("Situação Atual", "situacao_atual")}
                     {sortableHead("UTM Source", "utm_source")}
-                    {sortableHead("Campanha", "utm_campaign")}
+                    {sortableHead("UTM Medium", "utm_medium")}
+                    {sortableHead("Campanha UTM", "utm_campaign")}
+                    {sortableHead("UTM Content", "utm_content")}
+                    {sortableHead("UTM Term", "utm_term")}
+                    {sortableHead("Nome Anúncio", "ad_name")}
+                    {sortableHead("Nome Campanha", "campaign_name")}
+                    {sortableHead("Produto", "produto_slug")}
                     {sortableHead("Responsável", "deal_user")}
                     {sortableHead("Tags", "tags")}
-                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     Array.from({ length: 8 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 12 }).map((_, j) => (
+                        {Array.from({ length: 25 }).map((_, j) => (
                           <TableCell key={j}>
                             <Skeleton className="h-4 w-full" />
                           </TableCell>
@@ -492,7 +506,7 @@ const LeadsInsideSales = () => {
                     ))
                   ) : leads.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={25} className="text-center text-muted-foreground py-8">
                         Nenhum lead encontrado no período selecionado.
                       </TableCell>
                     </TableRow>
@@ -515,18 +529,29 @@ const LeadsInsideSales = () => {
                           })}
                         </TableCell>
                         <TableCell className="font-medium">{l.nome || "—"}</TableCell>
-                        <TableCell>
-                          <span className="text-sm">{l.email || "—"}</span>
-                        </TableCell>
+                        <TableCell><span className="text-sm">{l.email || "—"}</span></TableCell>
                         <TableCell>{l.telefone || "—"}</TableCell>
+                        <TableCell>{l.whatsapp || "—"}</TableCell>
+                        <TableCell>{l.instagram || "—"}</TableCell>
                         <TableCell>
                           <Badge variant={statusColor(l.status)}>
                             {statusLabels[l.status] || l.status}
                           </Badge>
                         </TableCell>
                         <TableCell>{l.origem || "—"}</TableCell>
+                        <TableCell>{l.cidade || "—"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>
+                        <TableCell>{l.papel || "—"}</TableCell>
+                        <TableCell>{l.faturamento || "—"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{l.situacao_atual || "—"}</TableCell>
                         <TableCell>{l.utm_source || "—"}</TableCell>
+                        <TableCell>{l.utm_medium || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.utm_campaign || "—"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{l.utm_content || "—"}</TableCell>
+                        <TableCell>{l.utm_term || "—"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>
+                        <TableCell>{l.produto_slug || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>
                         <TableCell>{l.tags || "—"}</TableCell>
                         <TableCell>
