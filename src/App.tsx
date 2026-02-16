@@ -11,6 +11,7 @@ import CadastroCidades from "./pages/CadastroCidades";
 import DashboardGeral from "./pages/DashboardGeral";
 import InsideSales from "./pages/InsideSales";
 import CadastroProdutos from "./pages/CadastroProdutos";
+import LeadsInsideSales from "./pages/LeadsInsideSales";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/eventos-geral" element={<DashboardGeral />} />
           <Route path="/integracoes" element={<Integracoes />} />
           <Route path="/inside-sales" element={<InsideSales />} />
+          <Route path="/leads" element={<LeadsInsideSales />} />
           <Route path="/cadastro-produtos" element={<CadastroProdutos />} />
           <Route path="/cadastro-cidades" element={<CadastroCidades />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -39,6 +39,7 @@ const eventosItems = [
 
 const insideSalesItems = [
   { title: "Dashboard Geral", url: "/inside-sales", icon: LayoutDashboard },
+  { title: "Leads", url: "/leads", icon: Users },
 ];
 
 const analyticsItems = [
