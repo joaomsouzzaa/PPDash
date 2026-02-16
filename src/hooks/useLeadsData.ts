@@ -57,9 +57,45 @@ function getDateRange(filters: Filters): { start: string; end: string } {
 
 function parseFaturamento(value: string | null | undefined): number | null {
   if (!value) return null;
-  const cleaned = value.replace(/[R$\s.]/g, "").replace(",", ".");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
+  const s = value.toLowerCase().replace(/[r$\s]/g, "").replace(/_/g, " ");
+
+  // Handle range formats like "entre 50 mil e 100 mil" or "entre 100 mil e 300 mil"
+  // Use the highest value in the range for comparison
+  const rangeMatch = s.match(/entre\s*([\d.,]+)\s*(mil|k)?\s*e\s*([\d.,]+)\s*(mil|k)?/i);
+  if (rangeMatch) {
+    const high = parseNumWithMil(rangeMatch[3], rangeMatch[4]);
+    return high;
+  }
+
+  // Handle "até X mil" — use the value itself (e.g. "até 15 mil" = 15000)
+  const ateMatch = s.match(/at[eé]\s*([\d.,]+)\s*(mil|k)?/i);
+  if (ateMatch) {
+    return parseNumWithMil(ateMatch[1], ateMatch[2]);
+  }
+
+  // Handle "acima de X mil" or "mais de X mil"
+  const acimaMatch = s.match(/(?:acima|mais)\s*(?:de)?\s*([\d.,]+)\s*(mil|k)?/i);
+  if (acimaMatch) {
+    return parseNumWithMil(acimaMatch[1], acimaMatch[2]);
+  }
+
+  // Handle simple "50 mil", "50mil", "100k", "50.000"
+  const simpleMatch = s.match(/([\d.,]+)\s*(mil|k)?/);
+  if (simpleMatch) {
+    return parseNumWithMil(simpleMatch[1], simpleMatch[2]);
+  }
+
+  return null;
+}
+
+function parseNumWithMil(numStr: string, suffix?: string): number {
+  const cleaned = numStr.replace(/\./g, "").replace(",", ".");
+  let num = parseFloat(cleaned);
+  if (isNaN(num)) return 0;
+  if (suffix && (suffix.toLowerCase() === "mil" || suffix.toLowerCase() === "k")) {
+    num *= 1000;
+  }
+  return num;
 }
 
 export interface LeadsKpis {
