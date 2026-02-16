@@ -58,6 +58,7 @@ export type Database = {
           produto_slug: string | null
           situacao_atual: string | null
           status: string
+          tags: string | null
           telefone: string | null
           utm_campaign: string | null
           utm_content: string | null
@@ -85,6 +86,7 @@ export type Database = {
           produto_slug?: string | null
           situacao_atual?: string | null
           status?: string
+          tags?: string | null
           telefone?: string | null
           utm_campaign?: string | null
           utm_content?: string | null
@@ -112,6 +114,7 @@ export type Database = {
           produto_slug?: string | null
           situacao_atual?: string | null
           status?: string
+          tags?: string | null
           telefone?: string | null
           utm_campaign?: string | null
           utm_content?: string | null

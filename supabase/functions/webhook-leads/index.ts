@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
       instagram: payload.contact_qual_o_do_instagram || payload.Instagram || payload.instagram || null,
       area_atuacao: payload.deal_qual_sua_area_de_atu || payload["área de atuação"] || payload.area_atuacao || null,
       papel: payload.contact_qual_e_o_seu_papel_h || payload["Seu papel hoje?"] || payload.papel || null,
+      tags: payload.contact_tag || payload.tags || null,
       payload,
     };
 
