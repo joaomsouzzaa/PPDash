@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -77,6 +77,7 @@ type LeadRow = {
   situacao_atual: string | null;
   ad_name: string | null;
   campaign_name: string | null;
+  is_sql: string | null;
 };
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
@@ -187,7 +188,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
+        .select("id, data_lead, nome, email, telefone, status, is_sql, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
@@ -487,7 +488,7 @@ const LeadsInsideSales = () => {
                     {sortableHead("WhatsApp", "whatsapp")}
                     {sortableHead("Instagram", "instagram")}
                     {sortableHead("Status", "status")}
-                    
+                    {sortableHead("SQL", "is_sql")}
                     
                     {sortableHead("Área de Atuação", "area_atuacao")}
                     {sortableHead("Papel", "papel")}
@@ -549,6 +550,13 @@ const LeadsInsideSales = () => {
                           <Badge variant={statusColor(l.status)}>
                             {statusLabels[l.status] || l.status}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {l.is_sql ? (
+                            <Badge variant="default">Sim</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         
                         
