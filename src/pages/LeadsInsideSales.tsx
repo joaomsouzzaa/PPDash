@@ -476,7 +476,7 @@ const LeadsInsideSales = () => {
                     {sortableHead("Instagram", "instagram")}
                     {sortableHead("Status", "status")}
                     {sortableHead("Origem", "origem")}
-                    {sortableHead("Cidade", "cidade")}
+                    
                     {sortableHead("Área de Atuação", "area_atuacao")}
                     {sortableHead("Papel", "papel")}
                     {sortableHead("Faturamento", "faturamento")}
@@ -488,7 +488,7 @@ const LeadsInsideSales = () => {
                     {sortableHead("UTM Term", "utm_term")}
                     {sortableHead("Nome Anúncio", "ad_name")}
                     {sortableHead("Nome Campanha", "campaign_name")}
-                    {sortableHead("Produto", "produto_slug")}
+                    
                     {sortableHead("Responsável", "deal_user")}
                     {sortableHead("Tags", "tags")}
                   </TableRow>
@@ -539,7 +539,7 @@ const LeadsInsideSales = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>{l.origem || "—"}</TableCell>
-                        <TableCell>{l.cidade || "—"}</TableCell>
+                        
                         <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>
                         <TableCell>{l.papel || "—"}</TableCell>
                         <TableCell>{l.faturamento || "—"}</TableCell>
@@ -551,7 +551,7 @@ const LeadsInsideSales = () => {
                         <TableCell>{l.utm_term || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>
-                        <TableCell>{l.produto_slug || "—"}</TableCell>
+                        
                         <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>
                         <TableCell>{l.tags || "—"}</TableCell>
                         <TableCell>
