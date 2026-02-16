@@ -88,11 +88,13 @@ export function useLeadsData(filters: Filters) {
 
       let leads = data || [];
 
-      // Filter by product slugs via campaign_name
+      // Filter by product slugs via campaign_name (accent-insensitive)
       if (filters.produtos.length > 0) {
+        const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const normalizedSlugs = filters.produtos.map(normalize);
         leads = leads.filter((l) =>
-          l.campaign_name && filters.produtos.some((slug) =>
-            l.campaign_name!.toLowerCase().includes(slug.toLowerCase())
+          l.campaign_name && normalizedSlugs.some((slug) =>
+            normalize(l.campaign_name!).includes(slug)
           )
         );
       }
