@@ -56,7 +56,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
                 style={{
                   width: `${widthPercent}%`,
                   minWidth: "140px",
-                  height: "72px",
+                  height: "100px",
                   clipPath: isLast
                     ? `polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%)`
                     : `polygon(0% 0%, 100% 0%, ${100 - ((1 / Math.max(totalSteps - 1, 1)) * 35)}% 100%, ${(1 / Math.max(totalSteps - 1, 1)) * 35}% 100%)`,
