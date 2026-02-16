@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -61,7 +61,7 @@ type LeadRow = {
   email: string | null;
   telefone: string | null;
   status: string;
-  utm_source: string | null;
+  
   utm_medium: string | null;
   utm_campaign: string | null;
   utm_content: string | null;
@@ -187,7 +187,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
+        .select("id, data_lead, nome, email, telefone, status, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
@@ -280,7 +280,7 @@ const LeadsInsideSales = () => {
       papel: l.papel,
       faturamento: l.faturamento,
       situacao_atual: l.situacao_atual,
-      utm_source: l.utm_source,
+      
       utm_medium: l.utm_medium,
       utm_campaign: l.utm_campaign,
       utm_content: l.utm_content,
@@ -309,7 +309,7 @@ const LeadsInsideSales = () => {
         papel: editForm.papel,
         faturamento: editForm.faturamento,
         situacao_atual: editForm.situacao_atual,
-        utm_source: editForm.utm_source,
+        
         utm_medium: editForm.utm_medium,
         utm_campaign: editForm.utm_campaign,
         utm_content: editForm.utm_content,
@@ -493,7 +493,7 @@ const LeadsInsideSales = () => {
                     {sortableHead("Papel", "papel")}
                     {sortableHead("Faturamento", "faturamento")}
                     {sortableHead("Situação Atual", "situacao_atual")}
-                    {sortableHead("UTM Source", "utm_source")}
+                    
                     {sortableHead("UTM Medium", "utm_medium")}
                     {sortableHead("Campanha UTM", "utm_campaign")}
                     {sortableHead("UTM Content", "utm_content")}
@@ -556,7 +556,7 @@ const LeadsInsideSales = () => {
                         <TableCell>{l.papel || "—"}</TableCell>
                         <TableCell>{l.faturamento || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.situacao_atual || "—"}</TableCell>
-                        <TableCell>{l.utm_source || "—"}</TableCell>
+                        
                         <TableCell>{l.utm_medium || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.utm_campaign || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.utm_content || "—"}</TableCell>
@@ -747,13 +747,6 @@ const LeadsInsideSales = () => {
               <Input
                 value={editForm.tags || ""}
                 onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Source</Label>
-              <Input
-                value={editForm.utm_source || ""}
-                onChange={(e) => setEditForm({ ...editForm, utm_source: e.target.value })}
               />
             </div>
             <div className="space-y-1">
