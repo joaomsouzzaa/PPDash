@@ -282,6 +282,13 @@ const LeadsInsideSales = () => {
       papel: l.papel,
       faturamento: l.faturamento,
       situacao_atual: l.situacao_atual,
+      utm_source: l.utm_source,
+      utm_medium: l.utm_medium,
+      utm_campaign: l.utm_campaign,
+      utm_content: l.utm_content,
+      utm_term: l.utm_term,
+      ad_name: l.ad_name,
+      campaign_name: l.campaign_name,
     });
   };
 
@@ -304,6 +311,13 @@ const LeadsInsideSales = () => {
         papel: editForm.papel,
         faturamento: editForm.faturamento,
         situacao_atual: editForm.situacao_atual,
+        utm_source: editForm.utm_source,
+        utm_medium: editForm.utm_medium,
+        utm_campaign: editForm.utm_campaign,
+        utm_content: editForm.utm_content,
+        utm_term: editForm.utm_term,
+        ad_name: editForm.ad_name,
+        campaign_name: editForm.campaign_name,
       })
       .eq("id", editingLead.id);
 
@@ -742,6 +756,55 @@ const LeadsInsideSales = () => {
               <Input
                 value={editForm.tags || ""}
                 onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Source</Label>
+              <Input
+                value={editForm.utm_source || ""}
+                onChange={(e) => setEditForm({ ...editForm, utm_source: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Medium</Label>
+              <Input
+                value={editForm.utm_medium || ""}
+                onChange={(e) => setEditForm({ ...editForm, utm_medium: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Campanha UTM</Label>
+              <Input
+                value={editForm.utm_campaign || ""}
+                onChange={(e) => setEditForm({ ...editForm, utm_campaign: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Content</Label>
+              <Input
+                value={editForm.utm_content || ""}
+                onChange={(e) => setEditForm({ ...editForm, utm_content: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Term</Label>
+              <Input
+                value={editForm.utm_term || ""}
+                onChange={(e) => setEditForm({ ...editForm, utm_term: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Nome do Anúncio</Label>
+              <Input
+                value={editForm.ad_name || ""}
+                onChange={(e) => setEditForm({ ...editForm, ad_name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Nome da Campanha</Label>
+              <Input
+                value={editForm.campaign_name || ""}
+                onChange={(e) => setEditForm({ ...editForm, campaign_name: e.target.value })}
               />
             </div>
           </div>
