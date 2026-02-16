@@ -121,7 +121,7 @@ export function useLeadsData(filters: Filters) {
 
       let query = supabase
         .from("leads")
-        .select("status, utm_medium, campaign_name, faturamento")
+        .select("status, utm_medium, campaign_name, faturamento, is_sql")
         .gte("data_lead", start)
         .lte("data_lead", end);
 
@@ -162,7 +162,7 @@ export function useLeadsData(filters: Filters) {
         if (isMqlByFaturamento || s === "mql" || s === "sql" || s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {
           mql++;
         }
-        if (s === "sql" || s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {
+        if (l.is_sql === "Sim" || s === "sql" || s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {
           sql++;
         }
         if (s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {

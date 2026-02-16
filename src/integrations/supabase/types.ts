@@ -51,6 +51,7 @@ export type Database = {
           faturamento: string | null
           id: string
           instagram: string | null
+          is_sql: string | null
           nome: string | null
           papel: string | null
           payload: Json | null
@@ -77,6 +78,7 @@ export type Database = {
           faturamento?: string | null
           id?: string
           instagram?: string | null
+          is_sql?: string | null
           nome?: string | null
           papel?: string | null
           payload?: Json | null
@@ -103,6 +105,7 @@ export type Database = {
           faturamento?: string | null
           id?: string
           instagram?: string | null
+          is_sql?: string | null
           nome?: string | null
           papel?: string | null
           payload?: Json | null

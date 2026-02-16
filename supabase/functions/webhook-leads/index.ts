@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
       area_atuacao: payload.deal_qual_sua_area_de_atu || payload["área de atuação"] || payload.area_atuacao || null,
       papel: payload.contact_qual_e_o_seu_papel_h || payload["Seu papel hoje?"] || payload.papel || null,
       tags: payload.contact_tag || payload.tags || null,
+      is_sql: detectSqlTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
       payload,
     };
 
@@ -135,6 +136,11 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+function detectSqlTag(tags: string): boolean {
+  if (!tags) return false;
+  return tags.toLowerCase().split(",").some((t) => t.trim() === "sql");
+}
 
 function mapLeadStatus(status: string): string {
   const s = status.toLowerCase().replace(/[_-]/g, " ").trim();
