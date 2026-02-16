@@ -23,9 +23,23 @@ Deno.serve(async (req) => {
   const queryToken = url.searchParams.get("token");
   const authHeader = req.headers.get("authorization");
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const webhookToken = req.headers.get("x-webhook-token") || req.headers.get("token");
+  const webhookToken = req.headers.get("x-webhook-token") || req.headers.get("token") || req.headers.get("x-api-key") || req.headers.get("api-token") || req.headers.get("api_token");
   const providedKey = queryToken || bearerToken || webhookToken;
   const expectedKey = Deno.env.get("WEBHOOK_LEADS_API_KEY");
+
+  // Debug: log all headers to identify how Clint sends the token
+  const allHeaders: Record<string, string> = {};
+  req.headers.forEach((value, key) => {
+    allHeaders[key] = key.toLowerCase().includes("token") || key.toLowerCase().includes("auth") || key.toLowerCase().includes("api") 
+      ? value.substring(0, 20) + "..." 
+      : value;
+  });
+  console.log("[Webhook Leads] Headers:", JSON.stringify(allHeaders));
+  console.log("[Webhook Leads] Query token:", queryToken ? "present" : "absent");
+  console.log("[Webhook Leads] Bearer token:", bearerToken ? "present" : "absent");
+  console.log("[Webhook Leads] Webhook token:", webhookToken ? "present" : "absent");
+  console.log("[Webhook Leads] Provided key:", providedKey ? providedKey.substring(0, 10) + "..." : "NONE");
+  console.log("[Webhook Leads] Expected key:", expectedKey ? expectedKey.substring(0, 10) + "..." : "NOT SET");
 
   if (!expectedKey || providedKey !== expectedKey) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
