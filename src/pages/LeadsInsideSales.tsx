@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "origem" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name" | "produto_slug";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -67,7 +67,6 @@ type LeadRow = {
   utm_content: string | null;
   utm_term: string | null;
   cidade: string | null;
-  origem: string | null;
   deal_user: string | null;
   tags: string | null;
   whatsapp: string | null;
@@ -78,7 +77,6 @@ type LeadRow = {
   situacao_atual: string | null;
   ad_name: string | null;
   campaign_name: string | null;
-  produto_slug: string | null;
 };
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
@@ -189,7 +187,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, origem, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, produto_slug")
+        .select("id, data_lead, nome, email, telefone, status, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
@@ -273,7 +271,7 @@ const LeadsInsideSales = () => {
       telefone: l.telefone,
       status: l.status,
       cidade: l.cidade,
-      origem: l.origem,
+      
       deal_user: l.deal_user,
       tags: l.tags,
       whatsapp: l.whatsapp,
@@ -302,7 +300,7 @@ const LeadsInsideSales = () => {
         telefone: editForm.telefone,
         status: editForm.status || "lead",
         cidade: editForm.cidade,
-        origem: editForm.origem,
+        
         deal_user: editForm.deal_user,
         tags: editForm.tags,
         whatsapp: editForm.whatsapp,
@@ -489,7 +487,7 @@ const LeadsInsideSales = () => {
                     {sortableHead("WhatsApp", "whatsapp")}
                     {sortableHead("Instagram", "instagram")}
                     {sortableHead("Status", "status")}
-                    {sortableHead("Origem", "origem")}
+                    
                     
                     {sortableHead("Área de Atuação", "area_atuacao")}
                     {sortableHead("Papel", "papel")}
@@ -552,7 +550,7 @@ const LeadsInsideSales = () => {
                             {statusLabels[l.status] || l.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{l.origem || "—"}</TableCell>
+                        
                         
                         <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>
                         <TableCell>{l.papel || "—"}</TableCell>
@@ -707,13 +705,6 @@ const LeadsInsideSales = () => {
               <Input
                 value={editForm.cidade || ""}
                 onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Origem</Label>
-              <Input
-                value={editForm.origem || ""}
-                onChange={(e) => setEditForm({ ...editForm, origem: e.target.value })}
               />
             </div>
             <div className="space-y-1">

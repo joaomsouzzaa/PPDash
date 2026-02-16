@@ -52,10 +52,8 @@ export type Database = {
           id: string
           instagram: string | null
           nome: string | null
-          origem: string | null
           papel: string | null
           payload: Json | null
-          produto_slug: string | null
           situacao_atual: string | null
           status: string
           tags: string | null
@@ -80,10 +78,8 @@ export type Database = {
           id?: string
           instagram?: string | null
           nome?: string | null
-          origem?: string | null
           papel?: string | null
           payload?: Json | null
-          produto_slug?: string | null
           situacao_atual?: string | null
           status?: string
           tags?: string | null
@@ -108,10 +104,8 @@ export type Database = {
           id?: string
           instagram?: string | null
           nome?: string | null
-          origem?: string | null
           papel?: string | null
           payload?: Json | null
-          produto_slug?: string | null
           situacao_atual?: string | null
           status?: string
           tags?: string | null
