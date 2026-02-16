@@ -96,7 +96,7 @@ const CrmWebhookSection = () => {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Envie um POST com os campos: <code className="text-xs">nome</code>, <code className="text-xs">email</code>, <code className="text-xs">telefone</code>, <code className="text-xs">status</code> (lead, mql, sql, reuniao_agendada, reuniao_realizada, venda), <code className="text-xs">utm_medium</code>, <code className="text-xs">produto_slug</code>, <code className="text-xs">cidade</code>. Autenticação via header <code className="text-xs">x-webhook-token</code>.
+          Envie um POST com os campos: <code className="text-xs">nome</code>, <code className="text-xs">email</code>, <code className="text-xs">telefone</code>, <code className="text-xs">status</code> (lead, mql, sql, reuniao_agendada, reuniao_realizada, venda), <code className="text-xs">utm_medium</code>, <code className="text-xs">campaign_name</code>, <code className="text-xs">cidade</code>. Autenticação via header <code className="text-xs">x-webhook-token</code>.
         </p>
       </CardContent>
     </Card>
