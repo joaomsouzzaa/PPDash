@@ -74,43 +74,50 @@ Deno.serve(async (req) => {
 
     // If email is provided, check for existing lead within 10-day window
     const email = lead.email as string | null;
+    const telefone = lead.telefone as string | null;
+
+    // Try to find existing lead by email or phone
+    let existingId: string | null = null;
     if (email) {
-      const { data: existing } = await supabase
+      const { data } = await supabase
         .from("leads")
-        .select("id, data_lead")
+        .select("id")
         .eq("email", email)
         .order("data_lead", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (data) existingId = data.id;
+    }
+    if (!existingId && telefone) {
+      const { data } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("telefone", telefone)
+        .order("data_lead", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) existingId = data.id;
+    }
 
-      if (existing) {
-        const existingDate = new Date(existing.data_lead);
-        const now = new Date();
-        const diffDays = (now.getTime() - existingDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (existingId) {
+      const { payload: _p, ...updateFields } = lead;
+      const { error } = await supabase
+        .from("leads")
+        .update({ ...updateFields, payload: lead.payload })
+        .eq("id", existingId);
 
-        if (diffDays <= 10) {
-          // Within 10 days — update existing lead (duplicate)
-          const { payload: _p, ...updateFields } = lead;
-          const { error } = await supabase
-            .from("leads")
-            .update({ ...updateFields, payload: lead.payload })
-            .eq("id", existing.id);
-
-          if (error) {
-            console.error("[Webhook Leads Update Error]", error.message);
-            return new Response(JSON.stringify({ error: "Failed to update lead" }), {
-              status: 500,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-
-          return new Response(JSON.stringify({ success: true, action: "updated" }), {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        // More than 10 days — fall through to insert as new lead
+      if (error) {
+        console.error("[Webhook Leads Update Error]", error.message);
+        return new Response(JSON.stringify({ error: "Failed to update lead" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
+
+      return new Response(JSON.stringify({ success: true, action: "updated" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Insert new lead
