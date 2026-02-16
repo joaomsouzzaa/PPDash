@@ -78,7 +78,7 @@ export function useLeadsData(filters: Filters) {
 
       let query = supabase
         .from("leads")
-        .select("status, utm_medium")
+        .select("status, utm_medium, campaign_name")
         .gte("data_lead", start)
         .lte("data_lead", end);
 
@@ -88,10 +88,12 @@ export function useLeadsData(filters: Filters) {
 
       let leads = data || [];
 
-      // Filter by product slugs via utm_medium
+      // Filter by product slugs via campaign_name
       if (filters.produtos.length > 0) {
         leads = leads.filter((l) =>
-          l.utm_medium && filters.produtos.includes(l.utm_medium)
+          l.campaign_name && filters.produtos.some((slug) =>
+            l.campaign_name!.toLowerCase().includes(slug.toLowerCase())
+          )
         );
       }
 
