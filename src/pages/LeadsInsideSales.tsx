@@ -288,6 +288,7 @@ const LeadsInsideSales = () => {
       utm_term: l.utm_term,
       ad_name: l.ad_name,
       campaign_name: l.campaign_name,
+      is_sql: l.is_sql,
     });
   };
 
@@ -317,6 +318,7 @@ const LeadsInsideSales = () => {
         utm_term: editForm.utm_term,
         ad_name: editForm.ad_name,
         campaign_name: editForm.campaign_name,
+        is_sql: editForm.is_sql,
       })
       .eq("id", editingLead.id);
 
@@ -798,6 +800,18 @@ const LeadsInsideSales = () => {
                 value={editForm.campaign_name || ""}
                 onChange={(e) => setEditForm({ ...editForm, campaign_name: e.target.value })}
               />
+            </div>
+            <div className="space-y-1">
+              <Label>SQL</Label>
+              <Select value={editForm.is_sql || ""} onValueChange={(v) => setEditForm({ ...editForm, is_sql: v || null })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Sim">Sim</SelectItem>
+                  <SelectItem value="Nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
