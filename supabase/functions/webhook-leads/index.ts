@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const webhookToken = req.headers.get("x-webhook-token") || req.headers.get("token");
   const providedKey = queryToken || bearerToken || webhookToken;
-  const expectedKey = Deno.env.get("WEBHOOK_API_KEY");
+  const expectedKey = Deno.env.get("WEBHOOK_LEADS_API_KEY");
 
   if (!expectedKey || providedKey !== expectedKey) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
