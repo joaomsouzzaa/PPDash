@@ -164,6 +164,18 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
               <p className="text-sm text-muted-foreground p-2">Nenhum produto ativo</p>
             ) : (
               <div className="space-y-1">
+                <label
+                  className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent font-medium"
+                >
+                  <Checkbox
+                    checked={filters.produtos.length === 0}
+                    onCheckedChange={() => {
+                      update({ produtos: [] });
+                    }}
+                  />
+                  Todos os produtos
+                </label>
+                <div className="border-t border-border my-1" />
                 {activeProdutos.map((p) => {
                   const checked = filters.produtos.includes(p.slug);
                   return (
@@ -184,6 +196,19 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
                     </label>
                   );
                 })}
+                {filters.produtos.length > 0 && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-muted-foreground"
+                      onClick={() => update({ produtos: [] })}
+                    >
+                      Limpar filtro
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </PopoverContent>
