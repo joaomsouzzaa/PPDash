@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       data_lead: payload.deal_created_at || payload["data da criação"] || payload.data_lead || payload.created_at || new Date().toISOString(),
       faturamento: payload.contact_scaleformatacao_fatu_1 || payload.faturamento || null,
       ad_name: payload.deal_ad_name || payload["nome do anúncio"] || null,
-      campaign_name: payload.deal_campaign_name || payload["nome da campanha"] || null,
+      campaign_name: payload.deal_campaign_name || payload["nome da campanha"] || payload.deal_utm_source || payload["Utm-source"] || payload.utm_source || null,
       deal_user: payload.deal_user || payload["dono do negócio"] || null,
       situacao_atual: payload.contact_quais_dessas_situaco || payload["situação atual?"] || payload["situacao atual"] || null,
       whatsapp: payload.contact_qual_seu_whatsapp || payload.Whatsapp || payload.whatsapp || null,
