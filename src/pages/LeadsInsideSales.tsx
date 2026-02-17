@@ -665,24 +665,83 @@ const LeadsInsideSales = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label>Nome</Label>
-              <Input
-                value={editForm.nome || ""}
-                onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
-              />
+              <Input value={editForm.nome || ""} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label>Email</Label>
-              <Input
-                value={editForm.email || ""}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              />
+              <Input value={editForm.email || ""} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label>Telefone</Label>
-              <Input
-                value={editForm.telefone || ""}
-                onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })}
-              />
+              <Input value={editForm.telefone || ""} onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>WhatsApp Digitado</Label>
+              <Input value={editForm.whatsapp || ""} onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Instagram</Label>
+              <Input value={editForm.instagram || ""} onChange={(e) => setEditForm({ ...editForm, instagram: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>SQL</Label>
+              <Select value={editForm.is_sql || ""} onValueChange={(v) => setEditForm({ ...editForm, is_sql: v || null })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Sim">Sim</SelectItem>
+                  <SelectItem value="Nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Área de Atuação</Label>
+              <Input value={editForm.area_atuacao || ""} onChange={(e) => setEditForm({ ...editForm, area_atuacao: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Papel na Empresa</Label>
+              <Input value={editForm.papel || ""} onChange={(e) => setEditForm({ ...editForm, papel: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Faturamento Atual</Label>
+              <Input value={editForm.faturamento || ""} onChange={(e) => setEditForm({ ...editForm, faturamento: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Situação Atual</Label>
+              <Input value={editForm.situacao_atual || ""} onChange={(e) => setEditForm({ ...editForm, situacao_atual: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Utm Campaign</Label>
+              <Input value={editForm.utm_campaign || ""} onChange={(e) => setEditForm({ ...editForm, utm_campaign: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Medium</Label>
+              <Input value={editForm.utm_medium || ""} onChange={(e) => setEditForm({ ...editForm, utm_medium: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Content</Label>
+              <Input value={editForm.utm_content || ""} onChange={(e) => setEditForm({ ...editForm, utm_content: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>UTM Term</Label>
+              <Input value={editForm.utm_term || ""} onChange={(e) => setEditForm({ ...editForm, utm_term: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Nome Campanha</Label>
+              <Input value={editForm.campaign_name || ""} onChange={(e) => setEditForm({ ...editForm, campaign_name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Nome do Anúncio</Label>
+              <Input value={editForm.ad_name || ""} onChange={(e) => setEditForm({ ...editForm, ad_name: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Responsável</Label>
+              <Input value={editForm.deal_user || ""} onChange={(e) => setEditForm({ ...editForm, deal_user: e.target.value })} />
+            </div>
+            <div className="space-y-1 col-span-2">
+              <Label>Tags</Label>
+              <Input value={editForm.tags || ""} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label>Status</Label>
@@ -698,123 +757,6 @@ const LeadsInsideSales = () => {
                   <SelectItem value="reuniao_realizada">Reunião Realizada</SelectItem>
                   <SelectItem value="venda">Venda</SelectItem>
                   <SelectItem value="perdido">Perdido</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>WhatsApp</Label>
-              <Input
-                value={editForm.whatsapp || ""}
-                onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Instagram</Label>
-              <Input
-                value={editForm.instagram || ""}
-                onChange={(e) => setEditForm({ ...editForm, instagram: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Cidade</Label>
-              <Input
-                value={editForm.cidade || ""}
-                onChange={(e) => setEditForm({ ...editForm, cidade: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Responsável</Label>
-              <Input
-                value={editForm.deal_user || ""}
-                onChange={(e) => setEditForm({ ...editForm, deal_user: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Área de Atuação</Label>
-              <Input
-                value={editForm.area_atuacao || ""}
-                onChange={(e) => setEditForm({ ...editForm, area_atuacao: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Papel</Label>
-              <Input
-                value={editForm.papel || ""}
-                onChange={(e) => setEditForm({ ...editForm, papel: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Faturamento</Label>
-              <Input
-                value={editForm.faturamento || ""}
-                onChange={(e) => setEditForm({ ...editForm, faturamento: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Situação Atual</Label>
-              <Input
-                value={editForm.situacao_atual || ""}
-                onChange={(e) => setEditForm({ ...editForm, situacao_atual: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Tags</Label>
-              <Input
-                value={editForm.tags || ""}
-                onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Medium</Label>
-              <Input
-                value={editForm.utm_medium || ""}
-                onChange={(e) => setEditForm({ ...editForm, utm_medium: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Campanha UTM</Label>
-              <Input
-                value={editForm.utm_campaign || ""}
-                onChange={(e) => setEditForm({ ...editForm, utm_campaign: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Content</Label>
-              <Input
-                value={editForm.utm_content || ""}
-                onChange={(e) => setEditForm({ ...editForm, utm_content: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Term</Label>
-              <Input
-                value={editForm.utm_term || ""}
-                onChange={(e) => setEditForm({ ...editForm, utm_term: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Nome do Anúncio</Label>
-              <Input
-                value={editForm.ad_name || ""}
-                onChange={(e) => setEditForm({ ...editForm, ad_name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Nome da Campanha</Label>
-              <Input
-                value={editForm.campaign_name || ""}
-                onChange={(e) => setEditForm({ ...editForm, campaign_name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>SQL</Label>
-              <Select value={editForm.is_sql || ""} onValueChange={(v) => setEditForm({ ...editForm, is_sql: v || null })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Sim">Sim</SelectItem>
-                  <SelectItem value="Nao">Não</SelectItem>
                 </SelectContent>
               </Select>
             </div>
