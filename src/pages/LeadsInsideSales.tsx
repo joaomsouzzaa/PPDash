@@ -487,23 +487,19 @@ const LeadsInsideSales = () => {
                     {sortableHead("Nome", "nome")}
                     {sortableHead("Email", "email")}
                     {sortableHead("Telefone", "telefone")}
-                    {sortableHead("WhatsApp", "whatsapp")}
+                    {sortableHead("WhatsApp Digitado", "whatsapp")}
                     {sortableHead("Instagram", "instagram")}
-                    {sortableHead("Status", "status")}
                     {sortableHead("SQL", "is_sql")}
-                    
                     {sortableHead("Área de Atuação", "area_atuacao")}
-                    {sortableHead("Papel", "papel")}
-                    {sortableHead("Faturamento", "faturamento")}
+                    {sortableHead("Papel na Empresa", "papel")}
+                    {sortableHead("Faturamento Atual", "faturamento")}
                     {sortableHead("Situação Atual", "situacao_atual")}
-                    
+                    {sortableHead("Utm Campaign", "utm_campaign")}
                     {sortableHead("UTM Medium", "utm_medium")}
-                    {sortableHead("Campanha UTM", "utm_campaign")}
                     {sortableHead("UTM Content", "utm_content")}
                     {sortableHead("UTM Term", "utm_term")}
-                    {sortableHead("Nome Anúncio", "ad_name")}
                     {sortableHead("Nome Campanha", "campaign_name")}
-                    
+                    {sortableHead("Nome Anúncio", "ad_name")}
                     {sortableHead("Responsável", "deal_user")}
                     {sortableHead("Tags", "tags")}
                   </TableRow>
@@ -549,31 +545,22 @@ const LeadsInsideSales = () => {
                         <TableCell>{l.whatsapp || "—"}</TableCell>
                         <TableCell>{l.instagram || "—"}</TableCell>
                         <TableCell>
-                          <Badge variant={statusColor(l.status)}>
-                            {statusLabels[l.status] || l.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
                           {l.is_sql ? (
                             <Badge variant="default">Sim</Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        
-                        
                         <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>
                         <TableCell>{l.papel || "—"}</TableCell>
                         <TableCell>{l.faturamento || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.situacao_atual || "—"}</TableCell>
-                        
-                        <TableCell>{l.utm_medium || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.utm_campaign || "—"}</TableCell>
+                        <TableCell>{l.utm_medium || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.utm_content || "—"}</TableCell>
                         <TableCell>{l.utm_term || "—"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>
-                        
+                        <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>
                         <TableCell>{l.tags || "—"}</TableCell>
                         <TableCell>
