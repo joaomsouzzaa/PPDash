@@ -51,6 +51,7 @@ import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X } fr
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { TagSelector } from "@/components/TagSelector";
 
 type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
@@ -758,7 +759,10 @@ const LeadsInsideSales = () => {
             </div>
             <div className="space-y-1 col-span-2">
               <Label>Tags</Label>
-              <Input value={editForm.tags || ""} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} />
+              <TagSelector
+                value={editForm.tags || ""}
+                onChange={(v) => setEditForm({ ...editForm, tags: v })}
+              />
             </div>
           </div>
           <DialogFooter>

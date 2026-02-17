@@ -72,6 +72,14 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Auto-register new tags in the tags table
+    if (lead.tags) {
+      const tagNames = (lead.tags as string).split(",").map((t: string) => t.trim()).filter(Boolean);
+      for (const tagName of tagNames) {
+        await supabase.from("tags").upsert({ nome: tagName }, { onConflict: "nome" });
+      }
+    }
+
     // If email is provided, check for existing lead within 10-day window
     const email = lead.email as string | null;
     const telefone = lead.telefone as string | null;
