@@ -562,7 +562,17 @@ const LeadsInsideSales = () => {
                         <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>
-                        <TableCell>{l.tags || "—"}</TableCell>
+                        <TableCell>
+                          {l.tags ? (
+                            <div className="flex flex-wrap gap-1">
+                              {l.tags.split(",").map((tag, i) => (
+                                <Badge key={i} variant="secondary" className="text-xs whitespace-nowrap">
+                                  {tag.trim()}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : "—"}
+                        </TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
