@@ -303,6 +303,12 @@ const LeadsInsideSales = () => {
 
   const handleSaveEdit = async () => {
     if (!editingLead) return;
+
+    // Auto-sync is_sql based on tags
+    const tags = editForm.tags || "";
+    const hasSqlTag = tags.toLowerCase().split(",").some((t) => t.trim() === "sql");
+    const computedIsSql = hasSqlTag ? "Sim" : null;
+
     const { error } = await supabase
       .from("leads")
       .update({
@@ -311,7 +317,6 @@ const LeadsInsideSales = () => {
         telefone: editForm.telefone,
         status: editForm.status || "lead",
         cidade: editForm.cidade,
-        
         deal_user: editForm.deal_user,
         tags: editForm.tags,
         whatsapp: editForm.whatsapp,
@@ -320,14 +325,13 @@ const LeadsInsideSales = () => {
         papel: editForm.papel,
         faturamento: editForm.faturamento,
         situacao_atual: editForm.situacao_atual,
-        
         utm_medium: editForm.utm_medium,
         utm_campaign: editForm.utm_campaign,
         utm_content: editForm.utm_content,
         utm_term: editForm.utm_term,
         ad_name: editForm.ad_name,
         campaign_name: editForm.campaign_name,
-        is_sql: editForm.is_sql,
+        is_sql: computedIsSql,
       })
       .eq("id", editingLead.id);
 
