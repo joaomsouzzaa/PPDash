@@ -3,6 +3,41 @@ import { useCallback, useRef } from "react";
 export function useColumnResize() {
   const tableRef = useRef<HTMLTableElement>(null);
 
+  const autoFitColumn = useCallback((th: HTMLTableCellElement) => {
+    const table = th.closest("table");
+    if (!table) return;
+
+    const colIndex = th.cellIndex;
+    const rows = table.querySelectorAll("tr");
+    let maxWidth = 0;
+
+    // Measure the natural width of content in every cell of this column
+    rows.forEach((row) => {
+      const cell = row.cells[colIndex];
+      if (!cell) return;
+
+      // Temporarily remove width constraints to measure natural content
+      const prevWidth = cell.style.width;
+      const prevMinWidth = cell.style.minWidth;
+      const prevMaxWidth = cell.style.maxWidth;
+      cell.style.width = "auto";
+      cell.style.minWidth = "0";
+      cell.style.maxWidth = "none";
+
+      // Measure scrollWidth for truncated content
+      const contentWidth = cell.scrollWidth;
+      maxWidth = Math.max(maxWidth, contentWidth);
+
+      cell.style.width = prevWidth;
+      cell.style.minWidth = prevMinWidth;
+      cell.style.maxWidth = prevMaxWidth;
+    });
+
+    const finalWidth = Math.max(60, maxWidth + 16); // add padding
+    th.style.width = `${finalWidth}px`;
+    th.style.minWidth = `${finalWidth}px`;
+  }, []);
+
   const onResizeStart = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       e.preventDefault();
@@ -42,5 +77,17 @@ export function useColumnResize() {
     []
   );
 
-  return { tableRef, onResizeStart };
+  const onResizeDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const handle = e.currentTarget as HTMLElement;
+      const th = handle.parentElement as HTMLTableCellElement;
+      if (!th) return;
+      autoFitColumn(th);
+    },
+    [autoFitColumn]
+  );
+
+  return { tableRef, onResizeStart, onResizeDoubleClick };
 }
