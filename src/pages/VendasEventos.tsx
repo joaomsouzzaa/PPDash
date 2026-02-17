@@ -157,7 +157,7 @@ const VendasEventos = () => {
   const [showBulkDelete, setShowBulkDelete] = useState(false);
 
   const queryClient = useQueryClient();
-  const { tableRef, onResizeStart } = useColumnResize();
+  const { tableRef, onResizeStart, onResizeDoubleClick } = useColumnResize();
   const { data: cidades = [] } = useCidades();
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
@@ -248,6 +248,7 @@ const VendasEventos = () => {
       <div
         onMouseDown={onResizeStart}
         onTouchStart={onResizeStart}
+        onDoubleClick={onResizeDoubleClick}
         className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-border/0 hover:bg-primary/40 group-hover:bg-border/30 transition-colors"
       />
     </TableHead>
