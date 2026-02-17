@@ -100,20 +100,38 @@ Deno.serve(async (req) => {
     }
 
     if (existingId) {
-      // Only update is_sql and tags — preserve all original lead data
-      const updateFields: Record<string, unknown> = {
-        payload: lead.payload,
-      };
-      if (lead.is_sql) updateFields.is_sql = lead.is_sql;
-      if (lead.tags) updateFields.tags = lead.tags;
+      const hasSqlTag = detectSqlTag(payload.contact_tag || payload.tags || "");
+      let updateError: string | null = null;
 
-      const { error } = await supabase
-        .from("leads")
-        .update(updateFields)
-        .eq("id", existingId);
+      if (hasSqlTag) {
+        // SQL tag: only update is_sql, append SQL to existing tags
+        const { data: existingLead } = await supabase
+          .from("leads")
+          .select("tags")
+          .eq("id", existingId)
+          .maybeSingle();
 
-      if (error) {
-        console.error("[Webhook Leads Update Error]", error.message);
+        let mergedTags = existingLead?.tags || "";
+        if (!mergedTags.toLowerCase().split(",").some((t: string) => t.trim().toLowerCase() === "sql")) {
+          mergedTags = mergedTags ? `${mergedTags}, SQL` : "SQL";
+        }
+
+        const { error } = await supabase
+          .from("leads")
+          .update({ is_sql: "Sim", tags: mergedTags, payload: lead.payload })
+          .eq("id", existingId);
+        if (error) updateError = error.message;
+      } else {
+        // No SQL tag: only update data_lead
+        const { error } = await supabase
+          .from("leads")
+          .update({ data_lead: lead.data_lead, payload: lead.payload })
+          .eq("id", existingId);
+        if (error) updateError = error.message;
+      }
+
+      if (updateError) {
+        console.error("[Webhook Leads Update Error]", updateError);
         return new Response(JSON.stringify({ error: "Failed to update lead" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
