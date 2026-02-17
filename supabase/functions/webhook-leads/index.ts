@@ -100,18 +100,11 @@ Deno.serve(async (req) => {
     }
 
     if (existingId) {
-      // Only update fields that have non-null values — preserve existing data
-      const { payload: _p, ...allFields } = lead;
-      const updateFields: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(allFields)) {
-        if (value !== null && value !== undefined) {
-          updateFields[key] = value;
-        }
-      }
-      // Always update payload and is_sql
-      updateFields.payload = lead.payload;
+      // Only update is_sql and tags — preserve all original lead data
+      const updateFields: Record<string, unknown> = {
+        payload: lead.payload,
+      };
       if (lead.is_sql) updateFields.is_sql = lead.is_sql;
-      // Always merge tags (append new ones)
       if (lead.tags) updateFields.tags = lead.tags;
 
       const { error } = await supabase
