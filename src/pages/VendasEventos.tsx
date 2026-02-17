@@ -234,10 +234,10 @@ const VendasEventos = () => {
   };
 
   const sortableHead = (label: string, col: SortKey, className?: string) => (
-    <TableHead className={className}>
+    <TableHead className={`${className || ""} overflow-hidden`} style={{ resize: "horizontal", minWidth: 80 }}>
       <button
         type="button"
-        className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
+        className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors whitespace-nowrap"
         onClick={() => toggleSort(col)}
       >
         {label}
