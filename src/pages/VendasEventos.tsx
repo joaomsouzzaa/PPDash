@@ -52,8 +52,9 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, X } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, X, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useProdutos } from "@/hooks/useProdutos";
 
 type SortKey = "data_venda" | "nome_comprador" | "produto" | "cidade" | "tipo_ingresso" | "quantidade" | "valor" | "metodo_pagamento" | "status" | "cupom" | "plataforma";
 type SortDir = "asc" | "desc";
@@ -155,10 +156,24 @@ const VendasEventos = () => {
   const [deletingVenda, setDeletingVenda] = useState<VendaRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDelete, setShowBulkDelete] = useState(false);
-
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    produto: "",
+    quantidade: 1,
+    valor: 0,
+    nome_comprador: "",
+    email_comprador: "",
+    telefone_comprador: "",
+    cidade: "",
+    tipo_ingresso: "",
+    metodo_pagamento: "",
+    status: "aprovada",
+    plataforma: "manual",
+  });
   const queryClient = useQueryClient();
   const { tableRef, onResizeStart, onResizeDoubleClick } = useColumnResize();
   const { data: cidades = [] } = useCidades();
+  const { data: produtos = [] } = useProdutos();
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
 
@@ -361,6 +376,48 @@ const VendasEventos = () => {
     queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
   };
 
+  const handleCreateVenda = async () => {
+    if (!createForm.produto) {
+      toast.error("Informe o produto");
+      return;
+    }
+    const { error } = await supabase.from("vendas").insert({
+      produto: createForm.produto,
+      quantidade: createForm.quantidade || 1,
+      valor: createForm.valor || 0,
+      nome_comprador: createForm.nome_comprador || null,
+      email_comprador: createForm.email_comprador || null,
+      telefone_comprador: createForm.telefone_comprador || null,
+      cidade: createForm.cidade || null,
+      tipo_ingresso: createForm.tipo_ingresso || null,
+      metodo_pagamento: createForm.metodo_pagamento || null,
+      status: createForm.status || "aprovada",
+      plataforma: "manual",
+      data_venda: new Date().toISOString(),
+    });
+    if (error) {
+      toast.error("Erro ao cadastrar venda");
+      console.error(error);
+      return;
+    }
+    toast.success("Venda cadastrada com sucesso!");
+    setShowCreateDialog(false);
+    setCreateForm({
+      produto: "",
+      quantidade: 1,
+      valor: 0,
+      nome_comprador: "",
+      email_comprador: "",
+      telefone_comprador: "",
+      cidade: "",
+      tipo_ingresso: "",
+      metodo_pagamento: "",
+      status: "aprovada",
+      plataforma: "manual",
+    });
+    queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -374,6 +431,10 @@ const VendasEventos = () => {
                 Espelho completo de todas as vendas registradas
               </p>
             </div>
+            <Button className="ml-auto" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Cadastrar Venda Manualmente
+            </Button>
           </header>
 
           <div className="p-6 space-y-4">
@@ -795,6 +856,114 @@ const VendasEventos = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Manual Sale Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Venda Manualmente</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Produto *</Label>
+              <Select value={createForm.produto} onValueChange={(v) => setCreateForm({ ...createForm, produto: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o produto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {produtos.filter(p => p.ativo).map((p) => (
+                    <SelectItem key={p.id} value={p.nome}>{p.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Quantidade</Label>
+              <Input
+                type="number"
+                min="1"
+                value={createForm.quantidade}
+                onChange={(e) => setCreateForm({ ...createForm, quantidade: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Valor (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={createForm.valor}
+                onChange={(e) => setCreateForm({ ...createForm, valor: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Cidade</Label>
+              <Select value={createForm.cidade} onValueChange={(v) => setCreateForm({ ...createForm, cidade: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a cidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibleCidades.map((c) => (
+                    <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Nome do Comprador</Label>
+              <Input
+                value={createForm.nome_comprador}
+                onChange={(e) => setCreateForm({ ...createForm, nome_comprador: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={createForm.email_comprador}
+                onChange={(e) => setCreateForm({ ...createForm, email_comprador: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Telefone</Label>
+              <Input
+                value={createForm.telefone_comprador}
+                onChange={(e) => setCreateForm({ ...createForm, telefone_comprador: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Tipo de Ingresso</Label>
+              <Input
+                value={createForm.tipo_ingresso}
+                onChange={(e) => setCreateForm({ ...createForm, tipo_ingresso: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Método de Pagamento</Label>
+              <Input
+                value={createForm.metodo_pagamento}
+                onChange={(e) => setCreateForm({ ...createForm, metodo_pagamento: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Status</Label>
+              <Select value={createForm.status} onValueChange={(v) => setCreateForm({ ...createForm, status: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aprovada">Aprovada</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                  <SelectItem value="cancelada">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancelar</Button>
+            <Button onClick={handleCreateVenda}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   );
 };
