@@ -66,6 +66,9 @@ Deno.serve(async (req) => {
       is_sql: detectSqlTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
       is_reuniao_agendada: detectRaTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
       is_reuniao_realizada: detectRrTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
+      is_venda_realizada: detectVrTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
+      faturamento_venda: parseVendaValue(payload.deal_value),
+      data_venda_realizada: payload.deal_data_de_fechamento || (detectVrTag(payload.contact_tag || payload.tags || "") ? new Date().toISOString() : null),
       payload,
     };
 
@@ -113,9 +116,10 @@ Deno.serve(async (req) => {
       const hasSqlTag = detectSqlTag(payload.contact_tag || payload.tags || "");
       const hasRaTag = detectRaTag(payload.contact_tag || payload.tags || "");
       const hasRrTag = detectRrTag(payload.contact_tag || payload.tags || "");
+      const hasVrTag = detectVrTag(payload.contact_tag || payload.tags || "");
       let updateError: string | null = null;
 
-      if (hasSqlTag || hasRaTag || hasRrTag) {
+      if (hasSqlTag || hasRaTag || hasRrTag || hasVrTag) {
         // Tag detected: fetch existing tags to merge
         const { data: existingLead } = await supabase
           .from("leads")
@@ -139,11 +143,22 @@ Deno.serve(async (req) => {
         if (hasRrTag && !mergedTags.toLowerCase().split(",").some((t: string) => t.trim().toLowerCase().includes("reuniao realizada") || t.trim().toLowerCase().includes("reunião realizada"))) {
           mergedTags = mergedTags ? `${mergedTags}, ${rrTagName}` : rrTagName;
         }
+        // Append Venda Realizada tag if needed
+        const vrTagName = "Venda Realizada";
+        if (hasVrTag && !mergedTags.toLowerCase().split(",").some((t: string) => t.trim().toLowerCase().includes("venda realizada"))) {
+          mergedTags = mergedTags ? `${mergedTags}, ${vrTagName}` : vrTagName;
+        }
 
         const updateFields: Record<string, unknown> = { tags: mergedTags, payload: lead.payload };
         if (hasSqlTag) updateFields.is_sql = "Sim";
         if (hasRaTag) updateFields.is_reuniao_agendada = "Sim";
         if (hasRrTag) updateFields.is_reuniao_realizada = "Sim";
+        if (hasVrTag) {
+          updateFields.is_venda_realizada = "Sim";
+          const vendaValue = parseVendaValue(payload.deal_value);
+          if (vendaValue !== null) updateFields.faturamento_venda = vendaValue;
+          updateFields.data_venda_realizada = payload.deal_data_de_fechamento || new Date().toISOString();
+        }
 
         const { error } = await supabase
           .from("leads")
@@ -230,6 +245,21 @@ function detectRrTag(tags: unknown): boolean {
     const trimmed = t.trim();
     return trimmed === "reunião realizada" || trimmed === "reuniao realizada" || trimmed === "rr";
   });
+}
+
+function detectVrTag(tags: unknown): boolean {
+  if (!tags) return false;
+  const normalized = (normalizeTags(tags) || "").toLowerCase();
+  return normalized.split(",").some((t) => {
+    const trimmed = t.trim();
+    return trimmed === "venda realizada" || trimmed === "vr";
+  });
+}
+
+function parseVendaValue(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const num = Number(value);
+  return isNaN(num) ? null : num;
 }
 
 function mapLeadStatus(status: string): string {
