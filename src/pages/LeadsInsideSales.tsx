@@ -811,6 +811,14 @@ const LeadsInsideSales = () => {
               <Label>Responsável</Label>
               <Input value={editForm.deal_user || ""} onChange={(e) => setEditForm({ ...editForm, deal_user: e.target.value })} />
             </div>
+            <div className="space-y-1">
+              <Label>Faturamento da Venda</Label>
+              <Input type="number" value={editForm.faturamento_venda ?? ""} onChange={(e) => setEditForm({ ...editForm, faturamento_venda: e.target.value ? Number(e.target.value) : null })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Data Venda Realizada</Label>
+              <Input type="date" value={editForm.data_venda_realizada ? new Date(editForm.data_venda_realizada).toISOString().split("T")[0] : ""} onChange={(e) => setEditForm({ ...editForm, data_venda_realizada: e.target.value ? new Date(e.target.value).toISOString() : null })} />
+            </div>
             <div className="space-y-1 col-span-2">
               <Label>Tags</Label>
               <TagSelector
