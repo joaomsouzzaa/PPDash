@@ -46,14 +46,17 @@ export type Database = {
           cidade: string | null
           created_at: string
           data_lead: string
+          data_venda_realizada: string | null
           deal_user: string | null
           email: string | null
           faturamento: string | null
+          faturamento_venda: number | null
           id: string
           instagram: string | null
           is_reuniao_agendada: string | null
           is_reuniao_realizada: string | null
           is_sql: string | null
+          is_venda_realizada: string | null
           nome: string | null
           papel: string | null
           payload: Json | null
@@ -75,14 +78,17 @@ export type Database = {
           cidade?: string | null
           created_at?: string
           data_lead?: string
+          data_venda_realizada?: string | null
           deal_user?: string | null
           email?: string | null
           faturamento?: string | null
+          faturamento_venda?: number | null
           id?: string
           instagram?: string | null
           is_reuniao_agendada?: string | null
           is_reuniao_realizada?: string | null
           is_sql?: string | null
+          is_venda_realizada?: string | null
           nome?: string | null
           papel?: string | null
           payload?: Json | null
@@ -104,14 +110,17 @@ export type Database = {
           cidade?: string | null
           created_at?: string
           data_lead?: string
+          data_venda_realizada?: string | null
           deal_user?: string | null
           email?: string | null
           faturamento?: string | null
+          faturamento_venda?: number | null
           id?: string
           instagram?: string | null
           is_reuniao_agendada?: string | null
           is_reuniao_realizada?: string | null
           is_sql?: string | null
+          is_venda_realizada?: string | null
           nome?: string | null
           papel?: string | null
           payload?: Json | null

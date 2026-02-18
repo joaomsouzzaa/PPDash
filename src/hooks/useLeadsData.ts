@@ -105,6 +105,8 @@ export interface LeadsKpis {
   reunioesAgendadas: number;
   reunioesRealizadas: number;
   vendas: number;
+  vendasRealizadas: number;
+  faturamentoVenda: number;
 }
 
 export function useLeadsData(filters: Filters) {
@@ -121,7 +123,7 @@ export function useLeadsData(filters: Filters) {
 
       let query = supabase
         .from("leads")
-        .select("status, utm_medium, campaign_name, faturamento, is_sql, is_reuniao_agendada, is_reuniao_realizada")
+        .select("status, utm_medium, campaign_name, faturamento, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
         .gte("data_lead", start)
         .lte("data_lead", end);
 
@@ -148,6 +150,8 @@ export function useLeadsData(filters: Filters) {
       let reunioesAgendadas = 0;
       let reunioesRealizadas = 0;
       let vendas = 0;
+      let vendasRealizadas = 0;
+      let faturamentoVenda = 0;
 
       for (const l of leads) {
         totalLeads++;
@@ -174,9 +178,14 @@ export function useLeadsData(filters: Filters) {
         if (s === "venda") {
           vendas++;
         }
+        if ((l as any).is_venda_realizada === "Sim") {
+          vendasRealizadas++;
+          const fv = Number((l as any).faturamento_venda);
+          if (!isNaN(fv)) faturamentoVenda += fv;
+        }
       }
 
-      return { totalLeads, mql, sql, reunioesAgendadas, reunioesRealizadas, vendas };
+      return { totalLeads, mql, sql, reunioesAgendadas, reunioesRealizadas, vendas, vendasRealizadas, faturamentoVenda };
     },
     refetchInterval: 600_000, // 10 minutes
   });

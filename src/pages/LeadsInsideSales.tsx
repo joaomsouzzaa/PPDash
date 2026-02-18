@@ -53,7 +53,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { TagSelector } from "@/components/TagSelector";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "is_reuniao_agendada" | "is_reuniao_realizada" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "is_reuniao_agendada" | "is_reuniao_realizada" | "is_venda_realizada" | "faturamento_venda" | "data_venda_realizada" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -82,6 +82,9 @@ type LeadRow = {
   is_sql: string | null;
   is_reuniao_agendada: string | null;
   is_reuniao_realizada: string | null;
+  is_venda_realizada: string | null;
+  faturamento_venda: number | null;
+  data_venda_realizada: string | null;
 };
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
@@ -193,7 +196,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
+        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
@@ -302,6 +305,9 @@ const LeadsInsideSales = () => {
       is_sql: l.is_sql,
       is_reuniao_agendada: l.is_reuniao_agendada,
       is_reuniao_realizada: l.is_reuniao_realizada,
+      is_venda_realizada: l.is_venda_realizada,
+      faturamento_venda: l.faturamento_venda,
+      data_venda_realizada: l.data_venda_realizada,
     });
   };
 
@@ -314,6 +320,7 @@ const LeadsInsideSales = () => {
     const computedIsSql = tagList.some((t) => t === "sql") ? "Sim" : null;
     const computedIsRa = tagList.some((t) => t === "reunião agendada" || t === "reuniao agendada") ? "Sim" : null;
     const computedIsRr = tagList.some((t) => t === "reunião realizada" || t === "reuniao realizada") ? "Sim" : null;
+    const computedIsVr = tagList.some((t) => t === "venda realizada") ? "Sim" : null;
 
     const { error } = await supabase
       .from("leads")
@@ -340,6 +347,9 @@ const LeadsInsideSales = () => {
         is_sql: computedIsSql,
         is_reuniao_agendada: computedIsRa,
         is_reuniao_realizada: computedIsRr,
+        is_venda_realizada: computedIsVr,
+        faturamento_venda: editForm.faturamento_venda,
+        data_venda_realizada: editForm.data_venda_realizada,
       })
       .eq("id", editingLead.id);
 
@@ -513,6 +523,9 @@ const LeadsInsideSales = () => {
                     {sortableHead("SQL", "is_sql")}
                     {sortableHead("Reunião Agendada", "is_reuniao_agendada")}
                     {sortableHead("Reunião Realizada", "is_reuniao_realizada")}
+                    {sortableHead("Venda Realizada", "is_venda_realizada")}
+                    {sortableHead("Faturamento Venda", "faturamento_venda")}
+                    {sortableHead("Data Venda", "data_venda_realizada")}
                     {sortableHead("Área de Atuação", "area_atuacao")}
                     {sortableHead("Papel na Empresa", "papel")}
                     {sortableHead("Faturamento Atual", "faturamento")}
@@ -587,6 +600,19 @@ const LeadsInsideSales = () => {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          {l.is_venda_realizada ? (
+                            <Badge variant="default">Sim</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {l.faturamento_venda != null ? `R$ ${Number(l.faturamento_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {l.data_venda_realizada ? new Date(l.data_venda_realizada).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>
                         <TableCell>{l.papel || "—"}</TableCell>
