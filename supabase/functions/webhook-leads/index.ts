@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       utm_content: payload.deal_utm_content || payload.utm_content || null,
       utm_term: payload.utm_term || null,
       cidade: payload.cidade || payload.city || null,
-      data_lead: payload.deal_created_at || payload["data da criação"] || payload.data_lead || payload.created_at || new Date().toISOString(),
+      data_lead: parseDateValue(payload.deal_created_at || payload["data da criação"] || payload.data_lead || payload.created_at) || new Date().toISOString(),
       faturamento: payload.contact_scaleformatacao_fatu_1 || payload.faturamento || null,
       ad_name: payload.deal_ad_name || payload["nome do anúncio"] || null,
       campaign_name: payload.deal_campaign_name || payload["nome da campanha"] || payload.deal_utm_source || payload["Utm-source"] || payload.utm_source || null,
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
       is_reuniao_realizada: detectRrTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
       is_venda_realizada: detectVrTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
       faturamento_venda: parseVendaValue(payload.deal_value),
-      data_venda_realizada: payload.deal_data_de_fechamento || (detectVrTag(payload.contact_tag || payload.tags || "") ? new Date().toISOString() : null),
+      data_venda_realizada: parseDateValue(payload.deal_data_de_fechamento) || (detectVrTag(payload.contact_tag || payload.tags || "") ? new Date().toISOString() : null),
       payload,
     };
 
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
           updateFields.is_venda_realizada = "Sim";
           const vendaValue = parseVendaValue(payload.deal_value);
           if (vendaValue !== null) updateFields.faturamento_venda = vendaValue;
-          updateFields.data_venda_realizada = payload.deal_data_de_fechamento || new Date().toISOString();
+          updateFields.data_venda_realizada = parseDateValue(payload.deal_data_de_fechamento) || new Date().toISOString();
         }
 
         const { error } = await supabase
@@ -254,6 +254,20 @@ function detectVrTag(tags: unknown): boolean {
     const trimmed = t.trim();
     return trimmed === "venda realizada" || trimmed === "vr";
   });
+}
+
+function parseDateValue(value: unknown): string | null {
+  if (!value) return null;
+  const s = String(value).trim();
+  // Handle DD/MM/YYYY format
+  const ddmmyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ddmmyyyy) {
+    const [, day, month, year] = ddmmyyyy;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00Z`;
+  }
+  // Already ISO or other parseable format
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 function parseVendaValue(value: unknown): number | null {
