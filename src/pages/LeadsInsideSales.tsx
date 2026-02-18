@@ -768,6 +768,42 @@ const LeadsInsideSales = () => {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label>Reunião Agendada</Label>
+              <Select value={editForm.is_reuniao_agendada || ""} onValueChange={(v) => setEditForm({ ...editForm, is_reuniao_agendada: v || null })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Sim">Sim</SelectItem>
+                  <SelectItem value="Nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Reunião Realizada</Label>
+              <Select value={editForm.is_reuniao_realizada || ""} onValueChange={(v) => setEditForm({ ...editForm, is_reuniao_realizada: v || null })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Sim">Sim</SelectItem>
+                  <SelectItem value="Nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Venda Realizada</Label>
+              <Select value={editForm.is_venda_realizada || ""} onValueChange={(v) => setEditForm({ ...editForm, is_venda_realizada: v || null })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Sim">Sim</SelectItem>
+                  <SelectItem value="Nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label>Área de Atuação</Label>
               <Input value={editForm.area_atuacao || ""} onChange={(e) => setEditForm({ ...editForm, area_atuacao: e.target.value })} />
             </div>
