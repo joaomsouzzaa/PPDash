@@ -263,7 +263,7 @@ function parseDateValue(value: unknown): string | null {
   const ddmmyyyy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (ddmmyyyy) {
     const [, day, month, year] = ddmmyyyy;
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00Z`;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T12:00:00Z`;
   }
   // Already ISO or other parseable format
   const d = new Date(s);
