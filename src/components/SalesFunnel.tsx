@@ -17,6 +17,8 @@ const NEON_COLORS = [
   { bg: "from-[#FF6F00] to-[#FF8C00]", glow: "rgba(255,111,0,0.4)", text: "#fff" },
   { bg: "from-[#BF40BF] to-[#9B30FF]", glow: "rgba(155,48,255,0.4)", text: "#fff" },
   { bg: "from-[#FF2D75] to-[#FF69B4]", glow: "rgba(255,45,117,0.3)", text: "#fff" },
+  { bg: "from-[#00CED1] to-[#20B2AA]", glow: "rgba(0,206,209,0.4)", text: "#1a1a2e" },
+  { bg: "from-[#FFD700] to-[#FFA500]", glow: "rgba(255,215,0,0.4)", text: "#1a1a2e" },
 ];
 
 function calcConversionPercent(current: number | null, previous: number | null): string {

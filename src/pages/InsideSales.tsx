@@ -129,6 +129,8 @@ const InsideSales = () => {
     { label: "Reunião Agendada", value: String(reunioesAgendadas), count: reunioesAgendadas, conversionLabel: "RA %" },
     { label: "Reunião Realizada", value: String(reunioesRealizadas), count: reunioesRealizadas, conversionLabel: "RR %" },
     { label: "Vendas", value: String(vendas), count: vendas, conversionLabel: "Vendas %" },
+    { label: "Faturamento", value: fmt(faturamentoVenda), count: null, conversionLabel: null },
+    { label: "ROAS", value: `${roas.toFixed(2)}x`, count: null, conversionLabel: null },
   ];
 
   return (

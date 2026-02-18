@@ -175,7 +175,7 @@ export function useLeadsData(filters: Filters) {
         if (l.is_reuniao_realizada === "Sim" || s === "reuniao_realizada" || s === "venda") {
           reunioesRealizadas++;
         }
-        if (s === "venda") {
+        if (l.is_venda_realizada === "Sim" || s === "venda") {
           vendas++;
         }
         if ((l as any).is_venda_realizada === "Sim") {
