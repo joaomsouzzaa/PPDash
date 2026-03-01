@@ -172,6 +172,8 @@ const Index = () => {
         const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const daysRemaining = Math.max(0, differenceInDays(eventDateOnly, todayOnly) + 1);
 
+        console.log(`[Projeção] CAC=${cacParticipanteDisplay}, dailyBudget=${dailyBudget}, daysRemaining=${daysRemaining}, participantes=${kpi.participantes}`);
+
         if (cacParticipanteDisplay <= 0 || dailyBudget <= 0) {
           setProjecaoParticipantes(kpi.participantes);
           return;
@@ -180,6 +182,7 @@ const Index = () => {
         // Formula: projection = currentParticipants + (dailyBudget / CAC) * daysRemaining
         const dailyNewParticipants = dailyBudget / cacParticipanteDisplay;
         const projected = Math.ceil(kpi.participantes + dailyNewParticipants * daysRemaining);
+        console.log(`[Projeção] dailyNew=${dailyNewParticipants}, projected=${projected}`);
         setProjecaoParticipantes(projected);
       } catch {
         setProjecaoParticipantes(null);

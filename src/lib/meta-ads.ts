@@ -285,7 +285,8 @@ export async function fetchDailySpendBreakdown(
   return dailyMap;
 }
 
-/** Fetch the sum of daily budgets for active campaigns matching a slug */
+/** Fetch the sum of daily budgets for active campaigns matching a slug.
+ *  Checks campaign-level daily_budget first, then falls back to adset-level budgets. */
 export async function fetchCampaignDailyBudget(
   accountIds: string[],
   slug: string
@@ -311,15 +312,34 @@ export async function fetchCampaignDailyBudget(
 
         const campaigns = campaignsRes.data || [];
         for (const c of campaigns) {
-          if (c.status === "ACTIVE" && c.daily_budget) {
-            // daily_budget is returned in cents (smallest currency unit)
+          if (c.status !== "ACTIVE") continue;
+
+          if (c.daily_budget && parseFloat(c.daily_budget) > 0) {
+            // Campaign-level daily_budget (returned in cents)
             totalDailyBudget += parseFloat(c.daily_budget) / 100;
+          } else {
+            // No campaign-level budget — check adsets for this campaign
+            try {
+              const adsetsRes = await graphApiFetch<{
+                data: Array<{ id: string; daily_budget?: string; status: string }>;
+              }>(`/${c.id}/adsets`, {
+                fields: "id,daily_budget,status",
+                limit: "500",
+              });
+              const adsets = adsetsRes.data || [];
+              for (const adset of adsets) {
+                if (adset.status === "ACTIVE" && adset.daily_budget && parseFloat(adset.daily_budget) > 0) {
+                  totalDailyBudget += parseFloat(adset.daily_budget) / 100;
+                }
+              }
+            } catch {}
           }
         }
       } catch {}
     })
   );
 
+  console.log(`[Projeção] slug=${slug} dailyBudget=${totalDailyBudget}`);
   _spendCache.set(cacheKey, { data: totalDailyBudget, ts: Date.now() });
   return totalDailyBudget;
 }
