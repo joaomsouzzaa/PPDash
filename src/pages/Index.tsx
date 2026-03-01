@@ -124,19 +124,18 @@ const Index = () => {
   const { data: vendasData, isLoading: loadingVendas } = useVendasData(filters);
   const kpi = vendasData || {
     investimentoTotal: 0, bilheteriaTotal: 0, cacVenda: 0, cacParticipante: 0,
-    participantes: 0, totalVips: 0, vendasIndividuais: 0, vendasDuplas: 0,
-    ticketMedio: 0, bilheteriaIngressos: 0, bilheteriaVip: 0, lucro: 0, chartData: [],
-    pagamentoPorMetodo: {},
+    participantes: 0, participantesParaCAC: 0, vendasParaCAC: 0, totalVips: 0,
+    vendasIndividuais: 0, vendasDuplas: 0, ticketMedio: 0, bilheteriaIngressos: 0,
+    bilheteriaVip: 0, lucro: 0, chartData: [], pagamentoPorMetodo: {},
   };
 
   const investimentoDisplay = metaInvestimento !== null ? metaInvestimento : kpi.investimentoTotal;
 
-  const totalVendas = kpi.vendasIndividuais + kpi.vendasDuplas;
-  const cacVendaDisplay = metaInvestimento !== null && totalVendas > 0
-    ? metaInvestimento / totalVendas
+  const cacVendaDisplay = metaInvestimento !== null && kpi.vendasParaCAC > 0
+    ? metaInvestimento / kpi.vendasParaCAC
     : kpi.cacVenda;
-  const cacParticipanteDisplay = metaInvestimento !== null && kpi.participantes > 0
-    ? metaInvestimento / kpi.participantes
+  const cacParticipanteDisplay = metaInvestimento !== null && kpi.participantesParaCAC > 0
+    ? metaInvestimento / kpi.participantesParaCAC
     : kpi.cacParticipante;
   const lucroDisplay = metaInvestimento !== null
     ? kpi.bilheteriaTotal - metaInvestimento

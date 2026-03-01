@@ -11,6 +11,7 @@ interface VendaRow {
   data_venda: string;
   status: string;
   metodo_pagamento: string | null;
+  plataforma: string;
 }
 
 function getDateRange(filters: Filters): { start: string; end: string } {
@@ -109,6 +110,9 @@ function calcularKpis(vendas: VendaRow[]) {
   let vendasDuplas = 0;
   let totalVips = 0;
   let participantes = 0;
+  // Counters excluding manual sales (convites) — used for CAC calculation
+  let participantesParaCAC = 0;
+  let vendasParaCAC = 0;
   const pagamentoPorMetodo: Record<string, number> = {};
 
   for (const v of vendas) {
@@ -121,14 +125,20 @@ function calcularKpis(vendas: VendaRow[]) {
     const duplo = isDuplo(v);
     const vip = isVip(v);
     const qty = v.quantidade || 1;
+    const isManual = v.plataforma === "manual";
 
     if (duplo) {
       vendasDuplas++;
-      // Quantity from checkout already represents participants
       participantes += qty;
     } else {
       vendasIndividuais++;
       participantes += qty;
+    }
+
+    // Only count non-manual sales for CAC
+    if (!isManual) {
+      vendasParaCAC += 1;
+      participantesParaCAC += qty;
     }
 
     if (vip) {
@@ -165,6 +175,8 @@ function calcularKpis(vendas: VendaRow[]) {
     vendasDuplas,
     totalVips,
     participantes,
+    participantesParaCAC,
+    vendasParaCAC,
     ticketMedio,
     investimentoTotal: 0, // comes from Meta Ads
     cacVenda: 0,
