@@ -136,8 +136,8 @@ function calcularKpis(vendas: VendaRow[]) {
       participantes += qty;
     }
 
-    // Only count non-manual sales for CAC
-    if (!isManual) {
+    // Exclude only free manual entries (convidados) from CAC
+    if (!isManual || valor > 0) {
       vendasParaCAC += 1;
       participantesParaCAC += qty;
     }
