@@ -140,7 +140,10 @@ function calcularKpis(vendas: VendaRow[]) {
     if (!isManual) {
       vendasParaCAC += 1;
       participantesParaCAC += qty;
-    } else {
+    }
+
+    // Convidados: manual AND valor zero
+    if (isManual && valor === 0) {
       totalConvidados += qty;
     }
 
