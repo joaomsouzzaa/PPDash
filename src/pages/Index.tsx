@@ -12,9 +12,11 @@ import {
   Gift,
   Banknote,
   BarChart3,
+  Tv,
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { Button } from "@/components/ui/button";
 
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
@@ -24,6 +26,7 @@ import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend, fetchCampaignDailyBudget, fetchDailySpendBreakdown } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
 import { useCidades } from "@/hooks/useCidades";
+import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { differenceInDays } from "date-fns";
 
 const Index = () => {
@@ -72,6 +75,58 @@ const Index = () => {
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
 
   const selectedCidade = cidades.find((c) => c.slug === filters.city);
+
+  // TV Mode: fullscreen + rotate through active cities every 20s
+  const [tvMode, setTvMode] = useState(false);
+  const hiddenCidades = getHiddenCidades();
+  const activeCidades = cidades.filter((c) => {
+    if (hiddenCidades.includes(c.id)) return false;
+    const eventDate = new Date(c.data_evento);
+    const today = new Date();
+    eventDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return eventDate >= today;
+  });
+
+  const toggleTvMode = async () => {
+    if (!tvMode) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {}
+      setTvMode(true);
+    } else {
+      if (document.fullscreenElement) {
+        try { await document.exitFullscreen(); } catch {}
+      }
+      setTvMode(false);
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setTvMode(false);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  useEffect(() => {
+    if (!tvMode || activeCidades.length === 0) return;
+    // Initialize with first active city if current isn't in list
+    const currentIdx = activeCidades.findIndex((c) => c.slug === filters.city);
+    if (currentIdx === -1) {
+      handleFiltersChange({ ...filters, city: activeCidades[0].slug });
+      return;
+    }
+    const interval = setInterval(() => {
+      const idx = activeCidades.findIndex((c) => c.slug === filters.city);
+      const nextIdx = (idx + 1) % activeCidades.length;
+      handleFiltersChange({ ...filters, city: activeCidades[nextIdx].slug });
+    }, 20000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tvMode, filters.city, activeCidades.length]);
+
 
   const loadSpend = useCallback(async () => {
     if (!isMetaConnected) {
@@ -200,12 +255,23 @@ const Index = () => {
         <main className="flex-1 overflow-auto">
           <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-background/80 backdrop-blur-sm px-6 py-3">
             <SidebarTrigger />
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Dashboard</h1>
+            <div className="flex-1">
+              <h1 className="text-xl font-bold tracking-tight">
+                Dashboard{tvMode && selectedCidade ? ` — ${selectedCidade.nome}` : ""}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Visão geral de métricas e performance
+                {tvMode ? `Modo TV — rotacionando ${activeCidades.length} cidades a cada 20s` : "Visão geral de métricas e performance"}
               </p>
             </div>
+            <Button
+              variant={tvMode ? "default" : "outline"}
+              size="sm"
+              onClick={toggleTvMode}
+              className="gap-2"
+            >
+              <Tv className="h-4 w-4" />
+              {tvMode ? "Sair do Modo TV" : "Modo TV"}
+            </Button>
           </header>
 
           <div className="p-6 space-y-6">
