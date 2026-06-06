@@ -80,9 +80,9 @@ const Index = () => {
   const [tvMode, setTvMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Collapse sidebar automatically when entering TV mode
+  // Fecha a sidebar ao entrar no Modo TV e reabre ao sair (botão ou ESC)
   useEffect(() => {
-    if (tvMode) setSidebarOpen(false);
+    setSidebarOpen(!tvMode);
   }, [tvMode]);
 
   const hiddenCidades = getHiddenCidades();
