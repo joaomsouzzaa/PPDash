@@ -60,6 +60,10 @@ function isVip(produto: string | null, tipo: string | null): boolean {
   return ((tipo || produto || "").toLowerCase()).includes("vip");
 }
 
+function isUpgrade(produto: string | null): boolean {
+  return (produto || "").toLowerCase().includes("upgrade");
+}
+
 interface CityKpis {
   participantes: number;
   totalVips: number;
@@ -174,20 +178,31 @@ const DashboardGeral = () => {
       });
 
       let participantes = 0;
+      let pagantes = 0; // exclui convites e cortesias — base do CAC (igual ao WS)
       let totalVips = 0;
       let bilheteria = 0;
 
       for (const v of cityVendas) {
         const qty = v.quantidade || 1;
-        participantes += qty;
-        bilheteria += Number(v.valor) || 0;
-        if (isVip(v.produto, v.tipo_ingresso)) {
+        const valor = Number(v.valor) || 0;
+        bilheteria += valor;
+
+        // Upgrade (orderbump): conta só em VIPs, não como participante
+        if (isUpgrade(v.produto)) {
           totalVips += qty;
+          continue;
         }
+
+        participantes += qty;
+        if (isVip(v.produto, v.tipo_ingresso)) totalVips += qty;
+
+        const convite = (v.tipo_ingresso || "").toLowerCase().includes("convite");
+        const isManual = (v as any).plataforma === "manual";
+        if (!convite && (!isManual || valor > 0)) pagantes += qty;
       }
 
       const spend = metaSpendMap.get(cidade.slug) || 0;
-      const cacParticipante = participantes > 0 && spend > 0 ? spend / participantes : 0;
+      const cacParticipante = pagantes > 0 && spend > 0 ? spend / pagantes : 0;
 
       // Calculate projection
       let projecao: number | null = null;
