@@ -118,11 +118,16 @@ function parseCsvLine(line: string, delim: string): string[] {
   return out.map((c) => c.trim());
 }
 
-function parseVendasCsv(text: string): Record<string, unknown>[] {
+type ParsedCsv = { rows: Record<string, unknown>[]; recognized: string[]; ignored: string[] };
+
+function parseVendasCsv(text: string): ParsedCsv {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.trim() !== "");
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { rows: [], recognized: [], ignored: [] };
   const delim = (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length ? ";" : ",";
-  const headers = parseCsvLine(lines[0], delim).map((h) => CSV_FIELD_ALIASES[stripAccentsLower(h)] || "");
+  const rawHeaders = parseCsvLine(lines[0], delim);
+  const headers = rawHeaders.map((h) => CSV_FIELD_ALIASES[stripAccentsLower(h)] || "");
+  const recognized = rawHeaders.filter((_, i) => headers[i]);
+  const ignored = rawHeaders.filter((h, i) => !headers[i] && h.trim() !== "");
   const rows: Record<string, unknown>[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i], delim);
@@ -145,7 +150,7 @@ function parseVendasCsv(text: string): Record<string, unknown>[] {
       data_venda: parseCsvDate(rec.data_venda || ""),
     });
   }
-  return rows;
+  return { rows, recognized, ignored };
 }
 
 type SortKey = "data_venda" | "nome_comprador" | "produto" | "cidade" | "tipo_ingresso" | "quantidade" | "valor" | "metodo_pagamento" | "status" | "cupom" | "plataforma";
@@ -516,19 +521,31 @@ const VendasEventos = () => {
   const [importPreview, setImportPreview] = useState<Record<string, unknown>[]>([]);
   const [importError, setImportError] = useState("");
   const [importFileName, setImportFileName] = useState("");
+  const [importRecognized, setImportRecognized] = useState<string[]>([]);
+  const [importIgnored, setImportIgnored] = useState<string[]>([]);
+
+  const resetImport = () => {
+    setImportPreview([]);
+    setImportError("");
+    setImportFileName("");
+    setImportRecognized([]);
+    setImportIgnored([]);
+  };
 
   const handleImportFile = async (file: File) => {
     setImportError("");
     setImportFileName(file.name);
     try {
       const text = await file.text();
-      const rows = parseVendasCsv(text);
-      if (rows.length === 0) {
+      const parsed = parseVendasCsv(text);
+      setImportRecognized(parsed.recognized);
+      setImportIgnored(parsed.ignored);
+      if (parsed.rows.length === 0) {
         setImportPreview([]);
         setImportError("Nenhuma linha válida encontrada. Confira se o cabeçalho tem as colunas corretas.");
         return;
       }
-      setImportPreview(rows);
+      setImportPreview(parsed.rows);
     } catch {
       setImportPreview([]);
       setImportError("Falha ao ler o arquivo. Salve como CSV e tente novamente.");
@@ -548,8 +565,7 @@ const VendasEventos = () => {
       }
       toast.success(`${inserted} venda(s) importada(s) com sucesso!`);
       setImportOpen(false);
-      setImportPreview([]);
-      setImportFileName("");
+      resetImport();
       queryClient.invalidateQueries({ queryKey: ["vendas-tabela"] });
     } catch (e: any) {
       toast.error(e?.message || "Erro ao importar vendas");
@@ -1016,58 +1032,121 @@ const VendasEventos = () => {
       </AlertDialog>
 
       {/* Import CSV Dialog */}
-      <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) { setImportPreview([]); setImportError(""); setImportFileName(""); } }}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) resetImport(); }}>
+        <DialogContent className={importPreview.length > 0 ? "max-w-4xl" : "max-w-lg"}>
           <DialogHeader>
             <DialogTitle>Importar Vendas (CSV)</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Importe vendas antigas (anteriores à integração) a partir de uma planilha CSV.
-              As colunas reconhecidas (cabeçalho na 1ª linha):
-            </p>
-            <code className="block text-xs bg-muted rounded p-2 leading-relaxed">
-              data; nome; email; telefone; produto; tipo; cidade; quantidade; valor; pagamento; status; cupom
-            </code>
-            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
-              <li><strong>data</strong>: dd/mm/aaaa (ex.: 16/06/2026). Se vazia, usa a data atual.</li>
-              <li><strong>tipo</strong>: individual, duplo ou vip (define a métrica do dashboard).</li>
-              <li><strong>valor</strong>: aceita 247,00 ou 247.00.</li>
-              <li>Só <strong>produto</strong> é essencial; os demais são opcionais.</li>
-              <li>As vendas entram com plataforma <strong>"importacao"</strong>.</li>
-            </ul>
 
-            <Button variant="outline" size="sm" onClick={downloadTemplate} className="w-full">
-              <Download className="mr-2 h-4 w-4" />
-              Baixar modelo (CSV)
-            </Button>
+          {importPreview.length === 0 ? (
+            /* Etapa 1: instruções + upload */
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Importe vendas antigas (anteriores à integração) a partir de uma planilha CSV.
+                As colunas reconhecidas (cabeçalho na 1ª linha):
+              </p>
+              <code className="block text-xs bg-muted rounded p-2 leading-relaxed">
+                data; nome; email; telefone; produto; tipo; cidade; quantidade; valor; pagamento; status; cupom
+              </code>
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+                <li><strong>data</strong>: dd/mm/aaaa (ex.: 16/06/2026). Se vazia, usa a data atual.</li>
+                <li><strong>tipo</strong>: individual, duplo ou vip (define a métrica do dashboard).</li>
+                <li><strong>valor</strong>: aceita 247,00 ou 247.00.</li>
+                <li>Só <strong>produto</strong> é essencial; os demais são opcionais.</li>
+                <li>As vendas entram com plataforma <strong>"importacao"</strong>.</li>
+              </ul>
 
-            <div className="space-y-1">
-              <Label>Arquivo CSV</Label>
-              <Input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportFile(f); }}
-              />
-            </div>
+              <Button variant="outline" size="sm" onClick={downloadTemplate} className="w-full">
+                <Download className="mr-2 h-4 w-4" />
+                Baixar modelo (CSV)
+              </Button>
 
-            {importError && <p className="text-sm text-destructive">{importError}</p>}
-            {importPreview.length > 0 && (
-              <div className="rounded-md border border-border p-3 text-sm">
-                <p className="font-medium text-success">
-                  {importPreview.length} venda(s) prontas para importar
-                  {importFileName ? ` (${importFileName})` : ""}.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Ex.: {String((importPreview[0] as any).produto || "—")} — {String((importPreview[0] as any).cidade || "—")} — R$ {Number((importPreview[0] as any).valor || 0).toFixed(2)}
-                </p>
+              <div className="space-y-1">
+                <Label>Arquivo CSV</Label>
+                <Input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportFile(f); }}
+                />
               </div>
-            )}
-          </div>
+
+              {importError && <p className="text-sm text-destructive">{importError}</p>}
+            </div>
+          ) : (
+            /* Etapa 2: conferência (de-para + tabela) */
+            <div className="space-y-3">
+              <p className="text-sm">
+                <span className="font-medium text-success">{importPreview.length} venda(s)</span> prontas para importar
+                {importFileName ? ` de "${importFileName}"` : ""}. Confira abaixo antes de confirmar:
+              </p>
+
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="text-muted-foreground">Colunas reconhecidas:</span>
+                {importRecognized.map((c) => (
+                  <Badge key={c} variant="secondary">{c}</Badge>
+                ))}
+              </div>
+              {importIgnored.length > 0 && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="text-destructive">Ignoradas (nome não reconhecido):</span>
+                  {importIgnored.map((c) => (
+                    <Badge key={c} variant="outline" className="text-destructive border-destructive/40">{c}</Badge>
+                  ))}
+                </div>
+              )}
+
+              <div className="max-h-[360px] overflow-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-card">
+                    <TableRow>
+                      <TableHead className="whitespace-nowrap">Data</TableHead>
+                      <TableHead className="whitespace-nowrap">Comprador</TableHead>
+                      <TableHead className="whitespace-nowrap">Produto</TableHead>
+                      <TableHead className="whitespace-nowrap">Cidade</TableHead>
+                      <TableHead className="whitespace-nowrap">Tipo</TableHead>
+                      <TableHead className="whitespace-nowrap text-right">Qtd</TableHead>
+                      <TableHead className="whitespace-nowrap text-right">Valor</TableHead>
+                      <TableHead className="whitespace-nowrap">Pagamento</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importPreview.slice(0, 50).map((r: any, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="whitespace-nowrap text-xs">
+                          {new Date(r.data_venda).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{r.nome_comprador || "—"}</TableCell>
+                        <TableCell className="text-xs max-w-[220px] truncate">{r.produto || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{r.cidade || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{r.tipo_ingresso || "—"}</TableCell>
+                        <TableCell className="text-right text-xs">{r.quantidade}</TableCell>
+                        <TableCell className={`text-right text-xs ${Number(r.valor) === 0 ? "text-destructive" : ""}`}>
+                          R$ {Number(r.valor || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{r.metodo_pagamento || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{r.status || "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {importPreview.length > 50 && (
+                <p className="text-xs text-muted-foreground">Mostrando as primeiras 50 de {importPreview.length} linhas.</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Valores em <span className="text-destructive">vermelho</span> estão R$ 0,00 — confira se a coluna de valor foi reconhecida.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
+            {importPreview.length > 0 && (
+              <Button variant="ghost" onClick={resetImport}>Trocar arquivo</Button>
+            )}
             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancelar</Button>
             <Button onClick={handleImportConfirm} disabled={importing || importPreview.length === 0}>
-              {importing ? "Importando..." : `Importar ${importPreview.length || ""}`.trim()}
+              {importing ? "Importando..." : importPreview.length > 0 ? `Confirmar e importar ${importPreview.length}` : "Importar"}
             </Button>
           </DialogFooter>
         </DialogContent>
