@@ -271,7 +271,7 @@ const Index = () => {
       
       <div className="min-h-screen flex w-full">
         <AppSidebar />
-        <main className={`flex-1 overflow-auto ${tvMode ? "tv-mode" : ""}`}>
+        <main className={tvMode ? "flex-1 tv-mode" : "flex-1 overflow-auto"}>
           <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-background/80 backdrop-blur-sm px-6 py-3">
             <SidebarTrigger />
             <div className="flex-1">
@@ -293,8 +293,8 @@ const Index = () => {
             </Button>
           </header>
 
-          <div className="p-6 space-y-6">
-            <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} />
+          <div className={tvMode ? "tv-content" : "p-6 space-y-6"}>
+            {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} />}
 
             {/* Row 1 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -382,6 +382,7 @@ const Index = () => {
             <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
 
             {/* Charts */}
+            <div className={tvMode ? "tv-chart" : ""}>
             <SalesChart data={(() => {
               // Merge daily Meta spend into chart data
               const merged = kpi.chartData.map((d) => {
@@ -407,6 +408,7 @@ const Index = () => {
               });
               return merged;
             })()} />
+            </div>
           </div>
         </main>
       </div>
