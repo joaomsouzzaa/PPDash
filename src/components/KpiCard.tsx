@@ -12,11 +12,11 @@ interface KpiCardProps {
 
 export function KpiCard({ title, value, change, changeType = "neutral", icon: Icon, iconColor }: KpiCardProps) {
   return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className="kpi-card rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-sm text-muted-foreground font-medium">{title}</p>
-          <p className="text-2xl font-bold tracking-tight text-card-foreground">{value}</p>
+          <p className="kpi-title text-sm text-muted-foreground font-medium">{title}</p>
+          <p className="kpi-value text-2xl font-bold tracking-tight text-card-foreground">{value}</p>
           {change && (
             <p
               className={cn(
@@ -32,7 +32,7 @@ export function KpiCard({ title, value, change, changeType = "neutral", icon: Ic
         </div>
         <div
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg",
+            "kpi-icon-wrap flex h-10 w-10 items-center justify-center rounded-lg",
             iconColor || "bg-primary/10 text-primary"
           )}
         >
