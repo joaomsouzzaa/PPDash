@@ -176,6 +176,16 @@ function clampTimeRange(range: { since: string; until: string }): { since: strin
   return range;
 }
 
+// Suporta múltiplos slugs por cidade separados por vírgula (ex.: "Porto Alegre, POA").
+// A correspondência é case-insensitive e basta UM dos termos aparecer no nome da campanha.
+function slugVariants(slug?: string): string[] {
+  return (slug || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+function campaignMatchesSlug(name: string, variants: string[]): boolean {
+  const n = (name || "").toLowerCase();
+  return variants.some((v) => n.includes(v));
+}
+
 // Cache for spend results (10 min TTL — matches dashboard refresh)
 const _spendCache = new Map<string, { data: any; ts: number }>();
 const SPEND_CACHE_TTL = 10 * 60 * 1000;
@@ -203,12 +213,13 @@ export async function fetchAdSpend(
     accountIds.map(async (id) => {
       try {
         if (campaignSlug) {
-          // Fetch campaign-level insights filtered by slug in campaign name
+          // Busca as campanhas e filtra pelo(s) slug(s) no nome (client-side, multi-slug)
+          const variants = slugVariants(campaignSlug);
           const campaignsRes = await graphApiFetch<{ data: Array<{ id: string; name: string }> }>(
             `/${id}/campaigns`,
-            { fields: "id,name", limit: "500", filtering: JSON.stringify([{ field: "name", operator: "CONTAIN", value: campaignSlug }]) }
+            { fields: "id,name", limit: "500" }
           );
-          const campaigns = campaignsRes.data || [];
+          const campaigns = (campaignsRes.data || []).filter((c) => campaignMatchesSlug(c.name, variants));
           if (campaigns.length === 0) return { accountId: id, accountName: "", spend: 0 };
 
           let totalSpend = 0;
@@ -264,11 +275,12 @@ export async function fetchDailySpendBreakdown(
     accountIds.map(async (id) => {
       try {
         if (campaignSlug) {
+          const variants = slugVariants(campaignSlug);
           const campaignsRes = await graphApiFetch<{ data: Array<{ id: string; name: string }> }>(
             `/${id}/campaigns`,
-            { fields: "id,name", limit: "500", filtering: JSON.stringify([{ field: "name", operator: "CONTAIN", value: campaignSlug }]) }
+            { fields: "id,name", limit: "500" }
           );
-          const campaigns = campaignsRes.data || [];
+          const campaigns = (campaignsRes.data || []).filter((c) => campaignMatchesSlug(c.name, variants));
           await Promise.all(
             campaigns.map(async (c) => {
               try {
@@ -318,17 +330,15 @@ export async function fetchCampaignDailyBudget(
   await Promise.all(
     accountIds.map(async (id) => {
       try {
+        const variants = slugVariants(slug);
         const campaignsRes = await graphApiFetch<{
           data: Array<{ id: string; name: string; daily_budget?: string; status: string }>;
         }>(`/${id}/campaigns`, {
           fields: "id,name,daily_budget,status",
           limit: "500",
-          filtering: JSON.stringify([
-            { field: "name", operator: "CONTAIN", value: slug },
-          ]),
         });
 
-        const campaigns = campaignsRes.data || [];
+        const campaigns = (campaignsRes.data || []).filter((c) => campaignMatchesSlug(c.name, variants));
         for (const c of campaigns) {
           if (c.status !== "ACTIVE") continue;
 

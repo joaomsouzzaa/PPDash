@@ -259,7 +259,7 @@ const CadastroCidades = () => {
                 placeholder="Ex: Belém"
               />
               <p className="text-xs text-muted-foreground">
-                Deve bater com o trecho da cidade no nome da campanha do Meta (com acento e maiúscula, ex.: <strong>Belém</strong>). Também casa as vendas pela cidade.
+                Deve bater com o trecho da cidade no nome da campanha do Meta (ex.: <strong>Belém</strong>). Pode usar vários separados por vírgula (ex.: <strong>Porto Alegre, POA</strong>) — casa se qualquer um aparecer. Também casa as vendas pela cidade.
               </p>
             </div>
             <div className="space-y-1">
@@ -300,7 +300,7 @@ const CadastroCidades = () => {
                 placeholder="Ex: Belém"
               />
               <p className="text-xs text-muted-foreground">
-                Deve bater com o trecho da cidade no nome da campanha do Meta (com acento e maiúscula, ex.: <strong>Belém</strong>). Também casa as vendas pela cidade.
+                Deve bater com o trecho da cidade no nome da campanha do Meta (ex.: <strong>Belém</strong>). Pode usar vários separados por vírgula (ex.: <strong>Porto Alegre, POA</strong>) — casa se qualquer um aparecer. Também casa as vendas pela cidade.
               </p>
             </div>
             <div className="space-y-1">
