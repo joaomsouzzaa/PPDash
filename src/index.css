@@ -124,14 +124,23 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.75rem 1rem;
-  gap: 0.5rem;
+  padding: 1.25rem 2rem;
+  gap: 1rem;
+  /* distribui o espaço que sobra como respiro entre as linhas de métricas */
+  justify-content: space-between;
 }
 .tv-mode .tv-content > * {
   flex-shrink: 0;
 }
+/* mais espaço entre os cards (respiro horizontal e vertical) */
+.tv-mode .tv-content .grid {
+  gap: 1.5rem;
+}
+/* gráfico limitado a no máximo 1/3 da tela */
 .tv-mode .tv-chart {
-  flex: 1 1 0;
+  flex: 0 0 auto;
+  height: 34vh;
+  max-height: 36vh;
   min-height: 0;
   display: flex;
   flex-direction: column;

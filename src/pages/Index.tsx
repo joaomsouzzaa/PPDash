@@ -278,9 +278,11 @@ const Index = () => {
               <h1 className="text-xl font-bold tracking-tight">
                 Dashboard{tvMode && selectedCidade ? ` — ${selectedCidade.nome}` : ""}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                {tvMode ? `Modo TV — rotacionando ${activeCidades.length} cidades a cada 20s` : "Visão geral de métricas e performance"}
-              </p>
+              {!tvMode && (
+                <p className="text-sm text-muted-foreground">
+                  Visão geral de métricas e performance
+                </p>
+              )}
             </div>
             <Button
               variant={tvMode ? "default" : "outline"}
@@ -321,7 +323,7 @@ const Index = () => {
             </div>
 
             {/* Row 2 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 title="Total de Participantes"
                 value={String(kpi.participantes)}
@@ -342,6 +344,10 @@ const Index = () => {
                 value={projecaoParticipantes !== null ? String(projecaoParticipantes) : "—"}
                 icon={BarChart3}
               />
+            </div>
+
+            {/* Row 2b */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <KpiCard
                 title="Vendas Individuais"
                 value={String(kpi.vendasIndividuais)}
