@@ -12,9 +12,11 @@ import {
   Gift,
   Banknote,
   BarChart3,
+  Tv,
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { Button } from "@/components/ui/button";
 
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
@@ -24,6 +26,7 @@ import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend, fetchCampaignDailyBudget, fetchDailySpendBreakdown } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
 import { useCidades } from "@/hooks/useCidades";
+import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { differenceInDays } from "date-fns";
 
 const Index = () => {
