@@ -101,6 +101,11 @@ function isUpgrade(row: VendaRow): boolean {
   return (row.produto || "").toLowerCase().includes("upgrade");
 }
 
+// Convite/cortesia: conta na métrica Convidados e fica fora do CAC
+function isConvite(row: VendaRow): boolean {
+  return (row.tipo_ingresso || "").toLowerCase().includes("convite");
+}
+
 function isDuplo(row: VendaRow): boolean {
   const tipo = (row.tipo_ingresso || "").toLowerCase();
   const nome = (row.produto || "").toLowerCase();
@@ -141,6 +146,7 @@ function calcularKpis(vendas: VendaRow[]) {
     const duplo = isDuplo(v);
     const vip = isVip(v);
     const isManual = v.plataforma === "manual";
+    const convite = isConvite(v);
 
     if (duplo) {
       vendasDuplas++;
@@ -150,14 +156,14 @@ function calcularKpis(vendas: VendaRow[]) {
       participantes += qty;
     }
 
-    // Exclude only free manual entries (convidados) from CAC
-    if (!isManual || valor > 0) {
+    // CAC exclui cortesias: convites e entradas manuais gratuitas
+    if (!convite && (!isManual || valor > 0)) {
       vendasParaCAC += 1;
       participantesParaCAC += qty;
     }
 
-    // Convidados: manual AND valor zero
-    if (isManual && valor === 0) {
+    // Convidados: tipo "convite" OU entrada manual com valor zero
+    if (convite || (isManual && valor === 0)) {
       totalConvidados += qty;
     }
 
