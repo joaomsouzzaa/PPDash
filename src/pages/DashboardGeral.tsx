@@ -196,7 +196,7 @@ const DashboardGeral = () => {
         participantes += qty;
         if (isVip(v.produto, v.tipo_ingresso)) totalVips += qty;
 
-        const convite = (v.tipo_ingresso || "").toLowerCase().includes("convite");
+        const convite = (v.tipo_ingresso || "").toLowerCase().includes("convite") || valor === 0;
         const isManual = (v as any).plataforma === "manual";
         if (!convite && (!isManual || valor > 0)) pagantes += qty;
       }

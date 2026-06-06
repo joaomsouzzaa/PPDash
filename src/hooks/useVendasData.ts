@@ -101,9 +101,10 @@ function isUpgrade(row: VendaRow): boolean {
   return (row.produto || "").toLowerCase().includes("upgrade");
 }
 
-// Convite/cortesia: conta na métrica Convidados e fica fora do CAC
+// Convite/cortesia: tipo "convite" OU qualquer ingresso gratuito (valor 0).
+// Conta na métrica Convidados e fica fora de vendas e do CAC.
 function isConvite(row: VendaRow): boolean {
-  return (row.tipo_ingresso || "").toLowerCase().includes("convite");
+  return (row.tipo_ingresso || "").toLowerCase().includes("convite") || (Number(row.valor) || 0) === 0;
 }
 
 function isDuplo(row: VendaRow): boolean {
