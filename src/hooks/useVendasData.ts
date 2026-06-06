@@ -148,12 +148,13 @@ function calcularKpis(vendas: VendaRow[]) {
     const isManual = v.plataforma === "manual";
     const convite = isConvite(v);
 
-    if (duplo) {
-      vendasDuplas++;
-      participantes += qty;
-    } else {
-      vendasIndividuais++;
-      participantes += qty;
+    // Participantes conta todos (incluindo convidados, que comparecem)
+    participantes += qty;
+
+    // Vendas individuais/duplas: convites (cortesia) não são vendas
+    if (!convite) {
+      if (duplo) vendasDuplas++;
+      else vendasIndividuais++;
     }
 
     // CAC exclui cortesias: convites e entradas manuais gratuitas
