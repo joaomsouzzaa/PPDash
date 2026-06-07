@@ -284,6 +284,13 @@ const VendasEventos = () => {
   const { data: produtos = [] } = useProdutos();
   const hiddenCidades = getHiddenCidades();
   const visibleCidades = cidades.filter((c) => !hiddenCidades.includes(c.id));
+  // Cidades ativas (evento de hoje em diante) — usado só no filtro da página.
+  const hojeCidades = new Date(); hojeCidades.setHours(0, 0, 0, 0);
+  const activeCidades = visibleCidades.filter((c) => {
+    if (!c.data_evento) return true;
+    const ev = new Date(c.data_evento); ev.setHours(0, 0, 0, 0);
+    return ev >= hojeCidades;
+  });
 
   const { start, end } = useMemo(
     () => getDateRange(dateRange, startDate, endDate),
@@ -671,7 +678,7 @@ const VendasEventos = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as cidades</SelectItem>
-                  {visibleCidades.map((c) => (
+                  {activeCidades.map((c) => (
                     <SelectItem key={c.id} value={c.slug}>
                       {c.nome}
                     </SelectItem>
