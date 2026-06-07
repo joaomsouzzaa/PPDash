@@ -229,6 +229,11 @@ async function resolveUpgradeQuantity(supabase: any, venda: Record<string, unkno
     const { data } = await query.maybeSingle();
     if (data && data.quantidade != null) {
       venda.quantidade = data.quantidade;
+      // Upgrade VIP herda também o "tamanho" da compra: qtd 2 => vip_duplo.
+      const t = String(venda.tipo_ingresso || "").toLowerCase();
+      if (t.includes("vip")) {
+        venda.tipo_ingresso = Number(data.quantidade) === 2 ? "vip_duplo" : "vip_individual";
+      }
     }
   } catch (_) {
     // silencioso: na pior hipótese mantém a quantidade do webhook
@@ -253,6 +258,18 @@ async function syncUpgradesForCompra(supabase: any, venda: Record<string, unknow
       .ilike("produto", "%upgrade%");
     if (cidade) query = query.eq("cidade", cidade);
     await query;
+
+    // Ajusta o tipo dos upgrades VIP conforme a quantidade (qtd 2 => vip_duplo).
+    const vipTipo = Number(qty) === 2 ? "vip_duplo" : "vip_individual";
+    let q2 = supabase
+      .from("vendas")
+      .update({ tipo_ingresso: vipTipo })
+      .eq("email_comprador", email)
+      .eq("status", "aprovada")
+      .ilike("produto", "%upgrade%")
+      .ilike("tipo_ingresso", "%vip%");
+    if (cidade) q2 = q2.eq("cidade", cidade);
+    await q2;
   } catch (_) {
     // silencioso
   }
