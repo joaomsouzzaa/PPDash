@@ -124,11 +124,16 @@ async function metaDailyBudget(meta: any, slug: string): Promise<number> {
 
 // Calcula um resumo de cidade (métricas do banco + Meta, se o token estiver salvo)
 async function resumoCidade(supabase: any, cidadeSlug: string | null) {
-  const { data } = await supabase.from("vendas").select("produto,cidade,tipo_ingresso,quantidade,valor").eq("status", "aprovada");
-  const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s-]/g, "");
-  const parts = cidadeSlug ? cidadeSlug.split(",").map((p) => norm(p)).filter(Boolean) : [];
-  const rows = (data || []).filter((r: any) =>
-    !cidadeSlug || parts.some((s) => norm(r.cidade || "").includes(s) || norm(r.produto || "").includes(s)));
+  // Usa a MESMA RPC do dashboard (filtra por cidade no servidor) para o report
+  // bater com os números do dashboard e evitar o limite de 1000 linhas que
+  // subcontava cidades quando carregávamos todas as vendas e filtrávamos no JS.
+  const { data } = await supabase.rpc("buscar_vendas", {
+    p_status: "aprovada",
+    p_start: "2000-01-01T00:00:00Z",
+    p_end: "2030-01-01T00:00:00Z",
+    p_city_slug: cidadeSlug || null,
+  });
+  const rows = (data || []) as any[];
 
   // Usa o nome COMPLETO do produto que vem nas vendas (com a data),
   // ex.: "Workshop Scale | Porto Alegre - RS | 09/06/2026" — ignora upgrades.
