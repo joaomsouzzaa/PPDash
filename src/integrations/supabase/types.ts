@@ -137,6 +137,78 @@ export type Database = {
         }
         Relationships: []
       }
+      notificacao_logs: {
+        Row: {
+          created_at: string | null
+          destinatario: string | null
+          erro: string | null
+          id: string
+          mensagem: string | null
+          notificacao_id: string | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          destinatario?: string | null
+          erro?: string | null
+          id?: string
+          mensagem?: string | null
+          notificacao_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          destinatario?: string | null
+          erro?: string | null
+          id?: string
+          mensagem?: string | null
+          notificacao_id?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      notificacoes: {
+        Row: {
+          ativo: boolean | null
+          cidade_slug: string | null
+          created_at: string | null
+          destinatario: string
+          destinatario_nome: string | null
+          destinatario_tipo: string
+          gatilho: string
+          horario: string | null
+          id: string
+          mensagem: string
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          cidade_slug?: string | null
+          created_at?: string | null
+          destinatario: string
+          destinatario_nome?: string | null
+          destinatario_tipo: string
+          gatilho: string
+          horario?: string | null
+          id?: string
+          mensagem: string
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          cidade_slug?: string | null
+          created_at?: string | null
+          destinatario?: string
+          destinatario_nome?: string | null
+          destinatario_tipo?: string
+          gatilho?: string
+          horario?: string | null
+          id?: string
+          mensagem?: string
+          nome?: string
+        }
+        Relationships: []
+      }
       produtos: {
         Row: {
           ativo: boolean
@@ -257,6 +329,39 @@ export type Database = {
           utm_source?: string | null
           utm_term?: string | null
           valor?: number
+        }
+        Relationships: []
+      }
+      whatsapp_config: {
+        Row: {
+          admin_token: string | null
+          id: string
+          instance: string | null
+          instance_token: string | null
+          numero: string | null
+          server_url: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          admin_token?: string | null
+          id?: string
+          instance?: string | null
+          instance_token?: string | null
+          numero?: string | null
+          server_url?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          admin_token?: string | null
+          id?: string
+          instance?: string | null
+          instance_token?: string | null
+          numero?: string | null
+          server_url?: string | null
+          status?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
