@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      agentes: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          descricao: string | null
+          id: string
+          modelo: string | null
+          nome: string
+          parent_id: string | null
+          pos_x: number | null
+          pos_y: number | null
+          provider: string | null
+          slug: string | null
+          system_prompt: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          modelo?: string | null
+          nome: string
+          parent_id?: string | null
+          pos_x?: number | null
+          pos_y?: number | null
+          provider?: string | null
+          slug?: string | null
+          system_prompt?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          modelo?: string | null
+          nome?: string
+          parent_id?: string | null
+          pos_x?: number | null
+          pos_y?: number | null
+          provider?: string | null
+          slug?: string | null
+          system_prompt?: string | null
+        }
+        Relationships: []
+      }
+      ai_config: {
+        Row: {
+          api_key: string | null
+          provider: string
+          updated_at: string | null
+        }
+        Insert: {
+          api_key?: string | null
+          provider: string
+          updated_at?: string | null
+        }
+        Update: {
+          api_key?: string | null
+          provider?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       cidades: {
         Row: {
           created_at: string
@@ -35,6 +98,30 @@ export type Database = {
           id?: string
           nome?: string
           slug?: string
+        }
+        Relationships: []
+      }
+      conversas: {
+        Row: {
+          agente_id: string | null
+          created_at: string | null
+          id: string
+          titulo: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agente_id?: string | null
+          created_at?: string | null
+          id?: string
+          titulo?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agente_id?: string | null
+          created_at?: string | null
+          id?: string
+          titulo?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -137,6 +224,30 @@ export type Database = {
         }
         Relationships: []
       }
+      mensagens: {
+        Row: {
+          conteudo: string | null
+          conversa_id: string | null
+          created_at: string | null
+          id: string
+          role: string | null
+        }
+        Insert: {
+          conteudo?: string | null
+          conversa_id?: string | null
+          created_at?: string | null
+          id?: string
+          role?: string | null
+        }
+        Update: {
+          conteudo?: string | null
+          conversa_id?: string | null
+          created_at?: string | null
+          id?: string
+          role?: string | null
+        }
+        Relationships: []
+      }
       meta_config: {
         Row: {
           access_token: string | null
@@ -196,6 +307,7 @@ export type Database = {
           destinatario: string
           destinatario_nome: string | null
           destinatario_tipo: string
+          destinatarios: Json | null
           gatilho: string
           horario: string | null
           id: string
@@ -209,6 +321,7 @@ export type Database = {
           destinatario: string
           destinatario_nome?: string | null
           destinatario_tipo: string
+          destinatarios?: Json | null
           gatilho: string
           horario?: string | null
           id?: string
@@ -222,6 +335,7 @@ export type Database = {
           destinatario?: string
           destinatario_nome?: string | null
           destinatario_tipo?: string
+          destinatarios?: Json | null
           gatilho?: string
           horario?: string | null
           id?: string
