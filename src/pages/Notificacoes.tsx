@@ -84,6 +84,10 @@ export default function Notificacoes() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [numeroConectado, setNumeroConectado] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [loadingGrupos, setLoadingGrupos] = useState(false);
+  const [testando, setTestando] = useState(false);     // botão do dialog
+  const [testandoId, setTestandoId] = useState<string | null>(null); // botão da linha
 
   useEffect(() => {
     (supabase as any).from("whatsapp_config").select("server_url,instance,status,numero").maybeSingle().then(({ data }: any) => {
@@ -134,26 +138,32 @@ export default function Notificacoes() {
   };
 
   const atualizarStatus = async () => {
+    setLoadingStatus(true);
     try {
       const data = await chamarUazapi("status");
       setCfgStatus(data?.status || "desconectado");
       setNumeroConectado(data?.numero || null);
-      if (data?.status === "connected" || data?.connected) setQrCode(null);
+      if (data?.status === "connected" || data?.connected) { setQrCode(null); toast.success("Conectado!"); }
       else if (data?.qrcode) setQrCode(data.qrcode);
     } catch (e: any) {
       toast.error(e?.message || "Falha ao consultar status");
+    } finally {
+      setLoadingStatus(false);
     }
   };
 
   // Grupos do WhatsApp (carregados sob demanda)
   const [grupos, setGrupos] = useState<Array<{ id: string; name: string }>>([]);
   const carregarGrupos = async () => {
+    setLoadingGrupos(true);
     try {
       const data = await chamarUazapi("groups");
       setGrupos(data?.groups || []);
       toast.success(`${(data?.groups || []).length} grupo(s) carregado(s)`);
     } catch (e: any) {
       toast.error(e?.message || "Falha ao listar grupos (conecte o WhatsApp primeiro)");
+    } finally {
+      setLoadingGrupos(false);
     }
   };
 
@@ -184,18 +194,40 @@ export default function Notificacoes() {
     setDialogOpen(true);
   };
 
-  const salvar = async () => {
+  // Persiste e retorna o id (sem fechar o dialog)
+  const salvar = async (): Promise<string | null> => {
     if (!form.nome || !form.destinatario || !form.mensagem) {
-      toast.error("Preencha nome, destinatário e mensagem"); return;
+      toast.error("Preencha nome, destinatário e mensagem"); return null;
     }
     const payload = { ...form, destinatario_nome: form.destinatario_nome || null };
-    const res = editingId
-      ? await (supabase as any).from("notificacoes").update(payload).eq("id", editingId)
-      : await (supabase as any).from("notificacoes").insert(payload);
-    if (res.error) { toast.error("Erro ao salvar notificação"); return; }
-    toast.success("Notificação salva");
-    setDialogOpen(false);
+    if (editingId) {
+      const { error } = await (supabase as any).from("notificacoes").update(payload).eq("id", editingId);
+      if (error) { toast.error("Erro ao salvar notificação"); return null; }
+      queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+      return editingId;
+    }
+    const { data, error } = await (supabase as any).from("notificacoes").insert(payload).select("id").single();
+    if (error) { toast.error("Erro ao salvar notificação"); return null; }
+    setEditingId(data.id);
     queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+    return data.id;
+  };
+
+  const salvarEFechar = async () => {
+    const id = await salvar();
+    if (id) { toast.success("Notificação salva"); setDialogOpen(false); }
+  };
+
+  const salvarETestar = async () => {
+    setTestando(true);
+    try {
+      const id = await salvar();
+      if (id) { await chamarUazapi("send_test", { notificacao_id: id }); toast.success("Teste enviado"); }
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao enviar teste");
+    } finally {
+      setTestando(false);
+    }
   };
 
   const excluir = async () => {
@@ -211,12 +243,15 @@ export default function Notificacoes() {
     queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
   };
 
-  const enviarTeste = async (n: Notificacao) => {
+  const enviarTeste = async (id: string) => {
+    setTestandoId(id);
     try {
-      await chamarUazapi("send_test", { notificacao_id: n.id });
+      await chamarUazapi("send_test", { notificacao_id: id });
       toast.success("Mensagem de teste enviada");
     } catch (e: any) {
       toast.error(e?.message || "Falha ao enviar teste");
+    } finally {
+      setTestandoId(null);
     }
   };
 
@@ -293,11 +328,13 @@ export default function Notificacoes() {
                   <Button onClick={conectar} disabled={connecting}>
                     <QrCode className="mr-2 h-4 w-4" /> {connecting ? "Conectando..." : "Conectar / Gerar QR"}
                   </Button>
-                  <Button variant="outline" onClick={atualizarStatus}>
-                    <RefreshCw className="mr-2 h-4 w-4" /> Atualizar status
+                  <Button variant="outline" onClick={atualizarStatus} disabled={loadingStatus}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loadingStatus ? "animate-spin" : ""}`} />
+                    {loadingStatus ? "Atualizando..." : "Atualizar status"}
                   </Button>
-                  <Button variant="outline" onClick={carregarGrupos} disabled={!isConnected}>
-                    Carregar grupos
+                  <Button variant="outline" onClick={carregarGrupos} disabled={!isConnected || loadingGrupos}>
+                    {loadingGrupos && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                    {loadingGrupos ? "Carregando..." : "Carregar grupos"}
                   </Button>
                 </div>
                 {qrCode && (
@@ -341,8 +378,8 @@ export default function Notificacoes() {
                         </p>
                       </div>
                       <Switch checked={n.ativo} onCheckedChange={() => toggleAtivo(n)} />
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => enviarTeste(n)} title="Enviar teste">
-                        <Send className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => enviarTeste(n.id)} disabled={testandoId === n.id} title="Enviar teste">
+                        {testandoId === n.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirEdicao(n)}>
                         <Pencil className="h-4 w-4" />
@@ -461,7 +498,11 @@ export default function Notificacoes() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={salvar}>Salvar</Button>
+            <Button variant="secondary" onClick={salvarETestar} disabled={testando}>
+              {testando ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              {testando ? "Enviando..." : "Salvar e testar"}
+            </Button>
+            <Button onClick={salvarEFechar}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
