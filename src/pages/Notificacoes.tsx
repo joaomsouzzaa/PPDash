@@ -35,7 +35,7 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
   resumo_cidade: {
     label: "Resumo de cidade (agendado)",
     desc: "Resumo periódico de uma cidade",
-    vars: ["cidade", "participantes", "vips", "convidados", "bilheteria", "cac", "projecao", "investimento"],
+    vars: ["cidade", "participantes", "vips", "convidados", "bilheteria", "cac", "projecao", "investimento", "projecao_investimento"],
   },
   resumo_geral: {
     label: "Resumo geral diário (agendado)",

@@ -144,7 +144,7 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
     if (convite) convidados += qty; else pagantes += qty;
   }
 
-  let investimento = "-", cac = "-", projecao = "-";
+  let investimento = "-", cac = "-", projecao = "-", projecao_investimento = "-";
   const meta = (await supabase.from("meta_config").select("*").maybeSingle()).data;
   if (meta?.access_token && meta?.account_id && cidadeSlug) {
     try {
@@ -152,12 +152,16 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
       investimento = fmtBRL(spend);
       const cacNum = pagantes > 0 && spend > 0 ? spend / pagantes : 0;
       if (cacNum > 0) cac = fmtBRL(cacNum);
-      // Projeção (precisa da data do evento)
+      // Projeções (precisam da data do evento + orçamento diário)
       const { data: cid } = await supabase.from("cidades").select("data_evento").eq("slug", cidadeSlug).maybeSingle();
-      if (cid?.data_evento && cacNum > 0) {
+      if (cid?.data_evento) {
         const budget = await metaDailyBudget(meta, cidadeSlug);
         const dias = Math.max(0, Math.ceil((new Date(cid.data_evento).getTime() - Date.now()) / 86400000) + 1);
-        if (budget > 0) projecao = String(Math.ceil(participantes + (budget / cacNum) * dias));
+        if (budget > 0) {
+          // Investimento projetado = gasto atual + orçamento diário × dias restantes
+          projecao_investimento = fmtBRL(spend + budget * dias);
+          if (cacNum > 0) projecao = String(Math.ceil(participantes + (budget / cacNum) * dias));
+        }
       }
     } catch (_) { /* mantém "-" */ }
   }
@@ -166,7 +170,7 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
     cidade: cidadeNome,
     participantes, vips, convidados,
     bilheteria: fmtBRL(bilheteria),
-    cac, projecao, investimento,
+    cac, projecao, investimento, projecao_investimento,
   };
 }
 
