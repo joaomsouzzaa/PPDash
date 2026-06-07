@@ -85,7 +85,7 @@ export default function Notificacoes() {
   const [numeroConectado, setNumeroConectado] = useState<string | null>(null);
 
   useEffect(() => {
-    (supabase as any).from("whatsapp_config").select("*").maybeSingle().then(({ data }) => {
+    (supabase as any).from("whatsapp_config").select("server_url,instance,status,numero").maybeSingle().then(({ data }: any) => {
       if (data) {
         setCfg({ server_url: data.server_url || "", admin_token: "", instance: data.instance || "" });
         setCfgStatus(data.status || "desconectado");
