@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
+  console.log("webhook-vendas atualizado");
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
