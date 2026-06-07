@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-type Projeto = { id: string; nome: string; descricao: string | null; cores: string | null; logo_posicao: string };
+type Projeto = { id: string; nome: string; descricao: string | null; cores: string | null; logo_posicao: string; palavras_chave: string | null };
 type Asset = { id: string; projeto_id: string; tipo: string; url: string; descricao: string | null };
 
 const POSICOES: Record<string, string> = { "cima-centro": "Topo (centro)", "baixo-centro": "Base (centro)" };
@@ -38,19 +38,19 @@ export default function Designer() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Projeto | null>(null);
-  const empty = { nome: "", descricao: "", cores: "", logo_posicao: "baixo-centro" };
+  const empty = { nome: "", descricao: "", cores: "", logo_posicao: "baixo-centro", palavras_chave: "" };
   const [form, setForm] = useState({ ...empty });
 
   const novo = () => { setEditing(null); setForm({ ...empty }); setOpen(true); };
   const editar = (p: Projeto) => {
     setEditing(p);
-    setForm({ nome: p.nome, descricao: p.descricao || "", cores: p.cores || "", logo_posicao: p.logo_posicao || "baixo-centro" });
+    setForm({ nome: p.nome, descricao: p.descricao || "", cores: p.cores || "", logo_posicao: p.logo_posicao || "baixo-centro", palavras_chave: p.palavras_chave || "" });
     setOpen(true);
   };
 
   const salvar = async () => {
     if (!form.nome.trim()) { toast.error("Informe o nome do projeto"); return; }
-    const payload = { nome: form.nome.trim(), descricao: form.descricao || null, cores: form.cores || null, logo_posicao: form.logo_posicao };
+    const payload = { nome: form.nome.trim(), descricao: form.descricao || null, cores: form.cores || null, logo_posicao: form.logo_posicao, palavras_chave: form.palavras_chave || null };
     const res = editing
       ? await (supabase as any).from("projetos_design").update(payload).eq("id", editing.id)
       : await (supabase as any).from("projetos_design").insert(payload);
@@ -116,6 +116,11 @@ export default function Designer() {
             <div className="space-y-1"><Label>Nome</Label><Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Workshop Scale" /></div>
             <div className="space-y-1"><Label>Descrição</Label><Textarea rows={2} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Sobre o projeto / instruções de estilo..." /></div>
             <div className="space-y-1"><Label>Cores da marca</Label><Input value={form.cores} onChange={(e) => setForm({ ...form, cores: e.target.value })} placeholder="Ex: preto, vermelho, branco" /></div>
+            <div className="space-y-1">
+              <Label>Palavras-chave (detecção automática)</Label>
+              <Input value={form.palavras_chave} onChange={(e) => setForm({ ...form, palavras_chave: e.target.value })} placeholder="Ex: workshop scale, ws, scale" />
+              <p className="text-[11px] text-muted-foreground">Quando o briefing contiver uma dessas palavras (ou o nome do projeto), este repositório é usado automaticamente.</p>
+            </div>
             <div className="space-y-1"><Label>Posição da logo na arte</Label>
               <Select value={form.logo_posicao} onValueChange={(v) => setForm({ ...form, logo_posicao: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>

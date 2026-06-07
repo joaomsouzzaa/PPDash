@@ -101,21 +101,33 @@ Deno.serve(async (req) => {
     if (!prompt) throw new Error("Sem copy/prompt para gerar a arte");
 
     // Projeto/marca: contexto pra IA + logo pra sobrepor no final.
+    // Pode vir um projeto específico (body.projeto_id) OU detectar automaticamente
+    // pelo briefing quando body.auto_marca = true (nome/palavras-chave do projeto).
     const projetoId: string | null = body.projeto_id || null;
     let logoUrl: string | null = null;
     let logoPos = "baixo-centro";
+    let proj: any = null;
     if (projetoId) {
-      const { data: proj } = await supabase.from("projetos_design").select("*").eq("id", projetoId).maybeSingle();
-      if (proj) {
-        logoPos = proj.logo_posicao || "baixo-centro";
-        const ctx = [
-          proj.cores ? `Use a paleta de cores da marca: ${proj.cores}.` : "",
-          proj.descricao ? `Identidade visual: ${proj.descricao}.` : "",
-        ].filter(Boolean).join(" ");
-        if (ctx) prompt = `${prompt}\n\n${ctx} Respeite a identidade visual da marca.`;
-        const { data: ass } = await supabase.from("projeto_assets").select("tipo,url").eq("projeto_id", projetoId);
-        logoUrl = (ass || []).find((a: any) => a.tipo === "logo")?.url || null;
+      proj = (await supabase.from("projetos_design").select("*").eq("id", projetoId).maybeSingle()).data;
+    } else if (body.auto_marca) {
+      const texto = `${tarefa.titulo || ""} ${tarefa.descricao || ""} ${prompt}`.toLowerCase();
+      const { data: projs } = await supabase.from("projetos_design").select("*");
+      for (const p of projs || []) {
+        const chaves = [p.nome, ...String(p.palavras_chave || "").split(",")]
+          .map((x: string) => x.trim().toLowerCase()).filter(Boolean);
+        if (chaves.some((k: string) => texto.includes(k))) { proj = p; break; }
       }
+      if (proj) console.log("marca auto-detectada:", proj.nome);
+    }
+    if (proj) {
+      logoPos = proj.logo_posicao || "baixo-centro";
+      const ctx = [
+        proj.cores ? `Use a paleta de cores da marca: ${proj.cores}.` : "",
+        proj.descricao ? `Identidade visual: ${proj.descricao}.` : "",
+      ].filter(Boolean).join(" ");
+      if (ctx) prompt = `${prompt}\n\n${ctx} Respeite a identidade visual da marca.`;
+      const { data: ass } = await supabase.from("projeto_assets").select("tipo,url").eq("projeto_id", proj.id);
+      logoUrl = (ass || []).find((a: any) => a.tipo === "logo")?.url || null;
     }
 
     const ins = await supabase.from("tarefa_anexos")

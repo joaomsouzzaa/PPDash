@@ -90,7 +90,7 @@ export default function Workflow() {
 
   const [gerando, setGerando] = useState<"imagem" | "video" | null>(null);
   const [provider, setProvider] = useState<"higgsfield" | "openai">("higgsfield");
-  const [projetoId, setProjetoId] = useState<string>("_none");
+  const [projetoId, setProjetoId] = useState<string>("_auto");
   const [lightbox, setLightbox] = useState<Anexo | null>(null);
 
   const { data: projetos = [] } = useQuery({
@@ -105,7 +105,12 @@ export default function Workflow() {
     if (!editing) { toast.error("Salve a tarefa antes de gerar a arte"); return; }
     setGerando(tipo);
     const { data, error } = await (supabase as any).functions.invoke("gerar-arte-higgsfield", {
-      body: { tarefa_id: editing.id, tipo, provider: tipo === "video" ? "higgsfield" : provider, projeto_id: projetoId === "_none" ? null : projetoId },
+      body: {
+        tarefa_id: editing.id, tipo,
+        provider: tipo === "video" ? "higgsfield" : provider,
+        projeto_id: (projetoId === "_none" || projetoId === "_auto") ? null : projetoId,
+        auto_marca: projetoId === "_auto",
+      },
     });
     setGerando(null);
     if (error || data?.ok === false) {
@@ -367,6 +372,7 @@ export default function Workflow() {
                   <Select value={projetoId} onValueChange={setProjetoId}>
                     <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Projeto/Marca" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="_auto">Automático (briefing)</SelectItem>
                       <SelectItem value="_none">Sem marca</SelectItem>
                       {projetos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
