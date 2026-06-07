@@ -553,7 +553,7 @@ export default function Notificacoes() {
 
       {/* Dialog de edição */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Editar notificação" : "Nova notificação"}</DialogTitle>
           </DialogHeader>
