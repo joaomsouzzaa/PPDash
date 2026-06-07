@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown } from "lucide-react";
+import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ type Coluna = { id: string; nome: string; ordem: number; agente_id: string | nul
 type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string };
 type Agente = { id: string; nome: string };
 type Resposta = { id: string; autor: string | null; conteudo: string; created_at: string };
+type Anexo = { id: string; tipo: string; url: string | null; status: string; created_at: string };
 
 const PRIORIDADES: Record<string, string> = { baixa: "Baixa", media: "Média", alta: "Alta" };
 const prioCor: Record<string, string> = { baixa: "secondary", media: "outline", alta: "destructive" };
@@ -69,6 +70,37 @@ export default function Workflow() {
       return (data || []) as Resposta[];
     },
   });
+
+  const { data: anexos = [] } = useQuery({
+    queryKey: ["anexos", editing?.id],
+    enabled: !!editing,
+    refetchInterval: (q) => ((q.state.data as Anexo[] | undefined)?.some((a) => a.status === "gerando") ? 4000 : false),
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("tarefa_anexos").select("*").eq("tarefa_id", editing!.id).order("created_at", { ascending: false });
+      return (data || []) as Anexo[];
+    },
+  });
+
+  // Etapa de design? (compara pelo nome da coluna selecionada no form)
+  const etapaNome = colunas.find((c) => c.id === form.coluna_id)?.nome || "";
+  const isDesign = /design|arte/i.test(etapaNome);
+
+  const [gerando, setGerando] = useState(false);
+  const gerarArte = async (tipo: "imagem" | "video") => {
+    if (!editing) { toast.error("Salve a tarefa antes de gerar a arte"); return; }
+    setGerando(true);
+    const { data, error } = await (supabase as any).functions.invoke("gerar-arte-higgsfield", {
+      body: { tarefa_id: editing.id, tipo },
+    });
+    setGerando(false);
+    if (error || data?.ok === false) {
+      toast.error(`Erro ao gerar arte: ${data?.error || error?.message || "falhou"}`);
+    } else {
+      toast.success(`Arte (${tipo}) gerada!`);
+    }
+    queryClient.invalidateQueries({ queryKey: ["anexos", editing.id] });
+    queryClient.invalidateQueries({ queryKey: ["respostas", editing.id] });
+  };
 
   const novaTarefa = (colunaId?: string) => {
     setEditing(null);
@@ -297,6 +329,38 @@ export default function Workflow() {
                 </Select>
               </div>
             </div>
+
+            {editing && isDesign && (
+              <div className="space-y-2 border-t border-border pt-3">
+                <Label className="flex items-center gap-2"><Paperclip className="h-4 w-4 text-primary" /> Design — gerar arte (Higgsfield)</Label>
+                <p className="text-xs text-muted-foreground">Usa o briefing/copy desta tarefa como prompt e anexa a arte aqui.</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={gerando} onClick={() => gerarArte("imagem")}>
+                    {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />} Gerar imagem
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={gerando} onClick={() => gerarArte("video")}>
+                    {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />} Gerar vídeo
+                  </Button>
+                </div>
+                {anexos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    {anexos.map((a) => (
+                      <div key={a.id} className="rounded-md border border-border overflow-hidden bg-muted/40">
+                        {a.status === "gerando" ? (
+                          <div className="aspect-square flex items-center justify-center text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                        ) : a.status === "erro" ? (
+                          <div className="aspect-square flex items-center justify-center text-xs text-destructive p-2 text-center">Erro</div>
+                        ) : a.tipo === "video" ? (
+                          <video src={a.url!} controls className="w-full aspect-square object-cover" />
+                        ) : (
+                          <a href={a.url!} target="_blank" rel="noreferrer"><img src={a.url!} alt="arte" className="w-full aspect-square object-cover" /></a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {editing && (
               <div className="space-y-2 border-t border-border pt-3">

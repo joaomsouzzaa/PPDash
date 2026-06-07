@@ -212,7 +212,7 @@ export default function Agentes() {
 
   // ---- Configuração das API keys ----
   const [configOpen, setConfigOpen] = useState(false);
-  const [aiKeys, setAiKeys] = useState<Record<string, string>>({ anthropic: "", openai: "", google: "" });
+  const [aiKeys, setAiKeys] = useState<Record<string, string>>({ anthropic: "", openai: "", google: "", higgsfield: "" });
   const [savedProviders, setSavedProviders] = useState<Set<string>>(new Set());
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
   const [savingKeys, setSavingKeys] = useState(false);
@@ -233,7 +233,7 @@ export default function Agentes() {
         else await (supabase as any).from("ai_config").insert({ provider, api_key: key.trim() });
       }
       toast.success("Chaves salvas");
-      setAiKeys({ anthropic: "", openai: "", google: "" });
+      setAiKeys({ anthropic: "", openai: "", google: "", higgsfield: "" });
       await carregarProvidersSalvos();
       setConfigOpen(false);
     } catch (e: any) {
@@ -358,6 +358,19 @@ export default function Agentes() {
                 </div>
               </div>
             ))}
+            {/* Higgsfield (geração de artes — não é LLM) */}
+            <div className="space-y-1 border-t border-border pt-3">
+              <Label className="flex items-center gap-2">Higgsfield (artes){savedProviders.has("higgsfield") && <Badge variant="secondary" className="text-[10px]">salvo</Badge>}</Label>
+              <div className="relative">
+                <Input type={showKey["higgsfield"] ? "text" : "password"} className="pr-9"
+                  placeholder={savedProviders.has("higgsfield") ? "•••••••• (salvo — deixe em branco p/ manter)" : "cole no formato KEY_ID:KEY_SECRET"}
+                  value={aiKeys["higgsfield"]} onChange={(e) => setAiKeys({ ...aiKeys, higgsfield: e.target.value })} />
+                <button type="button" onClick={() => setShowKey({ ...showKey, higgsfield: !showKey["higgsfield"] })} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showKey["higgsfield"] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Gere em cloud.higgsfield.ai → API. Usada para gerar artes na etapa Design do Workflow.</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfigOpen(false)}>Cancelar</Button>
