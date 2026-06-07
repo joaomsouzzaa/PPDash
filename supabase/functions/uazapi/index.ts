@@ -122,6 +122,14 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
   const rows = (data || []).filter((r: any) =>
     !cidadeSlug || parts.some((s) => norm(r.cidade || "").includes(s) || norm(r.produto || "").includes(s)));
 
+  // Nome da cidade conforme aparece nas vendas (ex.: "Porto Alegre"), não a slug
+  const nomeCount: Record<string, number> = {};
+  for (const r of rows) {
+    const nome = (r.cidade || "").trim();
+    if (nome) nomeCount[nome] = (nomeCount[nome] || 0) + 1;
+  }
+  const cidadeNome = Object.keys(nomeCount).sort((a, b) => nomeCount[b] - nomeCount[a])[0] || cidadeSlug || "Todas";
+
   let participantes = 0, pagantes = 0, vips = 0, convidados = 0, bilheteria = 0;
   for (const r of rows) {
     const qty = r.quantidade || 1; const valor = Number(r.valor) || 0; bilheteria += valor;
@@ -152,7 +160,7 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
   }
 
   return {
-    cidade: cidadeSlug || "Todas",
+    cidade: cidadeNome,
     participantes, vips, convidados,
     bilheteria: fmtBRL(bilheteria),
     cac, projecao, investimento,
