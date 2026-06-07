@@ -125,6 +125,30 @@ export type Database = {
         }
         Relationships: []
       }
+      kanban_colunas: {
+        Row: {
+          agente_id: string | null
+          created_at: string | null
+          id: string
+          nome: string
+          ordem: number | null
+        }
+        Insert: {
+          agente_id?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+          ordem?: number | null
+        }
+        Update: {
+          agente_id?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+          ordem?: number | null
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           ad_name: string | null
@@ -383,6 +407,69 @@ export type Database = {
           created_at?: string
           id?: string
           nome?: string
+        }
+        Relationships: []
+      }
+      tarefa_respostas: {
+        Row: {
+          autor: string | null
+          conteudo: string | null
+          created_at: string | null
+          id: string
+          tarefa_id: string | null
+        }
+        Insert: {
+          autor?: string | null
+          conteudo?: string | null
+          created_at?: string | null
+          id?: string
+          tarefa_id?: string | null
+        }
+        Update: {
+          autor?: string | null
+          conteudo?: string | null
+          created_at?: string | null
+          id?: string
+          tarefa_id?: string | null
+        }
+        Relationships: []
+      }
+      tarefas: {
+        Row: {
+          agente_id: string | null
+          coluna_id: string | null
+          created_at: string | null
+          descricao: string | null
+          id: string
+          ordem: number | null
+          origem: string | null
+          prioridade: string | null
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          agente_id?: string | null
+          coluna_id?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          ordem?: number | null
+          origem?: string | null
+          prioridade?: string | null
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          agente_id?: string | null
+          coluna_id?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          ordem?: number | null
+          origem?: string | null
+          prioridade?: string | null
+          titulo?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
