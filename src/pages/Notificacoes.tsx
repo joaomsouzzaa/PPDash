@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -295,8 +295,23 @@ export default function Notificacoes() {
     }
   };
 
+  const mensagemRef = useRef<HTMLTextAreaElement>(null);
   const inserirVar = (v: string) => {
-    setForm((f) => ({ ...f, mensagem: `${f.mensagem}{{${v}}}` }));
+    const token = `{{${v}}}`;
+    const ta = mensagemRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? form.mensagem.length;
+      const end = ta.selectionEnd ?? form.mensagem.length;
+      const novo = form.mensagem.slice(0, start) + token + form.mensagem.slice(end);
+      setForm((f) => ({ ...f, mensagem: novo }));
+      requestAnimationFrame(() => {
+        ta.focus();
+        const pos = start + token.length;
+        ta.setSelectionRange(pos, pos);
+      });
+    } else {
+      setForm((f) => ({ ...f, mensagem: f.mensagem + token }));
+    }
   };
 
   const isConnected = cfgStatus === "connected" || cfgStatus === "conectado";
@@ -537,7 +552,7 @@ export default function Notificacoes() {
                   ))}
                 </div>
               )}
-              <Textarea rows={5} value={form.mensagem} onChange={(e) => setForm({ ...form, mensagem: e.target.value })}
+              <Textarea ref={mensagemRef} rows={5} value={form.mensagem} onChange={(e) => setForm({ ...form, mensagem: e.target.value })}
                 placeholder={"Ex: 🎉 Nova venda em {{cidade}}!\nProduto: {{produto}}\nValor: {{valor}}\nComprador: {{nome}}"} />
             </div>
 
