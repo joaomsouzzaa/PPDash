@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { KanbanSquare, List, Plus, Trash2, Bot, Send } from "lucide-react";
+import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -120,6 +120,36 @@ export default function Workflow() {
     queryClient.invalidateQueries({ queryKey: ["tarefas"] });
   };
 
+  // ---- Gestão de colunas ----
+  const [colsOpen, setColsOpen] = useState(false);
+  const invCols = () => queryClient.invalidateQueries({ queryKey: ["kanban_colunas"] });
+  const addColuna = async () => {
+    const maxOrdem = colunas.reduce((m, c) => Math.max(m, c.ordem), -1);
+    await (supabase as any).from("kanban_colunas").insert({ nome: "Nova coluna", ordem: maxOrdem + 1 });
+    invCols();
+  };
+  const updateColuna = async (id: string, patch: Partial<Coluna>) => {
+    await (supabase as any).from("kanban_colunas").update(patch).eq("id", id);
+    invCols();
+  };
+  const moveColuna = async (id: string, dir: "up" | "down") => {
+    const sorted = [...colunas].sort((a, b) => a.ordem - b.ordem);
+    const idx = sorted.findIndex((c) => c.id === id);
+    const swap = dir === "up" ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= sorted.length) return;
+    const a = sorted[idx], b = sorted[swap];
+    await (supabase as any).from("kanban_colunas").update({ ordem: b.ordem }).eq("id", a.id);
+    await (supabase as any).from("kanban_colunas").update({ ordem: a.ordem }).eq("id", b.id);
+    invCols();
+  };
+  const deleteColuna = async (id: string) => {
+    const rest = colunas.filter((c) => c.id !== id).sort((a, b) => a.ordem - b.ordem);
+    if (rest.length) await (supabase as any).from("tarefas").update({ coluna_id: rest[0].id }).eq("coluna_id", id);
+    await (supabase as any).from("kanban_colunas").delete().eq("id", id);
+    invCols();
+    queryClient.invalidateQueries({ queryKey: ["tarefas"] });
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -135,6 +165,7 @@ export default function Workflow() {
               <button onClick={() => setView("kanban")} className={`px-3 py-1.5 text-sm flex items-center gap-1 ${view === "kanban" ? "bg-accent" : "hover:bg-accent/60"}`}><KanbanSquare className="h-4 w-4" /> Kanban</button>
               <button onClick={() => setView("lista")} className={`px-3 py-1.5 text-sm flex items-center gap-1 ${view === "lista" ? "bg-accent" : "hover:bg-accent/60"}`}><List className="h-4 w-4" /> Lista</button>
             </div>
+            <Button variant="outline" onClick={() => setColsOpen(true)}><Settings className="mr-2 h-4 w-4" /> Colunas</Button>
             <Button onClick={() => novaTarefa()}><Plus className="mr-2 h-4 w-4" /> Nova tarefa</Button>
           </header>
 
@@ -206,6 +237,38 @@ export default function Workflow() {
           )}
         </main>
       </div>
+
+      {/* Gestão de colunas */}
+      <Dialog open={colsOpen} onOpenChange={setColsOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Colunas do quadro</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Defina as etapas e vincule o agente responsável por cada uma. Quando o CEO delegar a um agente,
+            a tarefa nasce automaticamente na coluna vinculada a ele.
+          </p>
+          <div className="space-y-2">
+            {[...colunas].sort((a, b) => a.ordem - b.ordem).map((c, i, arr) => (
+              <div key={c.id} className="flex items-center gap-2 rounded-md border border-border p-2">
+                <div className="flex flex-col">
+                  <button disabled={i === 0} onClick={() => moveColuna(c.id, "up")} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                  <button disabled={i === arr.length - 1} onClick={() => moveColuna(c.id, "down")} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                </div>
+                <Input key={c.nome} defaultValue={c.nome} className="flex-1"
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== c.nome) updateColuna(c.id, { nome: v }); }} />
+                <Select value={c.agente_id || "_none"} onValueChange={(v) => updateColuna(c.id, { agente_id: v === "_none" ? null : v } as any)}>
+                  <SelectTrigger className="w-44"><SelectValue placeholder="Agente" /></SelectTrigger>
+                  <SelectContent><SelectItem value="_none">— sem agente</SelectItem>{agentes.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
+                </Select>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteColuna(c.id)}><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex sm:justify-between">
+            <Button variant="outline" onClick={addColuna}><Plus className="mr-2 h-4 w-4" /> Adicionar coluna</Button>
+            <Button onClick={() => setColsOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Popup da tarefa */}
       <Dialog open={open} onOpenChange={setOpen}>
