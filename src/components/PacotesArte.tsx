@@ -299,8 +299,15 @@ function EditorCampos({ arte, onClose, onSaved }: { arte: Arte; onClose: () => v
                 <div className="space-y-1"><Label className="text-xs">Cor</Label>
                   <input type="color" value={selCampo.color} onChange={(e) => upd(selCampo.id, { color: e.target.value })} className="h-8 w-full rounded border border-border bg-transparent" />
                 </div>
-                <div className="space-y-1"><Label className="text-xs">Tamanho ({selCampo.fontSize}% da largura)</Label>
-                  <input type="range" min={2} max={20} step={0.5} value={selCampo.fontSize} onChange={(e) => upd(selCampo.id, { fontSize: Number(e.target.value) })} className="w-full" />
+                <div className="space-y-1"><Label className="text-xs">Tamanho (px)</Label>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => upd(selCampo.id, { fontSize: Math.max(0.5, Math.round((selCampo.fontSize - 0.5) * 10) / 10) })}>−</Button>
+                    <Input type="number" min={1} max={400} className="h-8 text-center"
+                      value={Math.round(selCampo.fontSize * 10)}
+                      onChange={(e) => { const px = Number(e.target.value) || 0; upd(selCampo.id, { fontSize: Math.max(0.1, px / 10) }); }} />
+                    <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => upd(selCampo.id, { fontSize: Math.round((selCampo.fontSize + 0.5) * 10) / 10 })}>+</Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Digite ou use +/−. Também dá pra arrastar a alça no canto do campo.</p>
                 </div>
                 <div className="space-y-1"><Label className="text-xs">Alinhamento</Label>
                   <Select value={selCampo.align} onValueChange={(v) => upd(selCampo.id, { align: v as any })}>
