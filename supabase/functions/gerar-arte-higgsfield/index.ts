@@ -44,7 +44,7 @@ async function gerarOpenAI(supabase: any, apiKey: string, prompt: string, aspect
 }
 
 Deno.serve(async (req) => {
-  console.log("gerar-arte-higgsfield v3");
+  console.log("gerar-arte-higgsfield v4");
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabase = svc();
