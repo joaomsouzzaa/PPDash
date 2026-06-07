@@ -122,6 +122,7 @@ normal (sem JSON), consolidando o trabalho da equipe.`;
 }
 
 Deno.serve(async (req) => {
+  console.log('agente-chat v2');
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
