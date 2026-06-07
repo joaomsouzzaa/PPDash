@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Sparkles, Plus, Pencil, Trash2, Bot } from "lucide-react";
+import { Sparkles, Plus, Pencil, Trash2, Bot, Settings, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -63,6 +63,39 @@ export default function Agentes() {
   const [form, setForm] = useState({ ...emptyForm });
   const [slugTouched, setSlugTouched] = useState(false);
   const [deleting, setDeleting] = useState<Agente | null>(null);
+
+  // ---- Configuração das API keys dos providers (multi-tenant, no banco) ----
+  const [configOpen, setConfigOpen] = useState(false);
+  const [aiKeys, setAiKeys] = useState<Record<string, string>>({ anthropic: "", openai: "", google: "" });
+  const [savedProviders, setSavedProviders] = useState<Set<string>>(new Set());
+  const [showKey, setShowKey] = useState<Record<string, boolean>>({});
+  const [savingKeys, setSavingKeys] = useState(false);
+
+  const carregarProvidersSalvos = async () => {
+    const { data } = await (supabase as any).from("ai_config").select("provider");
+    setSavedProviders(new Set((data || []).map((r: any) => r.provider)));
+  };
+  useEffect(() => { carregarProvidersSalvos(); }, []);
+
+  const salvarKeys = async () => {
+    setSavingKeys(true);
+    try {
+      for (const [provider, key] of Object.entries(aiKeys)) {
+        if (!key.trim()) continue; // só grava o que foi preenchido
+        const { data: existing } = await (supabase as any).from("ai_config").select("provider").eq("provider", provider).maybeSingle();
+        if (existing) await (supabase as any).from("ai_config").update({ api_key: key.trim() }).eq("provider", provider);
+        else await (supabase as any).from("ai_config").insert({ provider, api_key: key.trim() });
+      }
+      toast.success("Chaves salvas");
+      setAiKeys({ anthropic: "", openai: "", google: "" });
+      await carregarProvidersSalvos();
+      setConfigOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao salvar chaves");
+    } finally {
+      setSavingKeys(false);
+    }
+  };
 
   const abrirNovo = () => { setEditingId(null); setForm({ ...emptyForm }); setSlugTouched(false); setDialogOpen(true); };
   const abrirEdicao = (a: Agente) => {
@@ -121,6 +154,9 @@ export default function Agentes() {
               </h1>
               <p className="text-sm text-muted-foreground">Agentes de IA e automações inteligentes</p>
             </div>
+            <Button variant="outline" onClick={() => setConfigOpen(true)}>
+              <Settings className="mr-2 h-4 w-4" /> Configurar modelos
+            </Button>
             <Button onClick={abrirNovo}><Plus className="mr-2 h-4 w-4" /> Novo agente</Button>
           </header>
 
@@ -232,6 +268,48 @@ export default function Agentes() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={salvar}>{editingId ? "Salvar alterações" : "Criar agente"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de configuração das API keys */}
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Configurar modelos (API keys)</DialogTitle>
+            <DialogDescription>
+              Cole a API key de cada provider que você usa. Por segurança, as chaves não são exibidas depois de salvas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {Object.entries(PROVIDERS).map(([prov, p]) => (
+              <div key={prov} className="space-y-1">
+                <Label className="flex items-center gap-2">
+                  {p.label}
+                  {savedProviders.has(prov) && <Badge variant="secondary" className="text-[10px]">salvo</Badge>}
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showKey[prov] ? "text" : "password"}
+                    className="pr-9"
+                    placeholder={savedProviders.has(prov) ? "•••••••• (salvo — deixe em branco p/ manter)" : "cole a API key"}
+                    value={aiKeys[prov]}
+                    onChange={(e) => setAiKeys({ ...aiKeys, [prov]: e.target.value })}
+                  />
+                  <button type="button" onClick={() => setShowKey({ ...showKey, [prov]: !showKey[prov] })}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showKey[prov] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <p className="text-[11px] text-muted-foreground">
+              As chaves ficam no servidor (usadas pelos agentes para chamar os modelos). Quando entrar o login multi-usuário, serão isoladas por conta.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfigOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarKeys} disabled={savingKeys}>{savingKeys ? "Salvando..." : "Salvar chaves"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
