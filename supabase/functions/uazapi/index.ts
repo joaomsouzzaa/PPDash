@@ -88,10 +88,15 @@ const GRAPH = "https://graph.facebook.com/v21.0";
 
 async function metaSpend(meta: any, slug: string): Promise<number> {
   const variants = slugVariants(slug);
+  // Considera apenas campanhas ATIVAS que casam o slug (ignora antigas/pausadas
+  // de eventos passados que tenham o mesmo slug no nome).
+  const cj = await (await fetch(`${GRAPH}/${meta.account_id}/campaigns?fields=id,name,status&limit=500&access_token=${meta.access_token}`)).json();
+  const ativos = new Set<string>((cj.data || []).filter((c: any) => c.status === "ACTIVE" && campMatch(c.name, variants)).map((c: any) => c.name));
+  if (ativos.size === 0) return 0;
   const r = await fetch(`${GRAPH}/${meta.account_id}/insights?level=campaign&fields=spend,campaign_name&date_preset=maximum&limit=500&access_token=${meta.access_token}`);
   const j = await r.json();
   let spend = 0;
-  for (const row of j.data || []) if (campMatch(row.campaign_name, variants)) spend += parseFloat(row.spend) || 0;
+  for (const row of j.data || []) if (ativos.has(row.campaign_name)) spend += parseFloat(row.spend) || 0;
   return spend;
 }
 async function metaDailyBudget(meta: any, slug: string): Promise<number> {
