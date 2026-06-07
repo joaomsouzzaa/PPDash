@@ -137,6 +137,27 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_config: {
+        Row: {
+          access_token: string | null
+          account_id: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          account_id?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          account_id?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       notificacao_logs: {
         Row: {
           created_at: string | null
