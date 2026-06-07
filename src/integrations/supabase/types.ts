@@ -419,7 +419,7 @@ export type Database = {
           status: string
           tarefa_id: string
           tipo: string
-          url: string
+          url: string | null
         }
         Insert: {
           created_at?: string
@@ -429,7 +429,7 @@ export type Database = {
           status?: string
           tarefa_id: string
           tipo?: string
-          url: string
+          url?: string | null
         }
         Update: {
           created_at?: string
@@ -439,7 +439,7 @@ export type Database = {
           status?: string
           tarefa_id?: string
           tipo?: string
-          url?: string
+          url?: string | null
         }
         Relationships: [
           {
