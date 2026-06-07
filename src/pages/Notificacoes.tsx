@@ -372,9 +372,11 @@ export default function Notificacoes() {
   const [loadingSheets, setLoadingSheets] = useState(false);
   const [sheetsPopover, setSheetsPopover] = useState(false);
   const [colarLink, setColarLink] = useState("");
+  const [testandoSheets, setTestandoSheets] = useState(false);
 
   const testarSheets = async () => {
     if (!form.sheets_spreadsheet_id || !form.sheets_aba) { toast.error("Selecione planilha e aba"); return; }
+    setTestandoSheets(true);
     const exemplo: Record<string, string> = {
       nome: "Fulano (teste)", produto: "Workshop Scale | São Paulo - SP", cidade: "São Paulo",
       valor: "R$ 247,00", tipo: "individual", quantidade: "1", pagamento: "pix",
@@ -388,11 +390,12 @@ export default function Notificacoes() {
       if (!tpl) continue;
       valores[col] = String(tpl).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => exemplo[k] ?? "");
     }
-    if (Object.keys(valores).length === 0) { toast.error("Mapeie ao menos uma coluna"); return; }
+    if (Object.keys(valores).length === 0) { toast.error("Mapeie ao menos uma coluna"); setTestandoSheets(false); return; }
     try {
       await gs("append", { spreadsheet_id: form.sheets_spreadsheet_id, aba: form.sheets_aba, valores });
       toast.success("Linha de teste adicionada na planilha!");
     } catch (e: any) { toast.error(e.message || "Erro ao escrever no Sheets"); }
+    finally { setTestandoSheets(false); }
   };
 
   const usarLink = async () => {
@@ -794,8 +797,9 @@ export default function Notificacoes() {
                         </div>
                       ))}
                       <p className="text-[11px] text-muted-foreground">As colunas vêm do cabeçalho (linha 1) da aba. Deixe "vazio" nas que não quer preencher.</p>
-                      <Button variant="outline" size="sm" onClick={testarSheets}>
-                        <Send className="mr-2 h-4 w-4" /> Testar no Sheets (linha de exemplo)
+                      <Button variant="outline" size="sm" onClick={testarSheets} disabled={testandoSheets}>
+                        {testandoSheets ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                        {testandoSheets ? "Enviando..." : "Testar no Sheets (linha de exemplo)"}
                       </Button>
                     </div>
                   )}
