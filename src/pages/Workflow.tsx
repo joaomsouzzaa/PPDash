@@ -94,7 +94,10 @@ export default function Workflow() {
     });
     setGerando(false);
     if (error || data?.ok === false) {
-      toast.error(`Erro ao gerar arte: ${data?.error || error?.message || "falhou"}`);
+      // Supabase esconde o corpo em FunctionsHttpError; lê do context p/ ver a causa real.
+      let msg = data?.error || error?.message || "falhou";
+      try { const b = await (error as any)?.context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      toast.error(`Erro ao gerar arte: ${msg}`, { duration: 10000 });
     } else {
       toast.success(`Arte (${tipo}) gerada!`);
     }
