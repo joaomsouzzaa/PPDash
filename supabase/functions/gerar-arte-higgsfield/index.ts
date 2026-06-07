@@ -25,6 +25,7 @@ function extrairUrl(obj: any): string | null {
 }
 
 Deno.serve(async (req) => {
+  console.log("gerar-arte-higgsfield v2");
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabase = svc();
