@@ -51,29 +51,30 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
   },
 };
 
+type Dest = { tipo: string; valor: string; nome: string }; // tipo: grupo | numero
+
 type Notificacao = {
   id: string;
   nome: string;
   gatilho: string;
   ativo: boolean;
-  destinatario_tipo: string; // grupo | numero
-  destinatario: string;
+  destinatario_tipo: string; // legado (1º destinatário)
+  destinatario: string;      // legado (1º destinatário)
   destinatario_nome: string | null;
+  destinatarios?: Dest[] | null;
   mensagem: string;
   cidade_slug: string | null;
   horario: string | null;
 };
 
-const emptyForm: Omit<Notificacao, "id"> = {
+const emptyForm = {
   nome: "",
   gatilho: "nova_venda",
   ativo: true,
-  destinatario_tipo: "grupo",
-  destinatario: "",
-  destinatario_nome: "",
+  destinatarios: [{ tipo: "grupo", valor: "", nome: "" }] as Dest[],
   mensagem: "",
-  cidade_slug: null,
-  horario: "09:00",
+  cidade_slug: null as string | null,
+  horario: "09:00" as string | null,
 };
 
 export default function Notificacoes() {
@@ -215,23 +216,34 @@ export default function Notificacoes() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [deleting, setDeleting] = useState<Notificacao | null>(null);
-  const [grupoPopoverOpen, setGrupoPopoverOpen] = useState(false);
+  const [grupoPopoverIdx, setGrupoPopoverIdx] = useState<number | null>(null);
 
-  // Carrega os grupos automaticamente ao escolher "Grupo" no dialog (se ainda não carregou)
+  // Carrega os grupos automaticamente ao abrir o dialog (se ainda não carregou)
   useEffect(() => {
-    if (dialogOpen && form.destinatario_tipo === "grupo" && isConnected && grupos.length === 0 && !loadingGrupos) {
+    if (dialogOpen && isConnected && grupos.length === 0 && !loadingGrupos) {
       carregarGrupos();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialogOpen, form.destinatario_tipo]);
+  }, [dialogOpen]);
 
-  const abrirNovo = () => { setEditingId(null); setForm({ ...emptyForm }); setDialogOpen(true); };
+  const addDest = () => setForm((f) => ({ ...f, destinatarios: [...f.destinatarios, { tipo: "grupo", valor: "", nome: "" }] }));
+  const removeDest = (i: number) => setForm((f) => ({ ...f, destinatarios: f.destinatarios.filter((_, idx) => idx !== i) }));
+  const updateDest = (i: number, patch: Partial<Dest>) =>
+    setForm((f) => ({ ...f, destinatarios: f.destinatarios.map((d, idx) => (idx === i ? { ...d, ...patch } : d)) }));
+
+  const abrirNovo = () => {
+    setEditingId(null);
+    setForm({ ...emptyForm, destinatarios: [{ tipo: "grupo", valor: "", nome: "" }] });
+    setDialogOpen(true);
+  };
   const abrirEdicao = (n: Notificacao) => {
     setEditingId(n.id);
+    const dests: Dest[] = (n.destinatarios && n.destinatarios.length)
+      ? n.destinatarios.map((d) => ({ tipo: d.tipo, valor: d.valor, nome: d.nome || "" }))
+      : [{ tipo: n.destinatario_tipo || "grupo", valor: n.destinatario || "", nome: n.destinatario_nome || "" }];
     setForm({
       nome: n.nome, gatilho: n.gatilho, ativo: n.ativo,
-      destinatario_tipo: n.destinatario_tipo, destinatario: n.destinatario,
-      destinatario_nome: n.destinatario_nome || "", mensagem: n.mensagem,
+      destinatarios: dests, mensagem: n.mensagem,
       cidade_slug: n.cidade_slug, horario: n.horario || "09:00",
     });
     setDialogOpen(true);
@@ -239,10 +251,17 @@ export default function Notificacoes() {
 
   // Persiste e retorna o id (sem fechar o dialog)
   const salvar = async (): Promise<string | null> => {
-    if (!form.nome || !form.destinatario || !form.mensagem) {
-      toast.error("Preencha nome, destinatário e mensagem"); return null;
+    const dests = form.destinatarios.filter((d) => d.valor.trim());
+    if (!form.nome || dests.length === 0 || !form.mensagem) {
+      toast.error("Preencha nome, ao menos um destinatário e a mensagem"); return null;
     }
-    const payload = { ...form, destinatario_nome: form.destinatario_nome || null };
+    const payload = {
+      nome: form.nome, gatilho: form.gatilho, ativo: form.ativo,
+      mensagem: form.mensagem, cidade_slug: form.cidade_slug, horario: form.horario,
+      destinatarios: dests,
+      // legado (1º destinatário) para compatibilidade
+      destinatario_tipo: dests[0].tipo, destinatario: dests[0].valor, destinatario_nome: dests[0].nome || null,
+    };
     if (editingId) {
       const { error } = await (supabase as any).from("notificacoes").update(payload).eq("id", editingId);
       if (error) { toast.error("Erro ao salvar notificação"); return null; }
@@ -431,7 +450,10 @@ export default function Notificacoes() {
                           {!n.ativo && <Badge variant="outline" className="text-muted-foreground">inativa</Badge>}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 truncate">
-                          → {n.destinatario_tipo === "grupo" ? "Grupo" : "Número"}: {n.destinatario_nome || n.destinatario}
+                          → {((n.destinatarios && n.destinatarios.length)
+                              ? n.destinatarios
+                              : [{ tipo: n.destinatario_tipo, valor: n.destinatario, nome: n.destinatario_nome }]
+                            ).map((d: any) => d.nome || d.valor).join(", ")}
                           {n.cidade_slug ? ` · ${n.cidade_slug}` : ""}{n.horario && (n.gatilho.startsWith("resumo")) ? ` · ${n.horario}` : ""}
                         </p>
                       </div>
@@ -478,71 +500,67 @@ export default function Notificacoes() {
               <p className="text-xs text-muted-foreground">{gatilhoAtual?.desc}</p>
             </div>
 
-            <div className="space-y-1">
-              <Label>Destinatário</Label>
-              <Select value={form.destinatario_tipo} onValueChange={(v) => setForm({ ...form, destinatario_tipo: v, destinatario: "", destinatario_nome: "" })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grupo">Grupo</SelectItem>
-                  <SelectItem value="numero">Número</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>{form.destinatario_tipo === "grupo" ? "Grupo" : "Número (com DDI)"}</Label>
-              {form.destinatario_tipo === "grupo" ? (
-                loadingGrupos ? (
-                  <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input text-sm text-muted-foreground">
-                    <RefreshCw className="h-4 w-4 animate-spin" /> Carregando grupos...
+            <div className="space-y-2 md:col-span-2">
+              <Label>Destinatários</Label>
+              {form.destinatarios.map((d, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <Select value={d.tipo} onValueChange={(v) => updateDest(i, { tipo: v, valor: "", nome: "" })}>
+                    <SelectTrigger className="w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="grupo">Grupo</SelectItem>
+                      <SelectItem value="numero">Número</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex-1 min-w-0">
+                    {d.tipo === "grupo" ? (
+                      loadingGrupos ? (
+                        <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input text-sm text-muted-foreground">
+                          <RefreshCw className="h-4 w-4 animate-spin" /> Carregando...
+                        </div>
+                      ) : grupos.length > 0 ? (
+                        <Popover open={grupoPopoverIdx === i} onOpenChange={(o) => setGrupoPopoverIdx(o ? i : null)}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                              <span className="truncate">{d.valor ? (d.nome || d.valor) : "Selecione um grupo"}</span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Pesquisar grupo..." />
+                              <CommandList>
+                                <CommandEmpty>Nenhum grupo encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {grupos.map((g) => (
+                                    <CommandItem key={g.id} value={`${g.name} ${g.id}`}
+                                      onSelect={() => { updateDest(i, { valor: g.id, nome: g.name }); setGrupoPopoverIdx(null); }}>
+                                      <Check className={`mr-2 h-4 w-4 ${d.valor === g.id ? "opacity-100" : "opacity-0"}`} />
+                                      <span className="truncate">{g.name}</span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <Input value={d.valor} onChange={(e) => updateDest(i, { valor: e.target.value })}
+                          placeholder="ID do grupo (xxxx@g.us)" />
+                      )
+                    ) : (
+                      <Input value={d.valor} onChange={(e) => updateDest(i, { valor: e.target.value })}
+                        placeholder="5591999999999" />
+                    )}
                   </div>
-                ) : grupos.length > 0 ? (
-                  <Popover open={grupoPopoverOpen} onOpenChange={setGrupoPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                        <span className="truncate">
-                          {form.destinatario
-                            ? (grupos.find((g) => g.id === form.destinatario)?.name || form.destinatario_nome || form.destinatario)
-                            : "Selecione um grupo"}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Pesquisar grupo..." />
-                        <CommandList>
-                          <CommandEmpty>Nenhum grupo encontrado.</CommandEmpty>
-                          <CommandGroup>
-                            {grupos.map((g) => (
-                              <CommandItem key={g.id} value={`${g.name} ${g.id}`}
-                                onSelect={() => {
-                                  setForm({ ...form, destinatario: g.id, destinatario_nome: g.name });
-                                  setGrupoPopoverOpen(false);
-                                }}>
-                                <Check className={`mr-2 h-4 w-4 ${form.destinatario === g.id ? "opacity-100" : "opacity-0"}`} />
-                                <span className="truncate">{g.name}</span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <div className="space-y-1">
-                    <Input value={form.destinatario}
-                      onChange={(e) => setForm({ ...form, destinatario: e.target.value })}
-                      placeholder="ID do grupo (xxxx@g.us)" />
-                    <button type="button" onClick={carregarGrupos} className="text-xs text-primary hover:underline">
-                      Recarregar lista de grupos
-                    </button>
-                  </div>
-                )
-              ) : (
-                <Input value={form.destinatario}
-                  onChange={(e) => setForm({ ...form, destinatario: e.target.value })}
-                  placeholder="5591999999999" />
-              )}
+                  <Button type="button" variant="ghost" size="icon" className="shrink-0 text-destructive"
+                    onClick={() => removeDest(i)} disabled={form.destinatarios.length === 1}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addDest}>
+                <Plus className="mr-2 h-4 w-4" /> Adicionar destinatário
+              </Button>
             </div>
 
             {precisaCidade && (

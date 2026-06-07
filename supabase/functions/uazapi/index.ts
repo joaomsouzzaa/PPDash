@@ -55,6 +55,14 @@ async function enviarTexto(cfg: any, destinatario: string, mensagem: string) {
   return uazFetch(base, UAZAPI.sendText(base), token, { number: destinatario, text: mensagem });
 }
 
+// Lista de destinatários de uma notificação (novo formato `destinatarios` ou legado)
+function destinatariosDe(n: any): string[] {
+  if (Array.isArray(n.destinatarios) && n.destinatarios.length) {
+    return n.destinatarios.map((d: any) => d.valor).filter(Boolean);
+  }
+  return n.destinatario ? [n.destinatario] : [];
+}
+
 // Monta as variáveis a partir de uma venda
 function varsDaVenda(v: any): Record<string, string | number> {
   return {
@@ -235,9 +243,13 @@ Deno.serve(async (req) => {
           vars = { total_cidades: "—", participantes_total: "—", bilheteria_total: "—", investimento_total: "—", data: new Date().toLocaleDateString("pt-BR") };
         }
         const msg = render(n.mensagem, vars) + "\n\n_(mensagem de teste)_";
-        const r = await enviarTexto(cfg, n.destinatario, msg);
-        await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: n.destinatario, mensagem: msg, status: "enviado" });
-        return json({ success: true, result: r });
+        const ds = destinatariosDe(n);
+        if (ds.length === 0) return json({ error: "Notificação sem destinatário" }, 400);
+        for (const dest of ds) {
+          await enviarTexto(cfg, dest, msg);
+          await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
+        }
+        return json({ success: true, enviados: ds.length });
       }
       case "nova_venda": {
         // Chamado pelo trigger do banco quando uma venda é inserida
@@ -253,12 +265,14 @@ Deno.serve(async (req) => {
             if (!match) continue;
           }
           const msg = render(n.mensagem, varsDaVenda(v));
-          try {
-            await enviarTexto(cfg, n.destinatario, msg);
-            await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: n.destinatario, mensagem: msg, status: "enviado" });
-            enviados++;
-          } catch (e) {
-            await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: n.destinatario, mensagem: msg, status: "erro", erro: String(e) });
+          for (const dest of destinatariosDe(n)) {
+            try {
+              await enviarTexto(cfg, dest, msg);
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
+              enviados++;
+            } catch (e) {
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e) });
+            }
           }
         }
         return json({ success: true, enviados });
@@ -274,12 +288,14 @@ Deno.serve(async (req) => {
           if (n.gatilho === "resumo_cidade") vars = await resumoCidade(supabase, n.cidade_slug);
           else vars = { total_cidades: "—", participantes_total: "—", bilheteria_total: "—", investimento_total: "—", data: new Date().toLocaleDateString("pt-BR") };
           const msg = render(n.mensagem, vars);
-          try {
-            await enviarTexto(cfg, n.destinatario, msg);
-            await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: n.destinatario, mensagem: msg, status: "enviado" });
-            enviados++;
-          } catch (e) {
-            await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: n.destinatario, mensagem: msg, status: "erro", erro: String(e) });
+          for (const dest of destinatariosDe(n)) {
+            try {
+              await enviarTexto(cfg, dest, msg);
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
+              enviados++;
+            } catch (e) {
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e) });
+            }
           }
         }
         return json({ success: true, enviados });
