@@ -358,7 +358,7 @@ export default function Notificacoes() {
                 Envie notificações no WhatsApp (UAZAPI) para grupos ou números
               </p>
             </div>
-            <Button onClick={abrirNovo} disabled={!isConnected}>
+            <Button onClick={abrirNovo}>
               <Plus className="mr-2 h-4 w-4" /> Nova notificação
             </Button>
           </header>
@@ -444,7 +444,7 @@ export default function Notificacoes() {
             <div className="space-y-3">
               {!isConnected && (
                 <p className="text-sm text-muted-foreground">
-                  Conecte o WhatsApp acima para criar e enviar notificações.
+                  Você pode criar e configurar notificações normalmente. Conecte o WhatsApp acima para <strong>enviar</strong> (testes e disparos).
                 </p>
               )}
               {notificacoes.length === 0 ? (
