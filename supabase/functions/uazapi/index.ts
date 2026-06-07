@@ -182,6 +182,31 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
   };
 }
 
+// Slugs a processar: 1 por cidade ATIVA (evento >= hoje) quando "todas",
+// senão a cidade específica da notificação.
+async function slugsDaNotif(supabase: any, n: any): Promise<(string | null)[]> {
+  if ((n.gatilho === "resumo_cidade" || n.gatilho === "manual") && !n.cidade_slug) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const { data: cids } = await supabase.from("cidades").select("slug,data_evento");
+    return (cids || []).filter((c: any) => new Date(c.data_evento) >= hoje).map((c: any) => c.slug);
+  }
+  return [n.cidade_slug || null];
+}
+
+// Lista de conjuntos de variáveis: 1 por cidade ativa (resumo) ou 1 (venda/geral)
+async function buildVarsList(supabase: any, n: any): Promise<Record<string, string | number>[]> {
+  if (n.gatilho === "nova_venda") {
+    return [varsDaVenda({ nome_comprador: "Fulano (teste)", produto: "Workshop Scale | Belém - PA", cidade: "Belém", valor: 247, tipo_ingresso: "individual", quantidade: 1, metodo_pagamento: "pix", data_venda: new Date().toISOString() })];
+  }
+  if (n.gatilho === "resumo_geral") {
+    return [{ total_cidades: "—", participantes_total: "—", bilheteria_total: "—", investimento_total: "—", data: new Date().toLocaleDateString("pt-BR") }];
+  }
+  const slugs = await slugsDaNotif(supabase, n);
+  const out: Record<string, string | number>[] = [];
+  for (const slug of slugs) out.push(await resumoCidade(supabase, slug));
+  return out;
+}
+
 Deno.serve(async (req) => {
   console.log("uazapi v4");
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -234,22 +259,20 @@ Deno.serve(async (req) => {
       case "send_test": {
         const { data: n } = await supabase.from("notificacoes").select("*").eq("id", payload.notificacao_id).maybeSingle();
         if (!n) return json({ error: "Notificação não encontrada" }, 404);
-        let vars: Record<string, string | number> = {};
-        if (n.gatilho === "nova_venda") {
-          vars = varsDaVenda({ nome_comprador: "Fulano (teste)", produto: "Workshop Scale | Belém - PA", cidade: "Belém", valor: 247, tipo_ingresso: "individual", quantidade: 1, metodo_pagamento: "pix", data_venda: new Date().toISOString() });
-        } else if (n.gatilho === "resumo_cidade" || n.gatilho === "manual") {
-          vars = await resumoCidade(supabase, n.cidade_slug);
-        } else if (n.gatilho === "resumo_geral") {
-          vars = { total_cidades: "—", participantes_total: "—", bilheteria_total: "—", investimento_total: "—", data: new Date().toLocaleDateString("pt-BR") };
-        }
-        const msg = render(n.mensagem, vars) + "\n\n_(mensagem de teste)_";
         const ds = destinatariosDe(n);
         if (ds.length === 0) return json({ error: "Notificação sem destinatário" }, 400);
-        for (const dest of ds) {
-          await enviarTexto(cfg, dest, msg);
-          await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
+        // 1 mensagem por cidade ativa (quando "todas") — enviadas separadamente
+        const varsList = await buildVarsList(supabase, n);
+        let enviados = 0;
+        for (const vars of varsList) {
+          const msg = render(n.mensagem, vars) + "\n\n_(mensagem de teste)_";
+          for (const dest of ds) {
+            await enviarTexto(cfg, dest, msg);
+            await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
+            enviados++;
+          }
         }
-        return json({ success: true, enviados: ds.length });
+        return json({ success: true, enviados });
       }
       case "nova_venda": {
         // Chamado pelo trigger do banco quando uma venda é inserida
@@ -284,17 +307,18 @@ Deno.serve(async (req) => {
         let enviados = 0;
         for (const n of notifs || []) {
           if ((n.horario || "").slice(0, 5) !== agora.slice(0, 5)) continue;
-          let vars: Record<string, string | number> = {};
-          if (n.gatilho === "resumo_cidade") vars = await resumoCidade(supabase, n.cidade_slug);
-          else vars = { total_cidades: "—", participantes_total: "—", bilheteria_total: "—", investimento_total: "—", data: new Date().toLocaleDateString("pt-BR") };
-          const msg = render(n.mensagem, vars);
-          for (const dest of destinatariosDe(n)) {
-            try {
-              await enviarTexto(cfg, dest, msg);
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
-              enviados++;
-            } catch (e) {
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e) });
+          // 1 mensagem por cidade ativa (quando "todas") — uma após a outra
+          const varsList = await buildVarsList(supabase, n);
+          for (const vars of varsList) {
+            const msg = render(n.mensagem, vars);
+            for (const dest of destinatariosDe(n)) {
+              try {
+                await enviarTexto(cfg, dest, msg);
+                await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado" });
+                enviados++;
+              } catch (e) {
+                await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e) });
+              }
             }
           }
         }
