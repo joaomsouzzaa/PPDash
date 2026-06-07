@@ -70,6 +70,18 @@ function parseDelegacao(text: string): { delegar: string; tarefa: string } | nul
   return null;
 }
 
+// Descobre a coluna do Kanban do agente (etapa atual) e a próxima
+async function colunaDoAgente(supabase: any, child: any): Promise<{ atual: any; proxima: any } | null> {
+  const { data: cols } = await supabase.from("kanban_colunas").select("*").order("ordem");
+  if (!cols || cols.length === 0) return null;
+  let atual = cols.find((c: any) => c.agente_id === child.id)
+    || cols.find((c: any) => norm(c.nome) === norm(child.nome))
+    || cols.find((c: any) => norm(child.nome).includes(norm(c.nome)) && (c.nome || "").length > 2);
+  if (!atual) atual = cols[Math.min(1, cols.length - 1)];
+  const idx = cols.findIndex((c: any) => c.id === atual.id);
+  return { atual, proxima: cols[idx + 1] || atual };
+}
+
 // Executa um agente com capacidade de DELEGAR aos seus filhos ativos (hierarquia)
 async function runAgente(supabase: any, agente: any, messages: Msg[]): Promise<{ text: string; trace: string[] }> {
   const { data: children } = await supabase.from("agentes").select("*").eq("parent_id", agente.id).eq("ativo", true);
@@ -109,6 +121,21 @@ normal (sem JSON), consolidando o trabalho da equipe.`;
       continue;
     }
     trace.push(`${agente.nome} → ${child.nome}`);
+
+    // Cria a tarefa no Kanban (coluna do agente) com o briefing
+    let tarefaId: string | null = null;
+    try {
+      const col = await colunaDoAgente(supabase, child);
+      const { data: t } = await supabase.from("tarefas").insert({
+        titulo: `${child.nome}: ${deleg.tarefa.slice(0, 60)}`,
+        descricao: deleg.tarefa, coluna_id: col?.atual?.id || null,
+        agente_id: child.id, origem: "delegacao",
+      }).select("id").single();
+      tarefaId = t?.id || null;
+      // guarda a próxima coluna para avançar depois
+      (deleg as any)._proxima = col?.proxima?.id || null;
+    } catch (_) { /* tabela pode não existir ainda */ }
+
     let childResp = "";
     try {
       const childKey = await getKey(supabase, child.provider);
@@ -116,6 +143,16 @@ normal (sem JSON), consolidando o trabalho da equipe.`;
     } catch (e) {
       childResp = `(falha ao executar ${child.nome}: ${e instanceof Error ? e.message : "erro"})`;
     }
+
+    // Registra a resposta na tarefa e avança o card para a próxima etapa
+    if (tarefaId) {
+      try {
+        await supabase.from("tarefa_respostas").insert({ tarefa_id: tarefaId, autor: child.nome, conteudo: childResp });
+        const prox = (deleg as any)._proxima;
+        if (prox) await supabase.from("tarefas").update({ coluna_id: prox, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      } catch (_) { /* ignora */ }
+    }
+
     convo.push({ role: "user", content: `[Resposta do agente ${child.nome}]:\n${childResp}\n\nContinue: delegue novamente se precisar, ou responda ao usuário em texto.` });
   }
   return { text: "Não consegui concluir a tarefa (muitas delegações seguidas).", trace };

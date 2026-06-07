@@ -15,6 +15,7 @@ import LeadsInsideSales from "./pages/LeadsInsideSales";
 import Notificacoes from "./pages/Notificacoes";
 import Agentes from "./pages/Agentes";
 import Chat from "./pages/Chat";
+import Workflow from "./pages/Workflow";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
           <Route path="/notificacoes" element={<Notificacoes />} />
           <Route path="/agentes" element={<Agentes />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/workflow" element={<Workflow />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

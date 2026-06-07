@@ -18,6 +18,7 @@ import {
   Bot,
   Sparkles,
   MessageSquare,
+  KanbanSquare,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -55,6 +56,7 @@ const growthItems = [
   { title: "Notificações", url: "/notificacoes", icon: Bot },
   { title: "Agentes", url: "/agentes", icon: Sparkles },
   { title: "Chat", url: "/chat", icon: MessageSquare },
+  { title: "Workflow", url: "/workflow", icon: KanbanSquare },
 ];
 
 export function AppSidebar() {
