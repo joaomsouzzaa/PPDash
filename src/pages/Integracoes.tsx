@@ -20,7 +20,7 @@ import {
   loginWithFacebook,
   logoutFromFacebook,
 } from "@/lib/facebook-sdk";
-import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache, clearRateLimitFlag } from "@/lib/meta-ads";
+import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache, clearRateLimitFlag, hydrateMetaTokenFromServer } from "@/lib/meta-ads";
 
 const WEBHOOK_VENDAS_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
 const WEBHOOK_LEADS_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-leads";
@@ -121,6 +121,15 @@ const Integracoes = () => {
 
   useEffect(() => {
     loadFacebookSDK();
+    // Conexão Meta vale entre dispositivos: hidrata o token salvo no banco.
+    (async () => {
+      const ok = await hydrateMetaTokenFromServer();
+      if (ok) {
+        setMetaConnected(true);
+        setTokenExpired(false);
+        setUserName(localStorage.getItem("meta_user_name"));
+      }
+    })();
   }, []);
 
   const handleConnect = async () => {

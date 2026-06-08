@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { ChevronDown } from "lucide-react";
 import type { Filters } from "@/lib/mockData";
-import { fetchAdAccounts, clearAdAccountsCache, type AdAccount, isTokenExpired, isGloballyRateLimited } from "@/lib/meta-ads";
+import { fetchAdAccounts, clearAdAccountsCache, type AdAccount, isTokenExpired, isGloballyRateLimited, hydrateMetaTokenFromServer } from "@/lib/meta-ads";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import { useCidades } from "@/hooks/useCidades";
@@ -90,9 +90,9 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
       });
   };
 
-  // Fetch on mount
+  // Fetch on mount — hidrata o token do banco antes (conexão vale entre dispositivos)
   useEffect(() => {
-    loadAccounts();
+    (async () => { await hydrateMetaTokenFromServer(); loadAccounts(); })();
   }, []);
 
   // Re-fetch when returning to tab

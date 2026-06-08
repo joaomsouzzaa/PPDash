@@ -16,16 +16,44 @@ export async function syncMetaTokenToServer(): Promise<void> {
     if (!token) return;
     const acc = localStorage.getItem("selected_ad_account");
     const account_id = acc && acc !== "all" ? acc : "act_1207875286360718";
+    const expires = localStorage.getItem("meta_token_expires_at");
+    const user_name = localStorage.getItem("meta_user_name");
+    const payload: any = { access_token: token, account_id };
+    if (expires) payload.token_expires_at = Number(expires);
+    if (user_name) payload.user_name = user_name;
     const { data: existing } = await (supabase as any)
       .from("meta_config").select("id,access_token").maybeSingle();
     if (existing?.id && existing.access_token === token) return; // já está atualizado
     if (existing?.id) {
-      await (supabase as any).from("meta_config").update({ access_token: token, account_id }).eq("id", existing.id);
+      await (supabase as any).from("meta_config").update(payload).eq("id", existing.id);
     } else {
-      await (supabase as any).from("meta_config").insert({ access_token: token, account_id });
+      await (supabase as any).from("meta_config").insert(payload);
     }
   } catch {
     /* silencioso — não atrapalha o dashboard */
+  }
+}
+
+// Carrega o token do Meta salvo no banco para o navegador atual, para a conexão
+// valer em qualquer dispositivo (não só onde foi conectado). Retorna true se hidratou.
+export async function hydrateMetaTokenFromServer(): Promise<boolean> {
+  try {
+    // Já tem token válido localmente? Não precisa.
+    if (localStorage.getItem("meta_access_token") && isTokenValid()) return false;
+    const { data } = await (supabase as any)
+      .from("meta_config").select("access_token,account_id,token_expires_at,user_name").maybeSingle();
+    if (!data?.access_token) return false;
+    // Token do banco expirado? Não hidrata (precisa reconectar de verdade).
+    if (data.token_expires_at && Date.now() >= Number(data.token_expires_at)) return false;
+    localStorage.setItem("meta_access_token", data.access_token);
+    localStorage.setItem("meta_connected", "true");
+    if (data.token_expires_at) localStorage.setItem("meta_token_expires_at", String(data.token_expires_at));
+    if (data.account_id) localStorage.setItem("selected_ad_account", data.account_id);
+    if (data.user_name) localStorage.setItem("meta_user_name", data.user_name);
+    localStorage.removeItem("meta_token_expired");
+    return true;
+  } catch {
+    return false;
   }
 }
 
