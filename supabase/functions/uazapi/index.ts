@@ -213,7 +213,7 @@ async function buildVarsList(supabase: any, n: any): Promise<Record<string, stri
 }
 
 Deno.serve(async (req) => {
-  console.log("uazapi v8");
+  console.log("uazapi v9 - rpc check");
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const json = (obj: unknown, status = 200) =>
     new Response(JSON.stringify(obj), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
