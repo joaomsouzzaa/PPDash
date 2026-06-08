@@ -295,6 +295,7 @@ export type Database = {
       }
       notificacao_logs: {
         Row: {
+          cidade: string | null
           created_at: string | null
           destinatario: string | null
           erro: string | null
@@ -304,6 +305,7 @@ export type Database = {
           status: string | null
         }
         Insert: {
+          cidade?: string | null
           created_at?: string | null
           destinatario?: string | null
           erro?: string | null
@@ -313,6 +315,7 @@ export type Database = {
           status?: string | null
         }
         Update: {
+          cidade?: string | null
           created_at?: string | null
           destinatario?: string | null
           erro?: string | null
