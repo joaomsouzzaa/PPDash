@@ -395,6 +395,71 @@ export type Database = {
         }
         Relationships: []
       }
+      projeto_assets: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          projeto_id: string
+          tipo: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          projeto_id: string
+          tipo?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          projeto_id?: string
+          tipo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projeto_assets_projeto_id_fkey"
+            columns: ["projeto_id"]
+            isOneToOne: false
+            referencedRelation: "projetos_design"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projetos_design: {
+        Row: {
+          cores: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          logo_posicao: string
+          nome: string
+          palavras_chave: string | null
+        }
+        Insert: {
+          cores?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          logo_posicao?: string
+          nome: string
+          palavras_chave?: string | null
+        }
+        Update: {
+          cores?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          logo_posicao?: string
+          nome?: string
+          palavras_chave?: string | null
+        }
+        Relationships: []
+      }
       tags: {
         Row: {
           created_at: string
