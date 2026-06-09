@@ -284,6 +284,11 @@ const Index = () => {
       setLoadingProjecao(false);
       return;
     }
+    // Espera as vendas carregarem antes de projetar (senão calcula com participantes=0 → pisca 0).
+    if (loadingVendas) {
+      setLoadingProjecao(true);
+      return;
+    }
 
     setLoadingProjecao(true);
     const calcProjection = async () => {
@@ -335,7 +340,7 @@ const Index = () => {
     };
 
     calcProjection();
-  }, [selectedCidade, isMetaConnected, filters.adAccount, kpi.participantes, cacParticipanteDisplay]);
+  }, [selectedCidade, isMetaConnected, filters.adAccount, kpi.participantes, cacParticipanteDisplay, loadingVendas]);
 
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
