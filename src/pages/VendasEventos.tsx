@@ -201,6 +201,10 @@ function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
       start = new Date(now);
       start.setDate(start.getDate() - 30);
       break;
+    case "90d":
+      start = new Date(now);
+      start.setDate(start.getDate() - 89); // 90 dias incl. hoje
+      break;
     case "this_month":
       start = new Date(now.getFullYear(), now.getMonth(), 1);
       break;
@@ -238,15 +242,10 @@ type VendaRow = {
 };
 
 const VendasEventos = () => {
-  const [dateRange, setDateRange] = useState(() => localStorage.getItem("vendas_date_range") || "30d");
-  const [startDate, setStartDate] = useState<Date | undefined>(() => {
-    const saved = localStorage.getItem("vendas_start_date");
-    return saved ? new Date(saved) : undefined;
-  });
-  const [endDate, setEndDate] = useState<Date | undefined>(() => {
-    const saved = localStorage.getItem("vendas_end_date");
-    return saved ? new Date(saved) : undefined;
-  });
+  // Filtro de data SEMPRE inicia em "últimos 90 dias" (não restaura o último escolhido).
+  const [dateRange, setDateRange] = useState<string>("90d");
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [city, setCity] = useState("all");
   const [tipoIngressoFilter, setTipoIngressoFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("aprovada");
@@ -1081,7 +1080,7 @@ const VendasEventos = () => {
 
       {/* Import CSV Dialog */}
       <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) resetImport(); }}>
-        <DialogContent className={importPreview.length > 0 ? "max-w-4xl" : "max-w-lg"}>
+        <DialogContent className={`${importPreview.length > 0 ? "max-w-4xl" : "max-w-lg"} overflow-hidden`}>
           <DialogHeader>
             <DialogTitle>Importar Vendas (CSV)</DialogTitle>
           </DialogHeader>
@@ -1143,8 +1142,8 @@ const VendasEventos = () => {
                 </div>
               )}
 
-              <div className="max-h-[360px] overflow-auto rounded-md border border-border">
-                <Table>
+              <div className="max-h-[360px] w-full overflow-auto rounded-md border border-border bg-card">
+                <Table className="min-w-[640px]">
                   <TableHeader className="sticky top-0 bg-card">
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Data</TableHead>
