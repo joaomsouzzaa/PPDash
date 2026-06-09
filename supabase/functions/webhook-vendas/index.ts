@@ -77,14 +77,15 @@ Deno.serve(async (req) => {
       const commissions = payload.Commissions || {};
       const tracking = payload.TrackingParameters || {};
       const productName = fixMojibake(product.product_name || product.name || "") || null;
-      // charge_amount vem em centavos (ex.: 24700 = R$ 247,00)
-      const chargeAmount = commissions.charge_amount ?? commissions.product_base_price;
+      // Usamos o PREÇO BASE do produto (sem juros de parcelamento no cartão), não o
+      // charge_amount (valor cobrado com acréscimo). Tudo em centavos (29700 = R$ 297,00).
+      const baseAmount = commissions.product_base_price ?? commissions.charge_amount;
 
       venda = {
         plataforma: "kiwify",
         id_transacao: payload.order_id || payload.Transaction?.id || null,
         status: mapStatus(payload.order_status || payload.webhook_event_type || payload.event || "aprovada"),
-        valor: chargeAmount != null ? Number(chargeAmount) / 100 : parseFloat(payload.order_price || payload.Transaction?.amount || "0"),
+        valor: baseAmount != null ? Number(baseAmount) / 100 : parseFloat(payload.order_price || payload.Transaction?.amount || "0"),
         quantidade: Array.isArray(payload.event_tickets) && payload.event_tickets.length > 0 ? payload.event_tickets.length : 1,
         nome_comprador: fixMojibake(customer.full_name || customer.name || "") || null,
         email_comprador: customer.email || null,
