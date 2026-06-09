@@ -3,7 +3,9 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/KpiCard";
-import { DateRangePicker } from "@/components/DateRangePicker";
+import { DashboardFilters } from "@/components/DashboardFilters";
+import { useCidades } from "@/hooks/useCidades";
+import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchAdAccounts, fetchAccountInsights, fetchDailyMetrics,
@@ -20,38 +22,42 @@ const fmtBRL = (n: number) => `R$ ${(n || 0).toLocaleString("pt-BR", { minimumFr
 const fmtNum = (n: number) => (n || 0).toLocaleString("pt-BR");
 const fmtPct = (n: number) => `${(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 
-async function getAccountIds(): Promise<string[]> {
-  const sel = localStorage.getItem("selected_ad_account");
-  if (sel && sel !== "all") return [sel];
-  const accounts = await fetchAdAccounts();
-  return accounts.map((a) => a.id);
-}
-
 export default function Performance() {
   const [metaConnected, setMetaConnected] = useState(() => localStorage.getItem("meta_connected") === "true");
   const init = (() => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 89); return { s, e }; })();
-  const [preset, setPreset] = useState("90d");
-  const [startDate, setStartDate] = useState<Date | undefined>(init.s);
-  const [endDate, setEndDate] = useState<Date | undefined>(init.e);
+  const [filters, setFilters] = useState<Filters>({
+    dateRange: "90d", startDate: init.s, endDate: init.e,
+    adAccount: localStorage.getItem("selected_ad_account") || "all",
+    city: "all", produtos: [],
+  });
+
+  const { data: cidades = [] } = useCidades();
+  const selectedCidade = cidades.find((c) => c.slug === filters.city);
+  const slug = filters.city !== "all" ? selectedCidade?.slug : undefined;
 
   useEffect(() => {
-    (async () => {
-      const ok = await hydrateMetaTokenFromServer();
-      if (ok) setMetaConnected(true);
-    })();
+    (async () => { if (await hydrateMetaTokenFromServer()) setMetaConnected(true); })();
   }, []);
 
   const enabled = metaConnected && !isTokenExpired();
 
+  const getAccountIds = async () => {
+    if (filters.adAccount !== "all") return [filters.adAccount];
+    const accounts = await fetchAdAccounts();
+    return accounts.map((a) => a.id);
+  };
+
+  const qkey = [filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.adAccount, slug];
+
   const { data: kpis, isLoading: loadingKpis } = useQuery({
-    queryKey: ["perf-kpis", startDate?.toISOString(), endDate?.toISOString(), preset],
+    queryKey: ["perf-kpis", ...qkey],
     enabled,
-    queryFn: async () => fetchAccountInsights(await getAccountIds(), startDate, endDate, preset),
+    queryFn: async () => fetchAccountInsights(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
   const { data: daily = [], isLoading: loadingDaily } = useQuery({
-    queryKey: ["perf-daily", startDate?.toISOString(), endDate?.toISOString(), preset],
+    queryKey: ["perf-daily", ...qkey],
     enabled,
-    queryFn: async () => fetchDailyMetrics(await getAccountIds(), startDate, endDate, preset),
+    queryFn: async () => fetchDailyMetrics(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
 
   const chartData = daily.map((d) => ({
@@ -59,6 +65,7 @@ export default function Performance() {
     Investimento: Math.round(d.spend),
     Cliques: d.clicks,
   }));
+  const L = (v: string) => (loadingKpis ? "Carregando..." : v);
 
   return (
     <SidebarProvider>
@@ -74,12 +81,7 @@ export default function Performance() {
           </header>
 
           <div className="p-6 space-y-6">
-            <DateRangePicker
-              preset={preset}
-              startDate={startDate}
-              endDate={endDate}
-              onApply={(p, s, e) => { setPreset(p); setStartDate(s); setEndDate(e); }}
-            />
+            <DashboardFilters filters={filters} onFiltersChange={setFilters} />
 
             {!enabled ? (
               <Card><CardContent className="py-10 text-center text-muted-foreground">
@@ -88,16 +90,16 @@ export default function Performance() {
             ) : (
               <>
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Resumo Executivo</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-                  <KpiCard title="Investimento Total" value={loadingKpis ? "..." : fmtBRL(kpis?.spend || 0)} icon={DollarSign} />
-                  <KpiCard title="Impressões" value={loadingKpis ? "..." : fmtNum(kpis?.impressions || 0)} icon={Eye} />
-                  <KpiCard title="CPM" value={loadingKpis ? "..." : fmtBRL(kpis?.cpm || 0)} icon={Layers} />
-                  <KpiCard title="CTR" value={loadingKpis ? "..." : fmtPct(kpis?.ctr || 0)} icon={Target} />
-                  <KpiCard title="Cliques" value={loadingKpis ? "..." : fmtNum(kpis?.clicks || 0)} icon={MousePointerClick} />
-                  <KpiCard title="CPC" value={loadingKpis ? "..." : fmtBRL(kpis?.cpc || 0)} icon={DollarSign} />
-                  <KpiCard title="Connect Rate" value={loadingKpis ? "..." : fmtPct(kpis?.connectRate || 0)} icon={Link2} />
-                  <KpiCard title="Page Views" value={loadingKpis ? "..." : fmtNum(kpis?.pageViews || 0)} icon={BarChart3} />
-                  <KpiCard title="Custo por Page View" value={loadingKpis ? "..." : fmtBRL(kpis?.costPerPageView || 0)} icon={CreditCard} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <KpiCard title="Investimento Total" value={L(fmtBRL(kpis?.spend || 0))} icon={DollarSign} />
+                  <KpiCard title="Impressões" value={L(fmtNum(kpis?.impressions || 0))} icon={Eye} />
+                  <KpiCard title="CPM" value={L(fmtBRL(kpis?.cpm || 0))} icon={Layers} />
+                  <KpiCard title="CTR" value={L(fmtPct(kpis?.ctr || 0))} icon={Target} />
+                  <KpiCard title="Cliques" value={L(fmtNum(kpis?.clicks || 0))} icon={MousePointerClick} />
+                  <KpiCard title="CPC" value={L(fmtBRL(kpis?.cpc || 0))} icon={DollarSign} />
+                  <KpiCard title="Connect Rate" value={L(fmtPct(kpis?.connectRate || 0))} icon={Link2} />
+                  <KpiCard title="Page Views" value={L(fmtNum(kpis?.pageViews || 0))} icon={BarChart3} />
+                  <KpiCard title="Custo por Page View" value={L(fmtBRL(kpis?.costPerPageView || 0))} icon={CreditCard} />
                 </div>
 
                 <Card>

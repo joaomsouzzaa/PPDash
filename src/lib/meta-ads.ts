@@ -399,22 +399,17 @@ function sumAction(actions: Array<{ action_type: string; value: string }> | unde
   return t;
 }
 
-/** KPIs agregados da conta (Resumo Executivo da Performance). */
+/** KPIs agregados da conta (Resumo Executivo da Performance). Filtra por cidade (slug) se informado. */
 export async function fetchAccountInsights(
-  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d"
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
 ): Promise<AccountInsights> {
   const timeRange = clampTimeRange(startDate && endDate
     ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
     : buildTimeRange(dateRange));
   const timeRangeParam = JSON.stringify(timeRange);
   const agg = { spend: 0, impressions: 0, clicks: 0, linkClicks: 0, reach: 0, pageViews: 0, checkouts: 0 };
-  await Promise.all(accountIds.map(async (id) => {
-    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
-      fields: "spend,impressions,clicks,inline_link_clicks,reach,actions",
-      time_range: timeRangeParam,
-    });
-    const r = res.data?.[0];
-    if (!r) return;
+  const variants = campaignSlug ? slugVariants(campaignSlug) : [];
+  const acc = (r: any) => {
     agg.spend += parseFloat(r.spend) || 0;
     agg.impressions += parseInt(r.impressions) || 0;
     agg.clicks += parseInt(r.clicks) || 0;
@@ -422,6 +417,20 @@ export async function fetchAccountInsights(
     agg.reach += parseInt(r.reach) || 0;
     agg.pageViews += sumAction(r.actions, ["landing_page_view"]);
     agg.checkouts += sumAction(r.actions, ["initiate_checkout", "omni_initiated_checkout", "offsite_conversion.fb_pixel_initiate_checkout"]);
+  };
+  await Promise.all(accountIds.map(async (id) => {
+    if (campaignSlug) {
+      const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
+        level: "campaign", fields: "campaign_name,spend,impressions,clicks,inline_link_clicks,reach,actions",
+        time_range: timeRangeParam, limit: "500",
+      });
+      for (const r of res.data || []) if (campaignMatchesSlug(r.campaign_name, variants, strictSales)) acc(r);
+    } else {
+      const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
+        fields: "spend,impressions,clicks,inline_link_clicks,reach,actions", time_range: timeRangeParam,
+      });
+      if (res.data?.[0]) acc(res.data[0]);
+    }
   }));
   return {
     ...agg,
@@ -433,20 +442,23 @@ export async function fetchAccountInsights(
   };
 }
 
-/** Série diária (data → gasto/impressões/cliques) para o gráfico da Performance. */
+/** Série diária (data → gasto/impressões/cliques) para o gráfico da Performance. Filtra por cidade (slug) se informado. */
 export async function fetchDailyMetrics(
-  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d"
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
 ): Promise<Array<{ date: string; spend: number; impressions: number; clicks: number }>> {
   const timeRange = clampTimeRange(startDate && endDate
     ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
     : buildTimeRange(dateRange));
   const timeRangeParam = JSON.stringify(timeRange);
+  const variants = campaignSlug ? slugVariants(campaignSlug) : [];
   const map = new Map<string, { spend: number; impressions: number; clicks: number }>();
   await Promise.all(accountIds.map(async (id) => {
-    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
-      fields: "spend,impressions,clicks", time_range: timeRangeParam, time_increment: "1", limit: "500",
-    });
+    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`,
+      campaignSlug
+        ? { level: "campaign", fields: "campaign_name,spend,impressions,clicks", time_range: timeRangeParam, time_increment: "1", limit: "500" }
+        : { fields: "spend,impressions,clicks", time_range: timeRangeParam, time_increment: "1", limit: "500" });
     for (const row of res.data || []) {
+      if (campaignSlug && !campaignMatchesSlug(row.campaign_name || "", variants, strictSales)) continue;
       const d = row.date_start;
       const cur = map.get(d) || { spend: 0, impressions: 0, clicks: 0 };
       cur.spend += parseFloat(row.spend) || 0;
