@@ -496,7 +496,9 @@ const Index = () => {
             </div>
 
             {/* Método de Pagamento depois */}
-            <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
+            <div className={tvMode ? "tv-pay" : ""}>
+              <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
+            </div>
             </div>
           </div>
         </main>

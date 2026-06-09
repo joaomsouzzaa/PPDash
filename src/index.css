@@ -124,7 +124,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 1.25rem 2rem;
+  padding: 2.5rem 4rem;
   gap: 1rem;
   /* distribui o espaço que sobra como respiro entre as linhas de métricas */
   justify-content: space-between;
@@ -188,28 +188,35 @@
 /* Wrapper dos gráficos: transparente no 16:9 (mantém o layout atual) */
 .tv-mode .tv-charts { display: contents; }
 
-/* ===== Modo 3:1 (3 TVs lado a lado / tela ultrawide) ===== */
-/* KPIs se espalham na largura (mais colunas) */
-.tv-mode.tv-3x1 .tv-content .grid {
-  grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
-  gap: 1rem 2rem;
-}
-/* fontes maiores para leitura à distância numa parede de TVs */
-.tv-mode.tv-3x1 .kpi-card .kpi-value {
-  font-size: clamp(1.8rem, 1.9vw, 3.2rem);
-}
-.tv-mode.tv-3x1 .kpi-card .kpi-title {
-  font-size: clamp(0.9rem, 0.95vw, 1.25rem);
-}
-/* os dois gráficos lado a lado na faixa inferior */
-.tv-mode.tv-3x1 .tv-charts {
+/* ===== Modo 3:1 = 3 telas 16:9 lado a lado =====
+   Coluna 1: métricas (KPIs) · Coluna 2: gráfico investimento · Coluna 3: método de pagamento */
+.tv-mode.tv-3x1 .tv-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  flex: 0 0 auto;
-  height: 36vh;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  align-items: stretch;
+  justify-content: initial;
 }
-.tv-mode.tv-3x1 .tv-charts .tv-chart { height: auto; max-height: none; }
-.tv-mode.tv-3x1 .tv-charts > * { min-width: 0; }
+.tv-mode.tv-3x1 .tv-content > * { min-width: 0; min-height: 0; }
+
+/* Coluna 1 — KPIs empilhados, 2 colunas internas, preenchendo a altura */
+.tv-mode.tv-3x1 > .tv-content > div:first-child {
+  display: flex; flex-direction: column; justify-content: space-evenly; gap: 1rem;
+}
+.tv-mode.tv-3x1 .tv-content .grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 1rem 1.25rem;
+}
+.tv-mode.tv-3x1 .kpi-card .kpi-value { font-size: clamp(1.6rem, 1.8vw, 3rem); }
+.tv-mode.tv-3x1 .kpi-card .kpi-title { font-size: clamp(0.85rem, 0.9vw, 1.2rem); }
+
+/* Colunas 2 e 3 — cada gráfico preenche a tela inteira da sua coluna */
+.tv-mode.tv-3x1 .tv-chart,
+.tv-mode.tv-3x1 .tv-pay { height: 100% !important; max-height: none; display: flex; flex-direction: column; min-height: 0; }
+.tv-mode.tv-3x1 .tv-pay > div { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.tv-mode.tv-3x1 .tv-pay > div > div:last-child { flex: 1 1 0; min-height: 0; }
+/* donut/área do gráfico de pagamento ocupa o espaço da coluna */
+.tv-mode.tv-3x1 .tv-pay .flex.flex-col { height: 100%; }
+.tv-mode.tv-3x1 .tv-pay [class*="h-[300px]"] { height: 100% !important; min-height: 0; }
 
 
