@@ -112,10 +112,12 @@ const DashboardGeral = () => {
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
   const [metaSpendMap, setMetaSpendMap] = useState<Map<string, number>>(new Map());
   const [projecaoMap, setProjecaoMap] = useState<Map<string, number | null>>(new Map());
+  const [loadingMeta, setLoadingMeta] = useState<boolean>(isMetaConnected);
 
   // Fetch Meta spend per city
   useEffect(() => {
-    if (!isMetaConnected || visibleCidades.length === 0) return;
+    if (!isMetaConnected || visibleCidades.length === 0) { setLoadingMeta(false); return; }
+    setLoadingMeta(true);
 
     const fetchSpend = async () => {
       try {
@@ -135,14 +137,8 @@ const DashboardGeral = () => {
 
               // Projection
               const dailyBudget = await fetchCampaignDailyBudget(accountIds, cidade.slug, true);
-              const eventDate = new Date(cidade.data_evento);
-              const today = new Date();
-              const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-              const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-              const daysRemaining = Math.max(0, differenceInDays(eventDateOnly, todayOnly) + 1);
-
-              // Will calculate projection after we have participantes
-              projMap.set(cidade.slug, daysRemaining > 0 && dailyBudget > 0 ? dailyBudget : null);
+              // Guarda o orçamento diário (a projeção final usa daysRemaining no cityKpis).
+              projMap.set(cidade.slug, dailyBudget > 0 ? dailyBudget : null);
             } catch {
               // ignore per-city errors
             }
@@ -153,6 +149,8 @@ const DashboardGeral = () => {
         setProjecaoMap(projMap);
       } catch {
         // ignore
+      } finally {
+        setLoadingMeta(false);
       }
     };
 
@@ -209,7 +207,9 @@ const DashboardGeral = () => {
         const today = new Date();
         const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
         const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const daysRemaining = Math.max(0, differenceInDays(eventDateOnly, todayOnly) + 1);
+        const diffDias = differenceInDays(eventDateOnly, todayOnly);
+        // Dia do evento só capta até as 12h; depois disso (ou evento passado) não projeta mais.
+        const daysRemaining = diffDias < 0 ? 0 : diffDias === 0 ? (today.getHours() < 12 ? 0.5 : 0) : diffDias + 0.5;
         const dailyNew = dailyBudgetOrNull / cacParticipante;
         projecao = Math.ceil(participantes + dailyNew * daysRemaining);
       }
@@ -256,7 +256,7 @@ const DashboardGeral = () => {
               }}
             />
 
-            {isLoading ? (
+            {(isLoading || loadingMeta) ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Card key={i}>
