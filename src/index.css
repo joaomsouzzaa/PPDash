@@ -236,11 +236,15 @@
 }
 /* CardContent preenche o resto */
 .tv-mode.tv-3x1 .tv-pay > div > div:last-child { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-/* Pizza: empilha donut em cima e legenda embaixo (não corta na largura) */
-.tv-mode.tv-3x1 .tv-pay > div > div:last-child > div {
-  flex-direction: column !important; height: 100%; gap: 1rem; justify-content: center;
+/* Pizza: empilha donut em cima e legenda embaixo, tudo centralizado */
+.tv-mode.tv-3x1 .tv-pay .flex.items-center {
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center;
+  height: 100%;
+  gap: 1rem;
 }
-.tv-mode.tv-3x1 .tv-pay > div > div:last-child > div > div { width: 100% !important; }
+.tv-mode.tv-3x1 .tv-pay .flex.items-center > * { width: 100% !important; }
 .tv-mode.tv-3x1 .tv-pay [class*="h-[300px]"] { height: auto !important; flex: 1 1 0; min-height: 0; }
 
 
