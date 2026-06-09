@@ -37,17 +37,17 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
   resumo_cidade: {
     label: "Resumo de cidade (agendado)",
     desc: "Resumo periódico de uma cidade",
-    vars: ["cidade", "participantes", "vips", "convidados", "bilheteria", "cac", "projecao", "investimento", "projecao_investimento"],
+    vars: ["cidade", "participantes", "vips", "convidados", "bilheteria", "resultado", "cac", "projecao", "investimento", "projecao_investimento"],
   },
   resumo_geral: {
     label: "Resumo geral diário (agendado)",
     desc: "Consolidado de todas as cidades, 1x/dia",
-    vars: ["total_cidades", "participantes_total", "bilheteria_total", "investimento_total", "data"],
+    vars: ["total_cidades", "participantes_total", "bilheteria_total", "investimento_total", "resultado_total", "data"],
   },
   manual: {
     label: "Manual / sob demanda",
     desc: "Enviado quando você clicar em Enviar. Usa o resumo da cidade selecionada.",
-    vars: ["cidade", "participantes", "vips", "convidados", "bilheteria", "cac", "projecao", "investimento", "projecao_investimento"],
+    vars: ["cidade", "participantes", "vips", "convidados", "bilheteria", "resultado", "cac", "projecao", "investimento", "projecao_investimento"],
   },
 };
 
@@ -381,9 +381,9 @@ export default function Notificacoes() {
       nome: "Fulano (teste)", produto: "Workshop Scale | São Paulo - SP", cidade: "São Paulo",
       valor: "R$ 247,00", tipo: "individual", quantidade: "1", pagamento: "pix",
       data: new Date().toLocaleString("pt-BR"),
-      participantes: "120", vips: "15", convidados: "8", bilheteria: "R$ 30.000,00",
+      participantes: "120", vips: "15", convidados: "8", bilheteria: "R$ 30.000,00", resultado: "R$ 18.000,00",
       cac: "R$ 180,00", projecao: "150", investimento: "R$ 12.000,00", projecao_investimento: "R$ 20.000,00",
-      total_cidades: "6", participantes_total: "540", bilheteria_total: "R$ 130.000,00", investimento_total: "R$ 60.000,00",
+      total_cidades: "6", participantes_total: "540", bilheteria_total: "R$ 130.000,00", investimento_total: "R$ 60.000,00", resultado_total: "R$ 70.000,00",
     };
     const valores: Record<string, string> = {};
     for (const [col, tpl] of Object.entries(form.sheets_mapa)) {

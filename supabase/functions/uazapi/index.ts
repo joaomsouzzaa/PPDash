@@ -207,6 +207,7 @@ async function resumoCidade(supabase: any, cidadeSlug: string | null) {
     cidade: cidadeNome,
     participantes, vips, convidados,
     bilheteria: fmtBRL(bilheteria),
+    resultado: fmtBRL(bilheteria - spendNum), // Bilheteria (+/-): bilheteria menos investimento
     cac, projecao, investimento, projecao_investimento,
     _bilheteriaNum: bilheteria, _investimentoNum: spendNum,
   };
@@ -229,6 +230,7 @@ async function resumoGeral(supabase: any): Promise<Record<string, string | numbe
     participantes_total: participantes,
     bilheteria_total: fmtBRL(bilheteria),
     investimento_total: fmtBRL(investimento),
+    resultado_total: fmtBRL(bilheteria - investimento), // Bilheteria (+/-) consolidada
     data: new Date().toLocaleDateString("pt-BR"),
   };
 }
