@@ -76,13 +76,16 @@ export default function PacotesArte() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {pacotes.map((p) => (
             <Card key={p.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setSelecionado(p)}>
-              <CardContent className="p-4 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <PackageIcon className="h-5 w-5 text-primary shrink-0" />
-                  <span className="font-medium truncate">{p.nome}</span>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PackageIcon className="h-5 w-5 text-primary shrink-0" />
+                    <span className="font-medium truncate">{p.nome}</span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0"
+                    onClick={(e) => { e.stopPropagation(); excluir(p); }}><Trash2 className="h-4 w-4" /></Button>
                 </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0"
-                  onClick={(e) => { e.stopPropagation(); excluir(p); }}><Trash2 className="h-4 w-4" /></Button>
+                <PacoteThumbs pacoteId={p.id} />
               </CardContent>
             </Card>
           ))}
@@ -96,6 +99,25 @@ export default function PacotesArte() {
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button><Button onClick={criar}>Criar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Miniaturas das artes do pacote (preview na lista).
+function PacoteThumbs({ pacoteId }: { pacoteId: string }) {
+  const { data: artes = [] } = useQuery({
+    queryKey: ["pacote_artes_thumbs", pacoteId],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("pacote_artes").select("id,url").eq("pacote_id", pacoteId).order("ordem").limit(6);
+      return (data || []) as { id: string; url: string }[];
+    },
+  });
+  if (artes.length === 0) return <p className="text-xs text-muted-foreground">Sem artes ainda</p>;
+  return (
+    <div className="flex gap-1.5 overflow-hidden">
+      {artes.map((a) => (
+        <img key={a.id} src={a.url} alt="" className="h-14 w-14 rounded object-cover border border-border shrink-0" />
+      ))}
     </div>
   );
 }
