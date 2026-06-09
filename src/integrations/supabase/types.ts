@@ -310,19 +310,25 @@ export type Database = {
           access_token: string | null
           account_id: string | null
           id: string
+          token_expires_at: number | null
           updated_at: string | null
+          user_name: string | null
         }
         Insert: {
           access_token?: string | null
           account_id?: string | null
           id?: string
+          token_expires_at?: number | null
           updated_at?: string | null
+          user_name?: string | null
         }
         Update: {
           access_token?: string | null
           account_id?: string | null
           id?: string
+          token_expires_at?: number | null
           updated_at?: string | null
+          user_name?: string | null
         }
         Relationships: []
       }
