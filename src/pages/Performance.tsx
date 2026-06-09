@@ -13,6 +13,7 @@ import {
 } from "@/lib/meta-ads";
 import {
   DollarSign, Eye, Layers, MousePointerClick, Target, TrendingUp, BarChart3, Link2, CreditCard,
+  ShoppingCart, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -100,6 +101,24 @@ export default function Performance() {
                   <KpiCard title="Connect Rate" value={L(fmtPct(kpis?.connectRate || 0))} icon={Link2} />
                   <KpiCard title="Page Views" value={L(fmtNum(kpis?.pageViews || 0))} icon={BarChart3} />
                   <KpiCard title="Custo por Page View" value={L(fmtBRL(kpis?.costPerPageView || 0))} icon={CreditCard} />
+                </div>
+
+                <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Conversão</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <KpiCard title="Conversão da LP" value={L(fmtPct(kpis?.convLP || 0))} icon={Target} />
+                  <KpiCard title="Inicialização de Checkout" value={L(fmtNum(kpis?.checkouts || 0))} icon={ShoppingCart} />
+                  <KpiCard title="Conversão do Checkout" value={L(fmtPct(kpis?.convCheckout || 0))} icon={Target} />
+                  <KpiCard title="Vendas (compras)" value={L(fmtNum(kpis?.purchases || 0))} icon={MousePointerClick} />
+                  <KpiCard title="CAC" value={L(fmtBRL(kpis?.cac || 0))} icon={DollarSign} />
+                </div>
+
+                <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Engajamento</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <KpiCard title="DMs Iniciadas" value={L(fmtNum(kpis?.dms || 0))} icon={MessageSquare} />
+                  <KpiCard title="Salvamentos" value={L(fmtNum(kpis?.saves || 0))} icon={Bookmark} />
+                  <KpiCard title="Reações" value={L(fmtNum(kpis?.reactions || 0))} icon={Heart} />
+                  <KpiCard title="Comentários" value={L(fmtNum(kpis?.comments || 0))} icon={MessageCircle} />
+                  <KpiCard title="Video Views" value={L(fmtNum(kpis?.videoViews || 0))} icon={PlayCircle} />
                 </div>
 
                 <Card>
