@@ -41,6 +41,8 @@ function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
       start = new Date(now); start.setDate(start.getDate() - 14); break;
     case "30d":
       start = new Date(now); start.setDate(start.getDate() - 30); break;
+    case "90d":
+      start = new Date(now); start.setDate(start.getDate() - 89); break; // 90 dias incl. hoje
     case "this_month":
       start = new Date(now.getFullYear(), now.getMonth(), 1); break;
     case "last_month": {
@@ -76,7 +78,7 @@ const fmt = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const DashboardGeral = () => {
-  const [dateRange, setDateRange] = useState(() => localStorage.getItem("geral_date_range") || "30d");
+  const [dateRange, setDateRange] = useState(() => localStorage.getItem("geral_date_range") || "90d");
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
     const saved = localStorage.getItem("geral_start_date");
     return saved ? new Date(saved) : undefined;

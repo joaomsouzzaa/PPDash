@@ -24,6 +24,7 @@ const presets = [
   { label: "Últimos 7 dias", value: "7d" },
   { label: "Últimos 14 dias", value: "14d" },
   { label: "Últimos 30 dias", value: "30d" },
+  { label: "Últimos 90 dias", value: "90d" },
   { label: "Este mês", value: "this_month" },
   { label: "Mês passado", value: "last_month" },
   { label: "Vitalício", value: "lifetime" },
@@ -47,6 +48,8 @@ function getPresetRange(value: string): { from: Date; to: Date } {
       return { from: subDays(today, 13), to: today };
     case "30d":
       return { from: subDays(today, 29), to: today };
+    case "90d":
+      return { from: subDays(today, 89), to: today };
     case "this_month":
       return { from: startOfMonth(today), to: today };
     case "last_month": {

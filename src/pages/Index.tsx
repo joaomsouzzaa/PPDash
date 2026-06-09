@@ -41,7 +41,7 @@ const Index = () => {
     const savedEndDate = localStorage.getItem("dashboard11_end_date");
     const savedCity = localStorage.getItem("selected_city");
     return {
-      dateRange: savedDateRange || "30d",
+      dateRange: savedDateRange || "90d",
       startDate: savedStartDate ? new Date(savedStartDate) : undefined,
       endDate: savedEndDate ? new Date(savedEndDate) : undefined,
       adAccount: savedAccount || "all",
