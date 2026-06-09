@@ -71,6 +71,7 @@ const Index = () => {
   const [loadingSpend, setLoadingSpend] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [projecaoParticipantes, setProjecaoParticipantes] = useState<number | null>(null);
+  const [loadingProjecao, setLoadingProjecao] = useState(false);
   const [dailySpendMap, setDailySpendMap] = useState<Map<string, number>>(new Map());
 
   const { data: cidades = [] } = useCidades();
@@ -270,13 +271,21 @@ const Index = () => {
     ? kpi.bilheteriaTotal - metaInvestimento
     : kpi.lucro;
 
+  // Enquanto carrega (1ª carga ou troca de cidade/período), mostra "Carregando..."
+  // em vez de piscar valor antigo → 0 → real.
+  const carregando = loadingVendas;
+  const sv = (v: string) => (carregando ? "Carregando..." : v);              // métricas de vendas
+  const svMeta = (v: string) => (carregando || loadingSpend ? "Carregando..." : v); // métricas que dependem do Meta
+
   // Calculate projection using campaign's configured daily budget
   useEffect(() => {
     if (!selectedCidade || !isMetaConnected) {
       setProjecaoParticipantes(null);
+      setLoadingProjecao(false);
       return;
     }
 
+    setLoadingProjecao(true);
     const calcProjection = async () => {
       try {
         let accountIds: string[];
@@ -320,6 +329,8 @@ const Index = () => {
         setProjecaoParticipantes(projected);
       } catch {
         setProjecaoParticipantes(null);
+      } finally {
+        setLoadingProjecao(false);
       }
     };
 
@@ -384,22 +395,22 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 title="Investimento Total"
-                value={loadingSpend ? "Carregando..." : fmt(investimentoDisplay)}
+                value={svMeta(fmt(investimentoDisplay))}
                 icon={DollarSign}
               />
               <KpiCard
                 title="Bilheteria Total"
-                value={fmt(kpi.bilheteriaTotal)}
+                value={sv(fmt(kpi.bilheteriaTotal))}
                 icon={TrendingUp}
               />
               <KpiCard
                 title="CAC por Venda"
-                value={fmt(cacVendaDisplay)}
+                value={svMeta(fmt(cacVendaDisplay))}
                 icon={Target}
               />
               <KpiCard
                 title="CAC por Participante"
-                value={fmt(cacParticipanteDisplay)}
+                value={svMeta(fmt(cacParticipanteDisplay))}
                 icon={Users}
               />
             </div>
@@ -408,22 +419,22 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 title="Total de Participantes"
-                value={String(kpi.participantes)}
+                value={sv(String(kpi.participantes))}
                 icon={Users}
               />
               <KpiCard
                 title="Total de VIPs"
-                value={String(kpi.totalVips)}
+                value={sv(String(kpi.totalVips))}
                 icon={Crown}
               />
               <KpiCard
                 title="Convidados"
-                value={String(kpi.totalConvidados)}
+                value={sv(String(kpi.totalConvidados))}
                 icon={Gift}
               />
               <KpiCard
                 title="Projeção de Participantes"
-                value={projecaoParticipantes !== null ? String(projecaoParticipantes) : "—"}
+                value={(carregando || loadingProjecao) ? "Carregando..." : (projecaoParticipantes !== null ? String(projecaoParticipantes) : "—")}
                 icon={BarChart3}
               />
             </div>
@@ -432,17 +443,17 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <KpiCard
                 title="Vendas Individuais"
-                value={String(kpi.vendasIndividuais)}
+                value={sv(String(kpi.vendasIndividuais))}
                 icon={User}
               />
               <KpiCard
                 title="Vendas Duplas"
-                value={String(kpi.vendasDuplas)}
+                value={sv(String(kpi.vendasDuplas))}
                 icon={Users2}
               />
               <KpiCard
                 title="Ticket Médio"
-                value={fmt(kpi.ticketMedio)}
+                value={sv(fmt(kpi.ticketMedio))}
                 icon={ShoppingCart}
               />
             </div>
@@ -451,17 +462,17 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <KpiCard
                 title="Bilheteria Ingressos"
-                value={fmt(kpi.bilheteriaIngressos)}
+                value={sv(fmt(kpi.bilheteriaIngressos))}
                 icon={Ticket}
               />
               <KpiCard
                 title="Bilheteria VIP"
-                value={fmt(kpi.bilheteriaVip)}
+                value={sv(fmt(kpi.bilheteriaVip))}
                 icon={Gift}
               />
               <KpiCard
                 title="Bilheteria (+/-)"
-                value={fmt(lucroDisplay)}
+                value={svMeta(fmt(lucroDisplay))}
                 icon={Banknote}
               />
             </div>
