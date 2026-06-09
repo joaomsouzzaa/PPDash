@@ -207,9 +207,9 @@
 }
 .tv-mode.tv-3x1 .tv-content .grid {
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 0.6rem 1rem !important;
-  max-width: 88%;        /* estreita os cards e dá respiro nas laterais */
-  margin-left: auto; margin-right: auto; width: 100%;
+  gap: 0.6rem 0.9rem !important;
+  max-width: 74%;        /* espreme os cards (menos esticado na horizontal) */
+  margin-left: 0; margin-right: auto; width: 100%;  /* alinhado à esquerda, folga à direita */
 }
 .tv-mode.tv-3x1 .kpi-card { padding: 0.55rem 0.9rem !important; }
 .tv-mode.tv-3x1 .kpi-card .kpi-value {
