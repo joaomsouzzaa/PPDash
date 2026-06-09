@@ -32,7 +32,7 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
   nova_venda: {
     label: "Nova venda",
     desc: "Dispara quando uma venda é registrada",
-    vars: ["nome", "produto", "cidade", "valor", "tipo", "quantidade", "pagamento", "data"],
+    vars: ["nome", "email", "telefone", "documento", "produto", "cidade", "valor", "tipo", "quantidade", "pagamento", "data"],
   },
   resumo_cidade: {
     label: "Resumo de cidade (agendado)",
@@ -378,7 +378,8 @@ export default function Notificacoes() {
     if (!form.sheets_spreadsheet_id || !form.sheets_aba) { toast.error("Selecione planilha e aba"); return; }
     setTestandoSheets(true);
     const exemplo: Record<string, string> = {
-      nome: "Fulano (teste)", produto: "Workshop Scale | São Paulo - SP", cidade: "São Paulo",
+      nome: "Fulano (teste)", email: "fulano@email.com", telefone: "5511999999999", documento: "000.000.000-00",
+      produto: "Workshop Scale | São Paulo - SP", cidade: "São Paulo",
       valor: "R$ 247,00", tipo: "individual", quantidade: "1", pagamento: "pix",
       data: new Date().toLocaleString("pt-BR"),
       participantes: "120", vips: "15", convidados: "8", bilheteria: "R$ 30.000,00", bilheteria_resultado: "R$ 18.000,00",

@@ -92,6 +92,9 @@ function formatTipo(s: string): string {
 function varsDaVenda(v: any): Record<string, string | number> {
   return {
     nome: v.nome_comprador || "",
+    email: v.email_comprador || "",
+    telefone: v.telefone_comprador || "",
+    documento: v.documento || "",
     produto: v.produto || "",
     cidade: v.cidade || "",
     valor: fmtBRL(v.valor || 0),
