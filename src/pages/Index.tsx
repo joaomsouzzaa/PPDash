@@ -72,6 +72,7 @@ const Index = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [projecaoParticipantes, setProjecaoParticipantes] = useState<number | null>(null);
   const [loadingProjecao, setLoadingProjecao] = useState(false);
+  const [spendFor, setSpendFor] = useState(""); // assinatura do filtro a que o metaInvestimento pertence
   const [dailySpendMap, setDailySpendMap] = useState<Map<string, number>>(new Map());
 
   const { data: cidades = [] } = useCidades();
@@ -215,8 +216,10 @@ const Index = () => {
         accountIds = accounts.map((a) => a.id);
       }
 
+      const chave = `${filters.adAccount}|${filters.dateRange}|${filters.startDate?.toISOString() || ""}|${filters.endDate?.toISOString() || ""}|${selectedCidade?.slug || "all"}`;
       if (accountIds.length === 0) {
         setMetaInvestimento(0);
+        setSpendFor(chave);
         return;
       }
 
@@ -228,6 +231,7 @@ const Index = () => {
       const totalSpend = results.reduce((sum, r) => sum + r.spend, 0);
       setMetaInvestimento(totalSpend);
       setDailySpendMap(dailyBreakdown);
+      setSpendFor(chave);
     } catch {
       setMetaInvestimento(null);
     } finally {
@@ -271,11 +275,15 @@ const Index = () => {
     ? kpi.bilheteriaTotal - metaInvestimento
     : kpi.lucro;
 
+  // Assinatura do filtro atual (conta + período + cidade) para o investimento Meta.
+  const spendKey = `${filters.adAccount}|${filters.dateRange}|${filters.startDate?.toISOString() || ""}|${filters.endDate?.toISOString() || ""}|${selectedCidade?.slug || "all"}`;
+
   // Enquanto carrega (1ª carga ou troca de cidade/período), mostra "Carregando..."
   // em vez de piscar valor antigo → 0 → real.
   const carregando = loadingVendas;
   const sv = (v: string) => (carregando ? "Carregando..." : v);              // métricas de vendas
-  const svMeta = (v: string) => (carregando || loadingSpend ? "Carregando..." : v); // métricas que dependem do Meta
+  // Métricas que dependem do Meta: só mostra quando o valor corresponde ao filtro atual.
+  const svMeta = (v: string) => (carregando || loadingSpend || spendFor !== spendKey ? "Carregando..." : v);
 
   // Calculate projection using campaign's configured daily budget
   useEffect(() => {
