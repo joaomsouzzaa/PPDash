@@ -82,6 +82,12 @@ async function enviarSheets(n: any, vars: Record<string, string | number>) {
   } catch (e) { console.log("Sheets append falhou:", (e as any)?.message || e); }
 }
 
+// "vip_duplo" -> "Vip Duplo", "convite" -> "Convite" (tira _ e capitaliza cada palavra)
+function formatTipo(s: string): string {
+  return (s || "").split(/[_\s]+/).filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+}
+
 // Monta as variáveis a partir de uma venda
 function varsDaVenda(v: any): Record<string, string | number> {
   return {
@@ -89,7 +95,7 @@ function varsDaVenda(v: any): Record<string, string | number> {
     produto: v.produto || "",
     cidade: v.cidade || "",
     valor: fmtBRL(v.valor || 0),
-    tipo: v.tipo_ingresso || "",
+    tipo: formatTipo(v.tipo_ingresso || ""),
     quantidade: v.quantidade || 1,
     pagamento: v.metodo_pagamento || "",
     data: v.data_venda ? new Date(v.data_venda).toLocaleString("pt-BR") : "",
