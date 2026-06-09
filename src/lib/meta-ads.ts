@@ -386,6 +386,80 @@ export async function fetchDailySpendBreakdown(
   }
 }
 
+export interface AccountInsights {
+  spend: number; impressions: number; clicks: number; linkClicks: number;
+  reach: number; pageViews: number; checkouts: number;
+  cpm: number; ctr: number; cpc: number; connectRate: number; costPerPageView: number;
+}
+
+function sumAction(actions: Array<{ action_type: string; value: string }> | undefined, types: string[]): number {
+  if (!actions) return 0;
+  let t = 0;
+  for (const a of actions) if (types.includes(a.action_type)) t += parseFloat(a.value) || 0;
+  return t;
+}
+
+/** KPIs agregados da conta (Resumo Executivo da Performance). */
+export async function fetchAccountInsights(
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d"
+): Promise<AccountInsights> {
+  const timeRange = clampTimeRange(startDate && endDate
+    ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
+    : buildTimeRange(dateRange));
+  const timeRangeParam = JSON.stringify(timeRange);
+  const agg = { spend: 0, impressions: 0, clicks: 0, linkClicks: 0, reach: 0, pageViews: 0, checkouts: 0 };
+  await Promise.all(accountIds.map(async (id) => {
+    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
+      fields: "spend,impressions,clicks,inline_link_clicks,reach,actions",
+      time_range: timeRangeParam,
+    });
+    const r = res.data?.[0];
+    if (!r) return;
+    agg.spend += parseFloat(r.spend) || 0;
+    agg.impressions += parseInt(r.impressions) || 0;
+    agg.clicks += parseInt(r.clicks) || 0;
+    agg.linkClicks += parseInt(r.inline_link_clicks) || 0;
+    agg.reach += parseInt(r.reach) || 0;
+    agg.pageViews += sumAction(r.actions, ["landing_page_view"]);
+    agg.checkouts += sumAction(r.actions, ["initiate_checkout", "omni_initiated_checkout", "offsite_conversion.fb_pixel_initiate_checkout"]);
+  }));
+  return {
+    ...agg,
+    cpm: agg.impressions > 0 ? (agg.spend / agg.impressions) * 1000 : 0,
+    ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : 0,
+    cpc: agg.clicks > 0 ? agg.spend / agg.clicks : 0,
+    connectRate: agg.linkClicks > 0 ? (agg.pageViews / agg.linkClicks) * 100 : 0,
+    costPerPageView: agg.pageViews > 0 ? agg.spend / agg.pageViews : 0,
+  };
+}
+
+/** Série diária (data → gasto/impressões/cliques) para o gráfico da Performance. */
+export async function fetchDailyMetrics(
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d"
+): Promise<Array<{ date: string; spend: number; impressions: number; clicks: number }>> {
+  const timeRange = clampTimeRange(startDate && endDate
+    ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
+    : buildTimeRange(dateRange));
+  const timeRangeParam = JSON.stringify(timeRange);
+  const map = new Map<string, { spend: number; impressions: number; clicks: number }>();
+  await Promise.all(accountIds.map(async (id) => {
+    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
+      fields: "spend,impressions,clicks", time_range: timeRangeParam, time_increment: "1", limit: "500",
+    });
+    for (const row of res.data || []) {
+      const d = row.date_start;
+      const cur = map.get(d) || { spend: 0, impressions: 0, clicks: 0 };
+      cur.spend += parseFloat(row.spend) || 0;
+      cur.impressions += parseInt(row.impressions) || 0;
+      cur.clicks += parseInt(row.clicks) || 0;
+      map.set(d, cur);
+    }
+  }));
+  return Array.from(map.entries())
+    .map(([date, v]) => ({ date, ...v }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Fetch the sum of daily budgets for active campaigns matching a slug.
  *  Checks campaign-level daily_budget first, then falls back to adset-level budgets. */
 export async function fetchCampaignDailyBudget(

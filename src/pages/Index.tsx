@@ -365,7 +365,7 @@ const Index = () => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => entrarTvMode("16:9")}>📺 16:9 (1 TV)</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => entrarTvMode("3:1")}>🖥️🖥️🖥️ 3:1 (3 TVs lado a lado)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => entrarTvMode("3:1")}>🖥️ 3:1 (3 TVs lado a lado)</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
