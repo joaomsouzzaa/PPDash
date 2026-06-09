@@ -36,14 +36,12 @@ import { differenceInDays } from "date-fns";
 const Index = () => {
   const [filters, setFilters] = useState<Filters>(() => {
     const savedAccount = localStorage.getItem("selected_ad_account");
-    const savedDateRange = localStorage.getItem("dashboard11_date_range");
-    const savedStartDate = localStorage.getItem("dashboard11_start_date");
-    const savedEndDate = localStorage.getItem("dashboard11_end_date");
     const savedCity = localStorage.getItem("selected_city");
+    // Filtro de data SEMPRE inicia em "últimos 90 dias" (não restaura o último escolhido).
     return {
-      dateRange: savedDateRange || "90d",
-      startDate: savedStartDate ? new Date(savedStartDate) : undefined,
-      endDate: savedEndDate ? new Date(savedEndDate) : undefined,
+      dateRange: "90d",
+      startDate: undefined,
+      endDate: undefined,
       adAccount: savedAccount || "all",
       city: savedCity || "all",
       produtos: [],

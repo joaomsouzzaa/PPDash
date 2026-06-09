@@ -78,15 +78,10 @@ const fmt = (v: number) =>
   `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const DashboardGeral = () => {
-  const [dateRange, setDateRange] = useState(() => localStorage.getItem("geral_date_range") || "90d");
-  const [startDate, setStartDate] = useState<Date | undefined>(() => {
-    const saved = localStorage.getItem("geral_start_date");
-    return saved ? new Date(saved) : undefined;
-  });
-  const [endDate, setEndDate] = useState<Date | undefined>(() => {
-    const saved = localStorage.getItem("geral_end_date");
-    return saved ? new Date(saved) : undefined;
-  });
+  // Filtro de data SEMPRE inicia em "últimos 90 dias" (não restaura o último escolhido).
+  const [dateRange, setDateRange] = useState<string>("90d");
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
   const { data: cidades = [] } = useCidades();
   const hiddenCidades = getHiddenCidades();
