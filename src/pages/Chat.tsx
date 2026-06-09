@@ -21,7 +21,9 @@ export default function Chat() {
   const [messages, setMessages] = useState<Mensagem[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pensando, setPensando] = useState<string>(""); // nome de quem está "pensando" agora
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   // Ditado por voz: anexa o texto reconhecido ao input.
   const { supported: micSupported, listening, toggle: toggleMic } = useSpeechToText(
@@ -65,6 +67,7 @@ export default function Chat() {
     if (!agenteId) { toast.error("Selecione um agente"); return; }
     setInput("");
     setLoading(true);
+    setPensando(agenteAtual?.nome || "CEO");
 
     try {
       // Cria a conversa na primeira mensagem
@@ -103,13 +106,21 @@ export default function Chat() {
       const novasMsgs: Mensagem[] = []; // acumula p/ persistir no fim
       let teveStep = false;
 
-      const processar = (obj: any) => {
+      // Deriva quem "pensa" a seguir: o destinatário (depois do →) do passo atual.
+      const proximoAtor = (autor: string) => (autor.includes("→") ? autor.split("→").pop()!.trim() : "");
+
+      const processar = async (obj: any) => {
         if (obj.type === "step" && obj.step) {
+          // Leve delay pra a conversa do time parecer natural (não tudo de uma vez).
+          await sleep(700);
           teveStep = true;
           const m: Mensagem = { role: "assistant", conteudo: `**${obj.step.autor}**\n${obj.step.conteudo}` };
           novasMsgs.push(m);
-          setMessages((prev) => [...prev, m]); // aparece na hora
+          setMessages((prev) => [...prev, m]);
+          const next = proximoAtor(obj.step.autor || "");
+          if (next) setPensando(next); // ex.: "CEO → Copy" → agora "Copy" está pensando
         } else if (obj.type === "done") {
+          await sleep(500);
           const reply = obj.reply || "(sem resposta)";
           const m: Mensagem = { role: "assistant", conteudo: teveStep ? `**${agenteAtual?.nome || "CEO"}**\n${reply}` : reply };
           novasMsgs.push(m);
@@ -128,10 +139,10 @@ export default function Chat() {
         const linhas = buffer.split("\n");
         buffer = linhas.pop() || "";
         for (const linha of linhas) {
-          if (linha.trim()) processar(JSON.parse(linha));
+          if (linha.trim()) await processar(JSON.parse(linha));
         }
       }
-      if (buffer.trim()) processar(JSON.parse(buffer));
+      if (buffer.trim()) await processar(JSON.parse(buffer));
 
       // Persiste todas as mensagens geradas.
       if (novasMsgs.length) {
@@ -146,6 +157,7 @@ export default function Chat() {
       setMessages((prev) => [...prev, { role: "assistant", conteudo: `⚠️ ${e?.message || "Erro"}` }]);
     } finally {
       setLoading(false);
+      setPensando("");
     }
   };
 
@@ -214,7 +226,7 @@ export default function Chat() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-muted rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> {agenteAtual?.nome || "Agente"} está pensando...
+                    <Loader2 className="h-4 w-4 animate-spin" /> {pensando || agenteAtual?.nome || "Agente"} está pensando...
                   </div>
                 </div>
               )}
