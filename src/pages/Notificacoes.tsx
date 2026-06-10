@@ -75,6 +75,8 @@ const emptyForm = {
   mensagem: "",
   cidade_slug: null as string | null,
   horario: "09:00" as string | null,
+  disparo_dia_evento: false,
+  horario_evento: "12:00" as string | null,
   sheets_ativo: false,
   sheets_spreadsheet_id: "" as string,
   sheets_spreadsheet_nome: "" as string,
@@ -264,6 +266,8 @@ export default function Notificacoes() {
       nome: n.nome, gatilho: n.gatilho, ativo: n.ativo,
       destinatarios: dests, mensagem: n.mensagem,
       cidade_slug: n.cidade_slug, horario: n.horario || "09:00",
+      disparo_dia_evento: (n as any).disparo_dia_evento || false,
+      horario_evento: (n as any).horario_evento || "12:00",
       sheets_ativo: (n as any).sheets_ativo || false,
       sheets_spreadsheet_id: (n as any).sheets_spreadsheet_id || "",
       sheets_spreadsheet_nome: (n as any).sheets_spreadsheet_nome || "",
@@ -282,6 +286,8 @@ export default function Notificacoes() {
     const payload = {
       nome: form.nome, gatilho: form.gatilho, ativo: form.ativo,
       mensagem: form.mensagem, cidade_slug: form.cidade_slug, horario: form.horario,
+      disparo_dia_evento: form.disparo_dia_evento,
+      horario_evento: form.horario_evento,
       destinatarios: dests,
       // legado (1º destinatário) para compatibilidade
       destinatario_tipo: dests[0].tipo, destinatario: dests[0].valor, destinatario_nome: dests[0].nome || null,
@@ -694,6 +700,27 @@ export default function Notificacoes() {
               <div className="space-y-1">
                 <Label>Horário do envio</Label>
                 <Input type="time" value={form.horario || ""} onChange={(e) => setForm({ ...form, horario: e.target.value })} />
+              </div>
+            )}
+
+            {form.gatilho === "resumo_cidade" && (
+              <div className="md:col-span-2 space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>Disparo extra no dia do evento</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      No dia do evento, dispara também só da cidade do evento daquele dia (ignora as demais)
+                      e envia <strong>apenas para os números</strong> (não para grupos).
+                    </p>
+                  </div>
+                  <Switch checked={form.disparo_dia_evento} onCheckedChange={(v) => setForm({ ...form, disparo_dia_evento: v })} />
+                </div>
+                {form.disparo_dia_evento && (
+                  <div className="space-y-1">
+                    <Label>Horário do disparo no dia do evento</Label>
+                    <Input type="time" value={form.horario_evento || ""} onChange={(e) => setForm({ ...form, horario_evento: e.target.value })} />
+                  </div>
+                )}
               </div>
             )}
 

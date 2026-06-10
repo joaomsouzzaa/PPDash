@@ -56,10 +56,13 @@ async function enviarTexto(cfg: any, destinatario: string, mensagem: string) {
 }
 
 // Lista de destinatários de uma notificação (novo formato `destinatarios` ou legado)
-function destinatariosDe(n: any): string[] {
+function destinatariosDe(n: any, soNumeros = false): string[] {
   if (Array.isArray(n.destinatarios) && n.destinatarios.length) {
-    return n.destinatarios.map((d: any) => d.valor).filter(Boolean);
+    return n.destinatarios
+      .filter((d: any) => !soNumeros || d.tipo === "numero")
+      .map((d: any) => d.valor).filter(Boolean);
   }
+  if (soNumeros && n.destinatario_tipo !== "numero") return [];
   return n.destinatario ? [n.destinatario] : [];
 }
 
@@ -252,6 +255,23 @@ function eventoAtivo(dataEvento: string | null): boolean {
   if (!dataEvento) return true;
   return String(dataEvento).slice(0, 10) >= hojeSPstr();
 }
+// Data do evento (YYYY-MM-DD) no fuso de São Paulo.
+function eventoDataSP(dataEvento: string | null): string {
+  if (!dataEvento) return "";
+  return new Date(dataEvento).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+// Slugs das cidades cujo evento é HOJE (respeitando a cidade específica da notificação, se houver).
+async function slugsEventoHoje(supabase: any, n: any): Promise<string[]> {
+  const { data: cids } = await supabase.from("cidades").select("slug,data_evento");
+  const hoje = hojeSPstr();
+  const eventoHoje = (cids || []).filter((c: any) => eventoDataSP(c.data_evento) === hoje);
+  if (!n.cidade_slug) return eventoHoje.map((c: any) => c.slug);
+  const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s-]/g, "");
+  const parts = String(n.cidade_slug).split(",").map((p: string) => norm(p)).filter(Boolean);
+  return eventoHoje
+    .filter((c: any) => { const cs = norm(c.slug); return parts.some((p) => p === cs || cs.includes(p) || p.includes(cs)); })
+    .map((c: any) => c.slug);
+}
 
 // Resumo consolidado de todas as cidades ativas (gatilho resumo_geral).
 async function resumoGeral(supabase: any): Promise<Record<string, string | number>> {
@@ -419,13 +439,30 @@ Deno.serve(async (req) => {
         const agora = payload.horario || new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
         const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).in("gatilho", ["resumo_cidade", "resumo_geral"]);
         let enviados = 0;
+        const hhmm = agora.slice(0, 5);
         for (const n of notifs || []) {
-          if ((n.horario || "").slice(0, 5) !== agora.slice(0, 5)) continue;
-          // 1 mensagem por cidade ativa (quando "todas") — uma após a outra
-          const varsList = await buildVarsList(supabase, n);
+          // Disparo normal (ex.: 9h): todas as cidades ativas.
+          const normalMatch = (n.horario || "").slice(0, 5) === hhmm;
+          // Disparo extra NO DIA do evento (ex.: 12h): só a(s) cidade(s) com evento hoje.
+          const eventoMatch = n.disparo_dia_evento && n.gatilho === "resumo_cidade"
+            && (n.horario_evento || "12:00").slice(0, 5) === hhmm;
+          if (!normalMatch && !eventoMatch) continue;
+
+          let varsList: Record<string, string | number>[];
+          if (normalMatch) {
+            varsList = await buildVarsList(supabase, n);
+          } else {
+            // Só cidades cujo evento é hoje (ignora as demais).
+            const slugs = await slugsEventoHoje(supabase, n);
+            varsList = [];
+            for (const slug of slugs) varsList.push(await resumoCidade(supabase, slug));
+          }
+          // No disparo do dia do evento: só números (ignora grupos). No normal: todos.
+          const soEventoDia = eventoMatch && !normalMatch;
+          const dests = destinatariosDe(n, soEventoDia);
           for (const vars of varsList) {
             const msg = render(n.mensagem, vars);
-            for (const dest of destinatariosDe(n)) {
+            for (const dest of dests) {
               try {
                 await enviarTexto(cfg, dest, msg);
                 await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
