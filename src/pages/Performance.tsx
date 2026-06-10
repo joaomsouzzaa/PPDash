@@ -126,7 +126,7 @@ export default function Performance() {
                   <CardHeader><CardTitle className="text-base">Funil de Conversão</CardTitle></CardHeader>
                   <CardContent>
                     {loadingKpis ? (
-                      <div className="h-[160px] flex items-center justify-center text-muted-foreground">Carregando...</div>
+                      <div className="h-[170px] flex items-center justify-center text-muted-foreground">Carregando...</div>
                     ) : (() => {
                       const stages = [
                         { label: "Impressões", value: kpis?.impressions || 0 },
@@ -136,30 +136,44 @@ export default function Performance() {
                         { label: "Vendas", value: kpis?.purchases || 0 },
                       ];
                       const top = stages[0].value || 1;
+                      const N = stages.length;
+                      const pcts = stages.map((s) => s.value / top); // 0..1 relativo ao topo
+                      // Pontos da área do funil (viewBox 0..100). Banda centralizada que afunila.
+                      const x = (i: number) => (i / (N - 1)) * 100;
+                      const halfPad = 6; // margem vertical
+                      const topY = (p: number) => halfPad + (1 - p) * (50 - halfPad);
+                      const botY = (p: number) => 100 - topY(p);
+                      const topPts = pcts.map((p, i) => `${x(i)},${topY(p)}`);
+                      const botPts = pcts.map((p, i) => `${x(i)},${botY(p)}`).reverse();
+                      const pathD = `M ${topPts.join(" L ")} L ${botPts.join(" L ")} Z`;
                       return (
                         <div>
-                          <div className="flex items-end gap-2 h-[150px]">
-                            {stages.map((s) => {
-                              const hPct = Math.max(8, (s.value / top) * 100);
-                              return (
-                                <div key={s.label} className="flex-1 flex flex-col items-center justify-end h-full">
-                                  <span className="text-sm font-bold mb-1">{fmtNum(s.value)}</span>
-                                  <div className="w-full rounded-t-md" style={{ height: `${hPct}%`, background: "linear-gradient(180deg, #ff2d75, #bf1d57)" }} />
-                                </div>
-                              );
-                            })}
+                          {/* rótulos no topo */}
+                          <div className="grid grid-cols-5 mb-1">
+                            {stages.map((s) => (
+                              <div key={s.label} className="text-center text-xs font-semibold px-1 leading-tight">{s.label}</div>
+                            ))}
                           </div>
-                          <div className="flex gap-2 mt-2">
-                            {stages.map((s, i) => {
-                              const prev = i > 0 ? stages[i - 1].value : 0;
-                              const step = i === 0 ? null : (prev > 0 ? (s.value / prev) * 100 : 0);
-                              return (
-                                <div key={s.label} className="flex-1 text-center">
-                                  <p className="text-xs text-muted-foreground leading-tight">{s.label}</p>
-                                  {step !== null && <p className="text-[11px] text-blue-400 font-medium">↓ {fmtPct(step)}</p>}
+                          {/* funil (SVG) com % centralizada por coluna */}
+                          <div className="relative h-[150px]">
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+                              <defs>
+                                <linearGradient id="funilGrad" x1="0" y1="0" x2="1" y2="0">
+                                  <stop offset="0%" stopColor="#2d6cff" />
+                                  <stop offset="55%" stopColor="#7b2dff" />
+                                  <stop offset="100%" stopColor="#ff2d75" />
+                                </linearGradient>
+                              </defs>
+                              <path d={pathD} fill="url(#funilGrad)" />
+                            </svg>
+                            <div className="absolute inset-0 grid grid-cols-5">
+                              {stages.map((s, i) => (
+                                <div key={s.label} className="flex flex-col items-center justify-center text-white">
+                                  <span className="font-bold text-sm drop-shadow">{fmtPct(pcts[i] * 100)}</span>
+                                  <span className="text-[10px] opacity-90 drop-shadow">{fmtNum(s.value)}</span>
                                 </div>
-                              );
-                            })}
+                              ))}
+                            </div>
                           </div>
                         </div>
                       );
