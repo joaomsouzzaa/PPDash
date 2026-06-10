@@ -77,12 +77,14 @@ export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [formatCurrency(value), "Faturamento"]}
+                  separator=""
+                  formatter={(value: number, _n, p: any) => [`${formatCurrency(value)}`, p?.payload?.name || ""]}
+                  itemStyle={{ color: "#fff" }}
+                  labelStyle={{ color: "#fff", fontWeight: 600 }}
                   contentStyle={{
                     backgroundColor: "hsl(var(--card))",
                     border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
-                    color: "hsl(var(--card-foreground))",
                   }}
                 />
               </PieChart>
