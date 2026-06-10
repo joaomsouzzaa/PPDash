@@ -524,6 +524,16 @@ export interface AdSetRow {
 }
 export interface AdRow {
   name: string; campaign: string; spend: number; impressions: number; clicks: number; ctr: number;
+  adId?: string; thumbnail?: string;
+}
+
+// Thumbnail do criativo do anúncio (imagem do estático ou preview do vídeo).
+async function fetchAdThumbnail(adId: string): Promise<string | undefined> {
+  try {
+    const r = await graphApiFetch<{ creative?: { thumbnail_url?: string; image_url?: string } }>(
+      `/${adId}`, { fields: "creative{thumbnail_url,image_url}" });
+    return r.creative?.image_url || r.creative?.thumbnail_url;
+  } catch { return undefined; }
 }
 
 function rangeParam(startDate?: Date, endDate?: Date, dateRange = "30d"): string {
@@ -594,18 +604,23 @@ export async function fetchAdBreakdown(
   await Promise.all(accountIds.map(async (id) => {
     const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
       level: "ad", time_range, limit: "500",
-      fields: "ad_name,campaign_name,spend,impressions,clicks,ctr",
+      fields: "ad_id,ad_name,campaign_name,spend,impressions,clicks,ctr",
     });
     for (const r of res.data || []) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
       rows.push({
-        name: r.ad_name || "—", campaign: r.campaign_name || "—",
+        adId: r.ad_id, name: r.ad_name || "—", campaign: r.campaign_name || "—",
         spend: parseFloat(r.spend) || 0, impressions: parseInt(r.impressions) || 0,
         clicks: parseInt(r.clicks) || 0, ctr: parseFloat(r.ctr) || 0,
       });
     }
   }));
-  return rows.sort((a, b) => b.spend - a.spend).slice(0, 50);
+  const sorted = rows.sort((a, b) => b.spend - a.spend).slice(0, 50);
+  // Busca a thumbnail só dos top criativos (evita muitas chamadas / rate limit).
+  await Promise.all(sorted.slice(0, 6).map(async (a) => {
+    if (a.adId) a.thumbnail = await fetchAdThumbnail(a.adId);
+  }));
+  return sorted;
 }
 
 export interface BreakdownRow { label: string; spend: number; impressions: number; clicks: number; purchases: number; }

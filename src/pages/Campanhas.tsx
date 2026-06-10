@@ -12,7 +12,7 @@ import {
   fetchAdAccounts, fetchCampaignBreakdown, fetchAdSetBreakdown, fetchAdBreakdown,
   hydrateMetaTokenFromServer, isTokenExpired, type CampaignRow,
 } from "@/lib/meta-ads";
-import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp } from "lucide-react";
+import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon } from "lucide-react";
 
 const fmtBRL = (n: number) => `R$ ${(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtNum = (n: number) => (n || 0).toLocaleString("pt-BR");
@@ -192,33 +192,34 @@ export default function Campanhas() {
                   </CardContent></Card>
                 )}
 
-                {/* CRIATIVOS */}
-                <SectionTitle>Criativos {ads.length > 0 && `· top ${ads.length}`}</SectionTitle>
-                {(
-                  <Card><CardContent className="p-0">
-                    <div className="max-h-[360px] overflow-auto">
-                      <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-card text-muted-foreground text-xs">
-                          <tr className="border-b border-border">
-                            <th className="text-left p-3">Anúncio</th><th className="text-right p-3">Gasto</th>
-                            <th className="text-right p-3">Impressões</th><th className="text-right p-3">Cliques</th><th className="text-right p-3">CTR</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ads.map((a, i) => (
-                            <tr key={i} className="border-b border-border/50">
-                              <td className="p-3"><span className="font-medium">{a.name}</span><br /><span className="text-[11px] text-muted-foreground">{a.campaign}</span></td>
-                              <td className="p-3 text-right">{fmtBRL(a.spend)}</td>
-                              <td className="p-3 text-right">{fmtNum(a.impressions)}</td>
-                              <td className="p-3 text-right">{fmtNum(a.clicks)}</td>
-                              <td className="p-3 text-right text-blue-400">{fmtPct(a.ctr)}</td>
-                            </tr>
-                          ))}
-                          {ads.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">Nenhum criativo.</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent></Card>
+                {/* TOP CRIATIVOS — top 3 em cards, com a thumbnail/imagem do criativo */}
+                <SectionTitle>Top Criativos</SectionTitle>
+                {ads.length === 0 ? (
+                  <Card><CardContent className="py-8 text-center text-muted-foreground">Nenhum criativo.</CardContent></Card>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {ads.slice(0, 3).map((a, i) => (
+                      <Card key={i} className="overflow-hidden">
+                        <div className="aspect-video bg-muted/40 flex items-center justify-center">
+                          {a.thumbnail
+                            ? <img src={a.thumbnail} alt={a.name} className="w-full h-full object-cover" loading="lazy" />
+                            : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+                        </div>
+                        <CardContent className="p-3 space-y-2">
+                          <div>
+                            <p className="text-sm font-medium leading-tight line-clamp-2">{a.name}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{a.campaign}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                            <div><span className="text-muted-foreground">Gasto</span><br /><span className="font-semibold">{fmtBRL(a.spend)}</span></div>
+                            <div><span className="text-muted-foreground">CTR</span><br /><span className="font-semibold text-blue-400">{fmtPct(a.ctr)}</span></div>
+                            <div><span className="text-muted-foreground">Impressões</span><br /><span className="font-semibold">{fmtNum(a.impressions)}</span></div>
+                            <div><span className="text-muted-foreground">Cliques</span><br /><span className="font-semibold">{fmtNum(a.clicks)}</span></div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 )}
 
                 {/* ALERTAS E INSIGHTS */}
