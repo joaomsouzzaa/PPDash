@@ -188,6 +188,24 @@ export type Database = {
         }
         Relationships: []
       }
+      insights_trafego: {
+        Row: {
+          cidade_slug: string
+          insights: Json
+          updated_at: string
+        }
+        Insert: {
+          cidade_slug: string
+          insights?: Json
+          updated_at?: string
+        }
+        Update: {
+          cidade_slug?: string
+          insights?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       kanban_colunas: {
         Row: {
           agente_id: string | null
