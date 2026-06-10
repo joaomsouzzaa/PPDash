@@ -77,6 +77,36 @@ export type Database = {
         }
         Relationships: []
       }
+      base_conhecimento: {
+        Row: {
+          ativo: boolean
+          conteudo: string
+          created_at: string
+          id: string
+          ordem: number
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          conteudo?: string
+          created_at?: string
+          id?: string
+          ordem?: number
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          conteudo?: string
+          created_at?: string
+          id?: string
+          ordem?: number
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cidades: {
         Row: {
           created_at: string
@@ -696,6 +726,7 @@ export type Database = {
           agente_id: string | null
           coluna_id: string | null
           created_at: string | null
+          deleted_at: string | null
           descricao: string | null
           id: string
           ordem: number | null
@@ -708,6 +739,7 @@ export type Database = {
           agente_id?: string | null
           coluna_id?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           descricao?: string | null
           id?: string
           ordem?: number | null
@@ -720,6 +752,7 @@ export type Database = {
           agente_id?: string | null
           coluna_id?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           descricao?: string | null
           id?: string
           ordem?: number | null
