@@ -1,0 +1,2 @@
+alter table public.notificacoes add column if not exists disparo_dia_evento boolean not null default false;
+alter table public.notificacoes add column if not exists horario_evento text default '12:00';

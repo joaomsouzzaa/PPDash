@@ -404,8 +404,10 @@ export type Database = {
           destinatario_nome: string | null
           destinatario_tipo: string
           destinatarios: Json | null
+          disparo_dia_evento: boolean
           gatilho: string
           horario: string | null
+          horario_evento: string | null
           id: string
           mensagem: string
           nome: string
@@ -423,8 +425,10 @@ export type Database = {
           destinatario_nome?: string | null
           destinatario_tipo: string
           destinatarios?: Json | null
+          disparo_dia_evento?: boolean
           gatilho: string
           horario?: string | null
+          horario_evento?: string | null
           id?: string
           mensagem: string
           nome: string
@@ -442,8 +446,10 @@ export type Database = {
           destinatario_nome?: string | null
           destinatario_tipo?: string
           destinatarios?: Json | null
+          disparo_dia_evento?: boolean
           gatilho?: string
           horario?: string | null
+          horario_evento?: string | null
           id?: string
           mensagem?: string
           nome?: string
