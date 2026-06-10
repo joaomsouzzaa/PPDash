@@ -1307,10 +1307,15 @@ const VendasEventos = () => {
             </div>
             <div className="space-y-1">
               <Label>Método de Pagamento</Label>
-              <Input
-                value={createForm.metodo_pagamento}
-                onChange={(e) => setCreateForm({ ...createForm, metodo_pagamento: e.target.value })}
-              />
+              <Select value={createForm.metodo_pagamento} onValueChange={(v) => setCreateForm({ ...createForm, metodo_pagamento: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">Pix</SelectItem>
+                  <SelectItem value="credit_card">Cartão de Crédito</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Status</Label>
