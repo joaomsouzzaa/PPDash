@@ -12,7 +12,7 @@ interface KpiCardProps {
 
 export function KpiCard({ title, value, change, changeType = "neutral", icon: Icon, iconColor }: KpiCardProps) {
   return (
-    <div className="kpi-card rounded-xl border border-border bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className="kpi-card rounded-xl border border-border border-l-[3px] border-l-primary/40 bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="kpi-title text-sm text-muted-foreground font-medium">{title}</p>
