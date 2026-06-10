@@ -67,7 +67,7 @@ export default function Campanhas() {
     queryKey: ["camp", ...qk], enabled, placeholderData: (p) => p,
     queryFn: async () => fetchCampaignBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
-  const { data: adsets = [] } = useQuery({
+  const { data: adsets = [], isFetching: loadingAdsets } = useQuery({
     queryKey: ["adsets", ...qk], enabled, placeholderData: (p) => p,
     queryFn: async () => fetchAdSetBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
@@ -197,13 +197,17 @@ export default function Campanhas() {
                         </Card>
                       );
                     })}
-                    {campanhas.length === 0 && <p className="text-muted-foreground text-sm">Nenhuma campanha no período/filtro.</p>}
+                    {campanhas.length === 0 && (lc
+                      ? <Card><CardContent className="py-10 flex flex-col items-center justify-center gap-2 text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin" /> Carregando...</CardContent></Card>
+                      : <p className="text-muted-foreground text-sm">Nenhuma campanha no período/filtro.</p>)}
                   </div>
                 )}
 
                 {/* CONJUNTOS DE ANÚNCIOS — mesmas 14 métricas do funil, em cards */}
                 <SectionTitle>Conjuntos de Anúncios {adsets.length > 0 && `· ${adsets.length} ad sets`}</SectionTitle>
-                {adsets.length === 0 ? (
+                {adsets.length === 0 && loadingAdsets ? (
+                  <Card><CardContent className="py-10 flex flex-col items-center justify-center gap-2 text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin" /> Carregando...</CardContent></Card>
+                ) : adsets.length === 0 ? (
                   <Card><CardContent className="py-8 text-center text-muted-foreground">Nenhum conjunto.</CardContent></Card>
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
