@@ -167,10 +167,9 @@ export default function Performance() {
                               <path d={pathD} fill="url(#funilGrad)" />
                             </svg>
                             <div className="absolute inset-0 grid grid-cols-5">
-                              {stages.map((s, i) => (
-                                <div key={s.label} className="flex flex-col items-center justify-center text-white">
-                                  <span className="font-bold text-sm drop-shadow">{fmtPct(pcts[i] * 100)}</span>
-                                  <span className="text-[10px] opacity-90 drop-shadow">{fmtNum(s.value)}</span>
+                              {stages.map((s) => (
+                                <div key={s.label} className="flex items-center justify-center text-white">
+                                  <span className="font-bold text-sm drop-shadow">{fmtNum(s.value)}</span>
                                 </div>
                               ))}
                             </div>
