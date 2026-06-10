@@ -524,6 +524,7 @@ export interface AdSetRow {
 }
 export interface AdRow {
   name: string; campaign: string; spend: number; impressions: number; clicks: number; ctr: number;
+  purchases: number; cac: number;
   adId?: string; thumbnail?: string;
 }
 
@@ -604,14 +605,17 @@ export async function fetchAdBreakdown(
   await Promise.all(accountIds.map(async (id) => {
     const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
       level: "ad", time_range, limit: "500",
-      fields: "ad_id,ad_name,campaign_name,spend,impressions,clicks,ctr",
+      fields: "ad_id,ad_name,campaign_name,spend,impressions,clicks,ctr,actions",
     });
     for (const r of res.data || []) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
+      const spend = parseFloat(r.spend) || 0;
+      const purchases = pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
       rows.push({
         adId: r.ad_id, name: r.ad_name || "—", campaign: r.campaign_name || "—",
-        spend: parseFloat(r.spend) || 0, impressions: parseInt(r.impressions) || 0,
+        spend, impressions: parseInt(r.impressions) || 0,
         clicks: parseInt(r.clicks) || 0, ctr: parseFloat(r.ctr) || 0,
+        purchases, cac: purchases > 0 ? spend / purchases : 0,
       });
     }
   }));

@@ -211,10 +211,10 @@ export default function Campanhas() {
                             <p className="text-[11px] text-muted-foreground truncate">{a.campaign}</p>
                           </div>
                           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-                            <div><span className="text-muted-foreground">Gasto</span><br /><span className="font-semibold">{fmtBRL(a.spend)}</span></div>
+                            <div><span className="text-muted-foreground">Investimento</span><br /><span className="font-semibold">{fmtBRL(a.spend)}</span></div>
                             <div><span className="text-muted-foreground">CTR</span><br /><span className="font-semibold text-blue-400">{fmtPct(a.ctr)}</span></div>
-                            <div><span className="text-muted-foreground">Impressões</span><br /><span className="font-semibold">{fmtNum(a.impressions)}</span></div>
-                            <div><span className="text-muted-foreground">Cliques</span><br /><span className="font-semibold">{fmtNum(a.clicks)}</span></div>
+                            <div><span className="text-muted-foreground">Vendas</span><br /><span className="font-semibold">{fmtNum(a.purchases)}</span></div>
+                            <div><span className="text-muted-foreground">CAC</span><br /><span className="font-semibold">{a.cac > 0 ? fmtBRL(a.cac) : "—"}</span></div>
                           </div>
                         </CardContent>
                       </Card>
