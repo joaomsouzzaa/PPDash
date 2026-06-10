@@ -8,11 +8,12 @@ import { useCidades } from "@/hooks/useCidades";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   fetchAdAccounts, fetchCampaignBreakdown, fetchAdSetBreakdown, fetchAdBreakdown,
   hydrateMetaTokenFromServer, isTokenExpired, type CampaignRow,
 } from "@/lib/meta-ads";
-import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon } from "lucide-react";
+import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon, Lightbulb, Sparkles } from "lucide-react";
 
 const fmtBRL = (n: number) => `R$ ${(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtNum = (n: number) => (n || 0).toLocaleString("pt-BR");
@@ -73,6 +74,16 @@ export default function Campanhas() {
     queryFn: async () => fetchAdBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
 
+  // Alertas & Insights gerados pela IA (Gestor de Tráfego), por cidade (cron 9h).
+  const { data: insightsIA = [] } = useQuery({
+    queryKey: ["insights-trafego", selectedCidade?.slug],
+    enabled: filters.city !== "all" && !!selectedCidade,
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("insights_trafego").select("insights").eq("cidade_slug", selectedCidade!.slug).maybeSingle();
+      return (data?.insights || []) as { nivel: string; titulo: string; texto: string }[];
+    },
+  });
+
   const totalSpend = campanhas.reduce((s, c) => s + c.spend, 0);
   // Alertas e insights (heurísticas a partir do agregado).
   const totalClicks = campanhas.reduce((s, c) => s + c.clicks, 0);
@@ -93,6 +104,19 @@ export default function Campanhas() {
   const SectionTitle = ({ children }: { children: React.ReactNode }) => (
     <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pt-2">{children}</div>
   );
+
+  // Estilo do card conforme o nível do insight da IA.
+  const nivelStyle = (nivel: string) => {
+    const n = (nivel || "").toLowerCase();
+    if (n.includes("alerta") || n.includes("risco")) return { icon: AlertTriangle, cls: "border-l-yellow-500" };
+    if (n.includes("oportun") || n.includes("positiv")) return { icon: Trophy, cls: "border-l-green-500" };
+    return { icon: Lightbulb, cls: "border-l-blue-500" };
+  };
+  // Usa os insights da IA quando uma cidade está selecionada e há dados; senão, as heurísticas.
+  const usandoIA = filters.city !== "all" && insightsIA.length > 0;
+  const itensInsight = usandoIA
+    ? insightsIA.map((i) => { const s = nivelStyle(i.nivel); return { icon: s.icon, cls: s.cls, titulo: i.titulo, texto: i.texto }; })
+    : alertas;
 
   return (
     <SidebarProvider>
@@ -223,11 +247,16 @@ export default function Campanhas() {
                 )}
 
                 {/* ALERTAS E INSIGHTS */}
-                {alertas.length > 0 && (
+                {itensInsight.length > 0 && (
                   <>
                     <SectionTitle>Alertas e Insights</SectionTitle>
+                    {usandoIA && (
+                      <p className="-mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Sparkles className="h-3 w-3 text-primary" /> Análise do Gestor de Tráfego (IA) · atualiza todo dia às 9h
+                      </p>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {alertas.map((al, i) => (
+                      {itensInsight.map((al, i) => (
                         <Card key={i} className={`border-l-4 ${al.cls}`}>
                           <CardContent className="p-4 flex gap-3">
                             <al.icon className="h-5 w-5 text-primary shrink-0 mt-0.5" />
