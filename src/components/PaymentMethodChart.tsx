@@ -40,7 +40,7 @@ const renderPctInside = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }
   const r = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + r * Math.cos(-midAngle * RAD);
   const y = cy + r * Math.sin(-midAngle * RAD);
-  return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700}>{(percent * 100).toFixed(1)}%</text>;
+  return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{(percent * 100).toFixed(1)}%</text>;
 };
 
 export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
@@ -65,17 +65,17 @@ export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
         <CardTitle className="text-base font-semibold">Faturamento por Método de Pagamento</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col lg:flex-row items-center gap-6">
-          {/* Donut Chart */}
-          <div className="h-[300px] w-full lg:w-1/2">
+        <div className="flex flex-col items-center gap-4">
+          {/* Donut Chart — mesmos raios/altura dos demais gráficos pizza (padronizado) */}
+          <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={chartData}
                   cx="50%"
                   cy="50%"
-                  innerRadius="58%"
-                  outerRadius="92%"
+                  innerRadius={45}
+                  outerRadius={78}
                   paddingAngle={3}
                   dataKey="value"
                   stroke="none"
@@ -102,7 +102,7 @@ export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
           </div>
 
           {/* Breakdown List */}
-          <div className="w-full lg:w-1/2 space-y-3">
+          <div className="w-full space-y-3">
             {chartData.map((item) => {
               const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : "0";
               return (
