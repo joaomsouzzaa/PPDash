@@ -37,14 +37,14 @@ import { differenceInDays } from "date-fns";
 const Index = () => {
   const [filters, setFilters] = useState<Filters>(() => {
     const savedAccount = localStorage.getItem("selected_ad_account");
-    // Filtros SEMPRE iniciam no padrão (data = 90 dias, cidade = Todas) — não restaura o último.
+    // Data SEMPRE inicia no padrão (90 dias). A cidade RESTAURA a última selecionada (selected_city).
     const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 89);
     return {
       dateRange: "90d",
       startDate: s,
       endDate: e,
       adAccount: savedAccount || "all",
-      city: "all",
+      city: localStorage.getItem("selected_city") || "all",
       produtos: [],
     };
   });
@@ -192,12 +192,13 @@ const Index = () => {
       const idx = list.findIndex((c) => c.slug === currentSlug);
       const nextIdx = idx === -1 ? 0 : (idx + 1) % list.length;
       console.log(`[TV Mode] Rotating ${currentSlug} -> ${list[nextIdx].slug} (${list.length} active)`);
-      handleFiltersChangeRef.current({ ...filtersRef.current, city: list[nextIdx].slug });
+      // Rotação do TV não persiste (não sobrescreve a última cidade escolhida manualmente).
+      setFilters((f) => ({ ...f, city: list[nextIdx].slug }));
     };
     // Switch immediately to the first active city on entering TV mode
     const list = activeCidadesRef.current;
     if (list.length > 0 && !list.some((c) => c.slug === filtersRef.current.city)) {
-      handleFiltersChangeRef.current({ ...filtersRef.current, city: list[0].slug });
+      setFilters((f) => ({ ...f, city: list[0].slug }));
     }
     const interval = setInterval(tick, 20000);
     return () => clearInterval(interval);

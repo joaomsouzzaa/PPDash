@@ -246,7 +246,7 @@ const VendasEventos = () => {
   const [dateRange, setDateRange] = useState<string>("90d");
   const [startDate, setStartDate] = useState<Date | undefined>(() => { const s = new Date(); s.setDate(s.getDate() - 89); return s; });
   const [endDate, setEndDate] = useState<Date | undefined>(() => new Date());
-  const [city, setCity] = useState("all");
+  const [city, setCity] = useState(() => localStorage.getItem("selected_city") || "all");
   const [tipoIngressoFilter, setTipoIngressoFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("aprovada");
   const [nomeFilter, setNomeFilter] = useState("");
@@ -671,7 +671,7 @@ const VendasEventos = () => {
                   if (e) localStorage.setItem("vendas_end_date", e.toISOString()); else localStorage.removeItem("vendas_end_date");
                 }}
               />
-              <Select value={city} onValueChange={(v) => { setCity(v); setPage(1); }}>
+              <Select value={city} onValueChange={(v) => { setCity(v); localStorage.setItem("selected_city", v); setPage(1); }}>
                 <SelectTrigger className="w-[240px] bg-card">
                   <SelectValue placeholder="Cidade" />
                 </SelectTrigger>
