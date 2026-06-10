@@ -13,7 +13,7 @@ import {
 } from "@/lib/meta-ads";
 import {
   DollarSign, Eye, Layers, MousePointerClick, Target, TrendingUp, BarChart3, Link2, CreditCard,
-  ShoppingCart, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle,
+  ShoppingCart, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle, PieChart as PieChartIcon,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -38,15 +38,28 @@ const PRETTY: Record<string, string> = {
 const lbl = (s: string) => GENERO[s] || PRETTY[s] || s;
 
 function BreakCard({ title, rows, type, max }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number }) {
+  const [tipo, setTipo] = useState<"pie" | "bar">(type);
   const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0).slice(0, max ?? 99);
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <div className="flex rounded-md border border-border overflow-hidden shrink-0">
+          <button type="button" onClick={() => setTipo("pie")} title="Pizza/Rosca"
+            className={`p-1.5 ${tipo === "pie" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
+            <PieChartIcon className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" onClick={() => setTipo("bar")} title="Barras"
+            className={`p-1.5 ${tipo === "bar" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
+            <BarChart3 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </CardHeader>
       <CardContent>
         <div className="h-[240px]">
           {data.length === 0 ? (
             <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sem compras neste segmento</div>
-          ) : type === "pie" ? (
+          ) : tipo === "pie" ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={45} outerRadius={78} paddingAngle={2}>
