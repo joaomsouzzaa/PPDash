@@ -255,7 +255,7 @@ export default function Performance() {
                   <BreakCard title="Dispositivo" rows={bdDispositivo} type="bar" />
                   <BreakCard title="Plataforma" rows={bdPlataforma} type="pie" />
                   <BreakCard title="Mobile vs Desktop" rows={bdMobileDesktop} type="pie" />
-                  <BreakCard title="Posição (Feed/Reels/Stories)" rows={bdPosicao} type="bar" max={8} />
+                  <BreakCard title="Posição (Feed/Reels/Stories)" rows={bdPosicao} type="pie" max={8} />
                 </div>
 
                 <Card>
