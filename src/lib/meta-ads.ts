@@ -529,10 +529,12 @@ export interface AdRow {
 }
 
 // Thumbnail do criativo do anúncio (imagem do estático ou preview do vídeo).
+// Pede uma thumbnail GRANDE (thumbnail_width/height) p/ não ficar pixelada; usa a
+// imagem cheia (image_url) quando disponível (estáticos).
 async function fetchAdThumbnail(adId: string): Promise<string | undefined> {
   try {
     const r = await graphApiFetch<{ creative?: { thumbnail_url?: string; image_url?: string } }>(
-      `/${adId}`, { fields: "creative{thumbnail_url,image_url}" });
+      `/${adId}`, { fields: "creative{thumbnail_url,image_url}", thumbnail_width: "1080", thumbnail_height: "1080" });
     return r.creative?.image_url || r.creative?.thumbnail_url;
   } catch { return undefined; }
 }
@@ -619,12 +621,15 @@ export async function fetchAdBreakdown(
       });
     }
   }));
-  const sorted = rows.sort((a, b) => b.spend - a.spend).slice(0, 50);
+  // Rankeia por MENOR CAC (criativos com vendas primeiro); sem vendas vêm depois por gasto.
+  const comVendas = rows.filter((r) => r.purchases > 0).sort((a, b) => a.cac - b.cac);
+  const semVendas = rows.filter((r) => r.purchases === 0).sort((a, b) => b.spend - a.spend);
+  const ordered = [...comVendas, ...semVendas].slice(0, 50);
   // Busca a thumbnail só dos top criativos (evita muitas chamadas / rate limit).
-  await Promise.all(sorted.slice(0, 6).map(async (a) => {
+  await Promise.all(ordered.slice(0, 6).map(async (a) => {
     if (a.adId) a.thumbnail = await fetchAdThumbnail(a.adId);
   }));
-  return sorted;
+  return ordered;
 }
 
 export interface BreakdownRow { label: string; spend: number; impressions: number; clicks: number; purchases: number; }

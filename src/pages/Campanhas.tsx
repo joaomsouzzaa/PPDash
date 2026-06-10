@@ -200,10 +200,10 @@ export default function Campanhas() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {ads.slice(0, 3).map((a, i) => (
                       <Card key={i} className="overflow-hidden">
-                        <div className="aspect-video bg-muted/40 flex items-center justify-center">
+                        <div className="bg-muted/40 flex items-center justify-center">
                           {a.thumbnail
-                            ? <img src={a.thumbnail} alt={a.name} className="w-full h-full object-cover" loading="lazy" />
-                            : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
+                            ? <img src={a.thumbnail} alt={a.name} className="w-full h-auto object-contain" loading="lazy" />
+                            : <div className="aspect-video w-full flex items-center justify-center"><ImageIcon className="h-8 w-8 text-muted-foreground" /></div>}
                         </div>
                         <CardContent className="p-3 space-y-2">
                           <div>
