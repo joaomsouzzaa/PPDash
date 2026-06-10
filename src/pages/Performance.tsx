@@ -115,16 +115,18 @@ export default function Performance() {
     queryFn: async () => fetchDailyMetrics(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
 
-  const bq = (breakdown: string) => ({
-    queryKey: ["perf-bd", breakdown, ...qkey],
+  const bq = (breakdown: string, keyField?: string) => ({
+    queryKey: ["perf-bd", breakdown, keyField || "", ...qkey],
     enabled,
-    queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, true),
+    queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, true, keyField),
   });
   const { data: bdGenero = [] } = useQuery(bq("gender"));
   const { data: bdIdade = [] } = useQuery(bq("age"));
   const { data: bdDispositivo = [] } = useQuery(bq("impression_device"));
   const { data: bdPlataforma = [] } = useQuery(bq("publisher_platform"));
   const { data: bdMobileDesktop = [] } = useQuery(bq("device_platform"));
+  // Posição (feed/reels/stories) exige combinar com publisher_platform; agregamos por platform_position.
+  const { data: bdPosicao = [] } = useQuery(bq("publisher_platform,platform_position", "platform_position"));
 
   const chartData = daily.map((d) => ({
     name: new Date(d.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
@@ -146,7 +148,7 @@ export default function Performance() {
             </div>
           </header>
 
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6 min-w-0 max-w-full overflow-x-hidden">
             <DashboardFilters filters={filters} onFiltersChange={setFilters} />
 
             {!enabled ? (
@@ -253,6 +255,7 @@ export default function Performance() {
                   <BreakCard title="Dispositivo" rows={bdDispositivo} type="bar" />
                   <BreakCard title="Plataforma" rows={bdPlataforma} type="pie" />
                   <BreakCard title="Mobile vs Desktop" rows={bdMobileDesktop} type="pie" />
+                  <BreakCard title="Posição (Feed/Reels/Stories)" rows={bdPosicao} type="bar" max={8} />
                 </div>
 
                 <Card>

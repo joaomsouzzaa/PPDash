@@ -594,10 +594,13 @@ export interface BreakdownRow { label: string; spend: number; impressions: numbe
 
 /** Insights segmentados por um breakdown do Meta (age, gender, impression_device, publisher_platform, device_platform...). */
 export async function fetchBreakdown(
-  accountIds: string[], breakdown: string, startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
+  accountIds: string[], breakdown: string, startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false, keyField?: string
 ): Promise<BreakdownRow[]> {
   const time_range = rangeParam(startDate, endDate, dateRange);
   const variants = campaignSlug ? slugVariants(campaignSlug) : [];
+  // Alguns breakdowns só funcionam combinados (ex.: publisher_platform,platform_position).
+  // keyField define por qual campo agregar (default = o próprio breakdown).
+  const kf = keyField || breakdown;
   const map = new Map<string, { spend: number; impressions: number; clicks: number; purchases: number }>();
   await Promise.all(accountIds.map(async (id) => {
     const params: Record<string, string> = campaignSlug
@@ -606,7 +609,7 @@ export async function fetchBreakdown(
     const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, params);
     for (const r of res.data || []) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
-      const key = String(r[breakdown] ?? "—");
+      const key = String(r[kf] ?? "—");
       const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0 };
       cur.spend += parseFloat(r.spend) || 0;
       cur.impressions += parseInt(r.impressions) || 0;
