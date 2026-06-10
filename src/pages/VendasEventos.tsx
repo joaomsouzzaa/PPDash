@@ -291,6 +291,24 @@ const VendasEventos = () => {
     return ev >= hojeCidades;
   });
 
+  // Produtos que chegam das vendas (nome real do produto), só das cidades ATIVAS —
+  // usado na lista de Produto do cadastro manual.
+  const { data: produtosVendas = [] } = useQuery({
+    queryKey: ["produtos-vendas-distinct"],
+    queryFn: async () => {
+      const { data } = await supabase.from("vendas").select("produto").not("produto", "is", null).limit(5000);
+      return Array.from(new Set((data || []).map((r: any) => (r.produto || "").trim()).filter(Boolean)));
+    },
+  });
+  const normP = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s-]/g, "");
+  const produtosAtivos = produtosVendas.filter((p) => {
+    const np = normP(p);
+    return activeCidades.some((c) => {
+      const partes = String(c.slug || "").split(",").map((x) => normP(x)).filter(Boolean);
+      return partes.some((slug) => np.includes(slug)) || np.includes(normP(c.nome));
+    });
+  }).sort();
+
   const { start, end } = useMemo(
     () => getDateRange(dateRange, startDate, endDate),
     [dateRange, startDate, endDate]
@@ -1213,8 +1231,10 @@ const VendasEventos = () => {
                   <SelectValue placeholder="Selecione o produto" />
                 </SelectTrigger>
                 <SelectContent>
-                  {visibleCidades.map((c) => (
-                    <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>
+                  {produtosAtivos.length === 0 ? (
+                    <SelectItem value="_none" disabled>Nenhum produto de cidade ativa</SelectItem>
+                  ) : produtosAtivos.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1274,10 +1294,16 @@ const VendasEventos = () => {
             </div>
             <div className="space-y-1">
               <Label>Tipo de Ingresso</Label>
-              <Input
-                value={createForm.tipo_ingresso}
-                onChange={(e) => setCreateForm({ ...createForm, tipo_ingresso: e.target.value })}
-              />
+              <Select value={createForm.tipo_ingresso} onValueChange={(v) => setCreateForm({ ...createForm, tipo_ingresso: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="convite">Convite</SelectItem>
+                  <SelectItem value="individual">Individual</SelectItem>
+                  <SelectItem value="duplo">Duplo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Método de Pagamento</Label>
