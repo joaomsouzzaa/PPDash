@@ -48,16 +48,17 @@ export default function Campanhas() {
   const getAccountIds = async () => filters.adAccount !== "all" ? [filters.adAccount] : (await fetchAdAccounts()).map((a) => a.id);
   const qk = [filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.adAccount, slug];
 
-  const { data: campanhas = [], isLoading: lc } = useQuery({
-    queryKey: ["camp", ...qk], enabled,
+  // keepPreviousData: mantém layout/tabelas enquanto novos dados carregam (só os dados mudam).
+  const { data: campanhas = [], isFetching: lc } = useQuery({
+    queryKey: ["camp", ...qk], enabled, placeholderData: (p) => p,
     queryFn: async () => fetchCampaignBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
-  const { data: adsets = [], isLoading: la } = useQuery({
-    queryKey: ["adsets", ...qk], enabled,
+  const { data: adsets = [] } = useQuery({
+    queryKey: ["adsets", ...qk], enabled, placeholderData: (p) => p,
     queryFn: async () => fetchAdSetBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
-  const { data: ads = [], isLoading: lad } = useQuery({
-    queryKey: ["ads", ...qk], enabled,
+  const { data: ads = [] } = useQuery({
+    queryKey: ["ads", ...qk], enabled, placeholderData: (p) => p,
     queryFn: async () => fetchAdBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
 
@@ -105,8 +106,8 @@ export default function Campanhas() {
             ) : (
               <>
                 {/* PERFORMANCE POR CAMPANHA */}
-                <SectionTitle>Performance por Campanha {campanhas.length > 0 && `· ${campanhas.length} campanhas`}</SectionTitle>
-                {lc ? <p className="text-muted-foreground text-sm">Carregando...</p> : (
+                <SectionTitle>Performance por Campanha {campanhas.length > 0 && `· ${campanhas.length} campanhas`}{lc && <span className="text-primary normal-case font-normal"> · atualizando…</span>}</SectionTitle>
+                {(
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {campanhas.map((c: CampaignRow) => {
                       const f = funil(c.name); const fs = freqStatus(c.frequency);
@@ -147,7 +148,7 @@ export default function Campanhas() {
 
                 {/* CONJUNTOS DE ANÚNCIOS */}
                 <SectionTitle>Conjuntos de Anúncios {adsets.length > 0 && `· ${adsets.length} ad sets`}</SectionTitle>
-                {la ? <p className="text-muted-foreground text-sm">Carregando...</p> : (
+                {(
                   <Card><CardContent className="p-0">
                     <div className="max-h-[420px] overflow-auto">
                       <table className="w-full text-sm">
@@ -182,7 +183,7 @@ export default function Campanhas() {
 
                 {/* CRIATIVOS */}
                 <SectionTitle>Criativos {ads.length > 0 && `· top ${ads.length}`}</SectionTitle>
-                {lad ? <p className="text-muted-foreground text-sm">Carregando...</p> : (
+                {(
                   <Card><CardContent className="p-0">
                     <div className="max-h-[360px] overflow-auto">
                       <table className="w-full text-sm">
