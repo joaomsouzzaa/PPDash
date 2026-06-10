@@ -32,13 +32,14 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
 
   const { data: cidades = [], isLoading: loadingCidades } = useCidades();
   const hiddenCidades = getHiddenCidades();
-  // Apenas cidades ativas: não-ocultas e com evento de hoje em diante.
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  // No seletor de cidade: mantém a cidade por mais 48h após o evento (tolerância),
+  // só depois disso ela some do filtro. Cidades ocultas nunca aparecem.
+  const agora = Date.now();
   const visibleCidades = cidades.filter((c) => {
     if (hiddenCidades.includes(c.id)) return false;
     if (!c.data_evento) return true;
     const ev = new Date(c.data_evento); ev.setHours(0, 0, 0, 0);
-    return ev >= hoje;
+    return agora <= ev.getTime() + 48 * 60 * 60 * 1000; // evento + 48h
   });
 
   const { data: produtos = [], isLoading: loadingProdutos } = useProdutos();
