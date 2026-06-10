@@ -56,11 +56,11 @@ export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center gap-2 pb-2">
-        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+      <CardHeader className="flex flex-row items-start gap-2 pb-2">
+        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <CreditCard className="h-4 w-4 text-primary" />
         </div>
-        <CardTitle className="text-base font-semibold">Faturamento por Método de Pagamento</CardTitle>
+        <CardTitle className="text-base font-semibold leading-tight min-h-[2.5rem] flex items-start">Faturamento por Método de Pagamento</CardTitle>
       </CardHeader>
       <CardContent>
         {/* Mesma estrutura dos demais gráficos pizza: donut + legenda (cor + método). */}

@@ -33,8 +33,8 @@ export function BreakCard({ title, rows, type, max, loading }: { title: string; 
   const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0).slice(0, max ?? 99);
   return (
     <Card>
-      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">{title}</CardTitle>
+      <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2 space-y-0">
+        <CardTitle className="text-base leading-tight min-h-[2.5rem] flex items-start">{title}</CardTitle>
         <div className="flex rounded-md border border-border overflow-hidden shrink-0">
           <button type="button" onClick={() => setTipo("pie")} title="Pizza/Rosca"
             className={`p-1.5 ${tipo === "pie" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
