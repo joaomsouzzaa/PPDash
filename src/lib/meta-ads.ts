@@ -590,6 +590,35 @@ export async function fetchAdBreakdown(
   return rows.sort((a, b) => b.spend - a.spend).slice(0, 50);
 }
 
+export interface BreakdownRow { label: string; spend: number; impressions: number; clicks: number; purchases: number; }
+
+/** Insights segmentados por um breakdown do Meta (age, gender, impression_device, publisher_platform, device_platform...). */
+export async function fetchBreakdown(
+  accountIds: string[], breakdown: string, startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
+): Promise<BreakdownRow[]> {
+  const time_range = rangeParam(startDate, endDate, dateRange);
+  const variants = campaignSlug ? slugVariants(campaignSlug) : [];
+  const map = new Map<string, { spend: number; impressions: number; clicks: number; purchases: number }>();
+  await Promise.all(accountIds.map(async (id) => {
+    const params: Record<string, string> = campaignSlug
+      ? { level: "campaign", breakdowns: breakdown, fields: "campaign_name,spend,impressions,clicks,actions", time_range, limit: "500" }
+      : { breakdowns: breakdown, fields: "spend,impressions,clicks,actions", time_range, limit: "500" };
+    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, params);
+    for (const r of res.data || []) {
+      if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
+      const key = String(r[breakdown] ?? "—");
+      const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0 };
+      cur.spend += parseFloat(r.spend) || 0;
+      cur.impressions += parseInt(r.impressions) || 0;
+      cur.clicks += parseInt(r.clicks) || 0;
+      cur.purchases += pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+      map.set(key, cur);
+    }
+  }));
+  return Array.from(map.entries()).map(([label, v]) => ({ label, ...v }))
+    .sort((a, b) => (b.purchases - a.purchases) || (b.spend - a.spend));
+}
+
 /** Fetch the sum of daily budgets for active campaigns matching a slug.
  *  Checks campaign-level daily_budget first, then falls back to adset-level budgets. */
 export async function fetchCampaignDailyBudget(

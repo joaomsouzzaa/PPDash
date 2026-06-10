@@ -8,8 +8,8 @@ import { useCidades } from "@/hooks/useCidades";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
-  fetchAdAccounts, fetchAccountInsights, fetchDailyMetrics,
-  hydrateMetaTokenFromServer, isTokenExpired,
+  fetchAdAccounts, fetchAccountInsights, fetchDailyMetrics, fetchBreakdown,
+  hydrateMetaTokenFromServer, isTokenExpired, type BreakdownRow,
 } from "@/lib/meta-ads";
 import {
   DollarSign, Eye, Layers, MousePointerClick, Target, TrendingUp, BarChart3, Link2, CreditCard,
@@ -17,7 +17,54 @@ import {
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, Cell, PieChart, Pie,
 } from "recharts";
+
+const BR_COLORS = ["#ff2d75", "#00d4ff", "#39ff14", "#faff00", "#bf5af2", "#ff6600"];
+const GENERO: Record<string, string> = { male: "Masculino", female: "Feminino", unknown: "Desconhecido" };
+const PRETTY: Record<string, string> = {
+  iphone: "iPhone", android_smartphone: "Android", desktop: "Desktop", ipad: "iPad",
+  android_tablet: "Android Tablet", facebook: "Facebook", instagram: "Instagram",
+  audience_network: "Audience Network", messenger: "Messenger", mobile_app: "App Mobile",
+  mobile_web: "Web Mobile", "unknown": "Desconhecido",
+};
+const lbl = (s: string) => GENERO[s] || PRETTY[s] || s;
+
+function BreakCard({ title, rows, type }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar" }) {
+  const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0);
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+      <CardContent>
+        <div className="h-[240px]">
+          {data.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sem compras neste segmento</div>
+          ) : type === "pie" ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  {data.map((_, i) => <Cell key={i} fill={BR_COLORS[i % BR_COLORS.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} formatter={(v: number) => [`${v} compras`, ""]} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} layout="vertical" margin={{ left: 10, right: 16 }}>
+                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" width={90} stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                <Tooltip cursor={{ fill: "hsl(var(--muted)/0.3)" }} contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} formatter={(v: number) => [`${v} compras`, ""]} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {data.map((_, i) => <Cell key={i} fill={BR_COLORS[i % BR_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 const fmtBRL = (n: number) => `R$ ${(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtNum = (n: number) => (n || 0).toLocaleString("pt-BR");
@@ -60,6 +107,16 @@ export default function Performance() {
     enabled,
     queryFn: async () => fetchDailyMetrics(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
   });
+
+  const bq = (breakdown: string) => ({
+    queryKey: ["perf-bd", breakdown, ...qkey],
+    enabled,
+    queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, true),
+  });
+  const { data: bdGenero = [] } = useQuery(bq("gender"));
+  const { data: bdIdade = [] } = useQuery(bq("age"));
+  const { data: bdDispositivo = [] } = useQuery(bq("impression_device"));
+  const { data: bdPlataforma = [] } = useQuery(bq("publisher_platform"));
 
   const chartData = daily.map((d) => ({
     name: new Date(d.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
@@ -179,6 +236,15 @@ export default function Performance() {
                     })()}
                   </CardContent>
                 </Card>
+
+                {/* PÚBLICO & DISPOSITIVOS (por compras) */}
+                <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Público & Dispositivos · por compras</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <BreakCard title="Gênero" rows={bdGenero} type="pie" />
+                  <BreakCard title="Faixa Etária" rows={bdIdade} type="bar" />
+                  <BreakCard title="Dispositivo" rows={bdDispositivo} type="bar" />
+                  <BreakCard title="Plataforma" rows={bdPlataforma} type="pie" />
+                </div>
 
                 <Card>
                   <CardHeader><CardTitle className="text-base">Investimento e Cliques por dia</CardTitle></CardHeader>
