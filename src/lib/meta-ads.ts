@@ -376,13 +376,14 @@ export async function fetchDailySpendBreakdown(
     await Promise.all(
       accountIds.map(async (id) => {
         // UMA chamada por conta: insights diários no nível de campanha
-        const res = await graphApiFetch<{ data: Array<{ spend: string; date_start: string; campaign_name?: string }> }>(
+        // Pagina (segue cursor): dias × campanhas pode passar de 500 e cortava os dias recentes.
+        const rows = await graphApiFetchAll(
           `/${id}/insights`,
           campaignSlug
             ? { level: "campaign", fields: "spend,campaign_name", time_range: timeRangeParam, time_increment: "1", limit: "500" }
             : { fields: "spend", time_range: timeRangeParam, time_increment: "1", limit: "500" }
         );
-        for (const row of res.data || []) {
+        for (const row of rows as Array<{ spend: string; date_start: string; campaign_name?: string }>) {
           if (campaignSlug && !campaignMatchesSlug(row.campaign_name || "", variants, strictSales)) continue;
           const spend = parseFloat(row.spend) || 0;
           dailyMap.set(row.date_start, (dailyMap.get(row.date_start) || 0) + spend);
@@ -494,11 +495,11 @@ export async function fetchDailyMetrics(
   const variants = campaignSlug ? slugVariants(campaignSlug) : [];
   const map = new Map<string, { spend: number; impressions: number; clicks: number }>();
   await Promise.all(accountIds.map(async (id) => {
-    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`,
+    const rows = await graphApiFetchAll(`/${id}/insights`,
       campaignSlug
         ? { level: "campaign", fields: "campaign_name,spend,impressions,clicks", time_range: timeRangeParam, time_increment: "1", limit: "500" }
         : { fields: "spend,impressions,clicks", time_range: timeRangeParam, time_increment: "1", limit: "500" });
-    for (const row of res.data || []) {
+    for (const row of rows) {
       if (campaignSlug && !campaignMatchesSlug(row.campaign_name || "", variants, strictSales)) continue;
       const d = row.date_start;
       const cur = map.get(d) || { spend: 0, impressions: 0, clicks: 0 };

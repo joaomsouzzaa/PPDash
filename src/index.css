@@ -276,6 +276,11 @@ main { min-width: 0; }
 .tv-mode.tv-3x1 .tv-quad [class*="h-[240px]"],
 .tv-mode.tv-3x1 .tv-quad [class*="h-[300px]"] { height: 100% !important; min-height: 0; flex: 1 1 0; }
 /* Pagamento no quadrante: empilha donut + lista (não lado a lado) e centraliza. */
-.tv-mode.tv-3x1 .tv-quad .lg\:flex-row { flex-direction: column !important; gap: 0.75rem !important; }
+.tv-mode.tv-3x1 .tv-quad .lg\:flex-row { flex-direction: column !important; align-items: center; gap: 0.5rem !important; }
+/* Donut do Pagamento (único h-[300px] com lg:w-1/2): precisa de altura definida
+   senão o Recharts não renderiza dentro do quadrante. */
+.tv-mode.tv-3x1 .tv-quad [class*="h-[300px]"].lg\:w-1\/2 {
+  height: 24vh !important; min-height: 200px; width: 100% !important; flex: none !important;
+}
 
 

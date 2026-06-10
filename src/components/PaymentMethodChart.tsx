@@ -33,6 +33,16 @@ function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// % desenhado DENTRO do anel (evita cortar no topo do card). Só fatias >= 5%.
+const renderPctInside = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+  if (percent < 0.05) return null;
+  const RAD = Math.PI / 180;
+  const r = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + r * Math.cos(-midAngle * RAD);
+  const y = cy + r * Math.sin(-midAngle * RAD);
+  return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={700}>{(percent * 100).toFixed(1)}%</text>;
+};
+
 export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
   const chartData: PaymentMethodData[] = Object.entries(data)
     .filter(([, v]) => v > 0)
@@ -69,8 +79,8 @@ export function PaymentMethodChart({ data }: PaymentMethodChartProps) {
                   paddingAngle={3}
                   dataKey="value"
                   stroke="none"
-                  label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
-                  labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+                  label={renderPctInside}
+                  labelLine={false}
                 >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />

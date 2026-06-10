@@ -390,12 +390,12 @@ const Index = () => {
   })();
 
   // Gráficos avulsos reaproveitados nos layouts (normal e TV 3:1).
-  const cPlataforma = <BreakCard title="Plataforma" rows={bd.plataforma} type="pie" />;
-  const cPosicao = <BreakCard title="Posição (Feed/Reels/Stories)" rows={bd.posicao} type="pie" max={8} />;
-  const cDispositivo = <BreakCard title="Dispositivo" rows={bd.dispositivo} type="pie" />;
-  const cMobile = <BreakCard title="Mobile vs Desktop" rows={bd.mobileDesktop} type="pie" />;
-  const cGenero = <BreakCard title="Gênero" rows={bd.genero} type="pie" />;
-  const cIdade = <BreakCard title="Faixa Etária" rows={bd.idade} type="bar" />;
+  const cPlataforma = <BreakCard title="Plataforma" rows={bd.plataforma.rows} loading={bd.plataforma.loading} type="pie" />;
+  const cPosicao = <BreakCard title="Posição (Feed/Reels/Stories)" rows={bd.posicao.rows} loading={bd.posicao.loading} type="pie" max={8} />;
+  const cDispositivo = <BreakCard title="Dispositivo" rows={bd.dispositivo.rows} loading={bd.dispositivo.loading} type="pie" />;
+  const cMobile = <BreakCard title="Mobile vs Desktop" rows={bd.mobileDesktop.rows} loading={bd.mobileDesktop.loading} type="pie" />;
+  const cGenero = <BreakCard title="Gênero" rows={bd.genero.rows} loading={bd.genero.loading} type="pie" />;
+  const cIdade = <BreakCard title="Faixa Etária" rows={bd.idade.rows} loading={bd.idade.loading} type="bar" />;
 
   const kpisBlock = (
     <div ref={kpisRef} className="space-y-4">

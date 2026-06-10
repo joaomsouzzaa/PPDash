@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBreakdown, type BreakdownRow } from "@/lib/meta-ads";
-import { BarChart3, PieChart as PieChartIcon } from "lucide-react";
+import { BarChart3, PieChart as PieChartIcon, Loader2 } from "lucide-react";
 import { BarChart, Bar, Cell, PieChart, Pie, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const BR_COLORS = ["#ff2d75", "#00d4ff", "#39ff14", "#faff00", "#bf5af2", "#ff6600"];
@@ -28,7 +28,7 @@ const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any)
   return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{(percent * 100).toFixed(0)}%</text>;
 };
 
-export function BreakCard({ title, rows, type, max }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number }) {
+export function BreakCard({ title, rows, type, max, loading }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number; loading?: boolean }) {
   const [tipo, setTipo] = useState<"pie" | "bar">(type);
   const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0).slice(0, max ?? 99);
   return (
@@ -48,7 +48,11 @@ export function BreakCard({ title, rows, type, max }: { title: string; rows: Bre
       </CardHeader>
       <CardContent>
         <div className="h-[240px]">
-          {data.length === 0 ? (
+          {loading && data.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" /> Carregando...
+            </div>
+          ) : data.length === 0 ? (
             <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sem compras neste segmento</div>
           ) : tipo === "pie" ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -92,29 +96,37 @@ export function useBreakdownData({ enabled, getAccountIds, startDate, endDate, d
     enabled,
     queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, startDate, endDate, dateRange, slug, true, keyField),
   });
-  const { data: genero = [] } = useQuery(bq("gender"));
-  const { data: idade = [] } = useQuery(bq("age"));
-  const { data: dispositivo = [] } = useQuery(bq("impression_device"));
-  const { data: plataforma = [] } = useQuery(bq("publisher_platform"));
-  const { data: mobileDesktop = [] } = useQuery(bq("device_platform"));
-  const { data: posicao = [] } = useQuery(bq("publisher_platform,platform_position", "platform_position"));
-  return { genero, idade, dispositivo, plataforma, mobileDesktop, posicao };
+  const qGenero = useQuery(bq("gender"));
+  const qIdade = useQuery(bq("age"));
+  const qDispositivo = useQuery(bq("impression_device"));
+  const qPlataforma = useQuery(bq("publisher_platform"));
+  const qMobileDesktop = useQuery(bq("device_platform"));
+  const qPosicao = useQuery(bq("publisher_platform,platform_position", "platform_position"));
+  // enabled + ainda buscando e sem dados => mostrar loading nos cards.
+  const ld = (q: { isPending: boolean; isFetching: boolean }) => enabled && (q.isPending || q.isFetching);
+  return {
+    genero: { rows: qGenero.data || [], loading: ld(qGenero) },
+    idade: { rows: qIdade.data || [], loading: ld(qIdade) },
+    dispositivo: { rows: qDispositivo.data || [], loading: ld(qDispositivo) },
+    plataforma: { rows: qPlataforma.data || [], loading: ld(qPlataforma) },
+    mobileDesktop: { rows: qMobileDesktop.data || [], loading: ld(qMobileDesktop) },
+    posicao: { rows: qPosicao.data || [], loading: ld(qPosicao) },
+  };
 }
 
 export function BreakdownCharts(props: Props) {
-  const { genero: bdGenero, idade: bdIdade, dispositivo: bdDispositivo, plataforma: bdPlataforma, mobileDesktop: bdMobileDesktop, posicao: bdPosicao } = useBreakdownData(props);
-
+  const bd = useBreakdownData(props);
   if (!props.enabled) return null;
   return (
     <div className="space-y-4">
       <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Público &amp; Dispositivos · por compras</div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BreakCard title="Plataforma" rows={bdPlataforma} type="pie" />
-        <BreakCard title="Posição (Feed/Reels/Stories)" rows={bdPosicao} type="pie" max={8} />
-        <BreakCard title="Dispositivo" rows={bdDispositivo} type="pie" />
-        <BreakCard title="Mobile vs Desktop" rows={bdMobileDesktop} type="pie" />
-        <BreakCard title="Gênero" rows={bdGenero} type="pie" />
-        <BreakCard title="Faixa Etária" rows={bdIdade} type="bar" />
+        <BreakCard title="Plataforma" rows={bd.plataforma.rows} loading={bd.plataforma.loading} type="pie" />
+        <BreakCard title="Posição (Feed/Reels/Stories)" rows={bd.posicao.rows} loading={bd.posicao.loading} type="pie" max={8} />
+        <BreakCard title="Dispositivo" rows={bd.dispositivo.rows} loading={bd.dispositivo.loading} type="pie" />
+        <BreakCard title="Mobile vs Desktop" rows={bd.mobileDesktop.rows} loading={bd.mobileDesktop.loading} type="pie" />
+        <BreakCard title="Gênero" rows={bd.genero.rows} loading={bd.genero.loading} type="pie" />
+        <BreakCard title="Faixa Etária" rows={bd.idade.rows} loading={bd.idade.loading} type="bar" />
       </div>
     </div>
   );

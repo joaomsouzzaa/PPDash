@@ -13,7 +13,7 @@ import {
 } from "@/lib/meta-ads";
 import {
   DollarSign, Eye, Layers, MousePointerClick, Target, TrendingUp, BarChart3, Link2, CreditCard,
-  ShoppingCart, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle, PieChart as PieChartIcon,
+  ShoppingCart, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle, PieChart as PieChartIcon, Loader2,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -47,7 +47,7 @@ const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any)
   return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{(percent * 100).toFixed(0)}%</text>;
 };
 
-function BreakCard({ title, rows, type, max }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number }) {
+function BreakCard({ title, rows, type, max, loading }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number; loading?: boolean }) {
   const [tipo, setTipo] = useState<"pie" | "bar">(type);
   const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0).slice(0, max ?? 99);
   return (
@@ -67,7 +67,11 @@ function BreakCard({ title, rows, type, max }: { title: string; rows: BreakdownR
       </CardHeader>
       <CardContent>
         <div className="h-[240px]">
-          {data.length === 0 ? (
+          {loading && data.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" /> Carregando...
+            </div>
+          ) : data.length === 0 ? (
             <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sem compras neste segmento</div>
           ) : tipo === "pie" ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -146,13 +150,16 @@ export default function Performance() {
     enabled,
     queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, true, keyField),
   });
-  const { data: bdGenero = [] } = useQuery(bq("gender"));
-  const { data: bdIdade = [] } = useQuery(bq("age"));
-  const { data: bdDispositivo = [] } = useQuery(bq("impression_device"));
-  const { data: bdPlataforma = [] } = useQuery(bq("publisher_platform"));
-  const { data: bdMobileDesktop = [] } = useQuery(bq("device_platform"));
+  const qGenero = useQuery(bq("gender"));
+  const qIdade = useQuery(bq("age"));
+  const qDispositivo = useQuery(bq("impression_device"));
+  const qPlataforma = useQuery(bq("publisher_platform"));
+  const qMobileDesktop = useQuery(bq("device_platform"));
   // Posição (feed/reels/stories) exige combinar com publisher_platform; agregamos por platform_position.
-  const { data: bdPosicao = [] } = useQuery(bq("publisher_platform,platform_position", "platform_position"));
+  const qPosicao = useQuery(bq("publisher_platform,platform_position", "platform_position"));
+  const bdGenero = qGenero.data || [], bdIdade = qIdade.data || [], bdDispositivo = qDispositivo.data || [];
+  const bdPlataforma = qPlataforma.data || [], bdMobileDesktop = qMobileDesktop.data || [], bdPosicao = qPosicao.data || [];
+  const ldBd = (q: { isPending: boolean; isFetching: boolean }) => enabled && (q.isPending || q.isFetching);
 
   const chartData = daily.map((d) => ({
     name: new Date(d.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
@@ -276,12 +283,12 @@ export default function Performance() {
                 {/* PÚBLICO & DISPOSITIVOS (por compras) */}
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Público & Dispositivos · por compras</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <BreakCard title="Plataforma" rows={bdPlataforma} type="pie" />
-                  <BreakCard title="Posição (Feed/Reels/Stories)" rows={bdPosicao} type="pie" max={8} />
-                  <BreakCard title="Dispositivo" rows={bdDispositivo} type="pie" />
-                  <BreakCard title="Mobile vs Desktop" rows={bdMobileDesktop} type="pie" />
-                  <BreakCard title="Gênero" rows={bdGenero} type="pie" />
-                  <BreakCard title="Faixa Etária" rows={bdIdade} type="bar" />
+                  <BreakCard title="Plataforma" rows={bdPlataforma} loading={ldBd(qPlataforma)} type="pie" />
+                  <BreakCard title="Posição (Feed/Reels/Stories)" rows={bdPosicao} loading={ldBd(qPosicao)} type="pie" max={8} />
+                  <BreakCard title="Dispositivo" rows={bdDispositivo} loading={ldBd(qDispositivo)} type="pie" />
+                  <BreakCard title="Mobile vs Desktop" rows={bdMobileDesktop} loading={ldBd(qMobileDesktop)} type="pie" />
+                  <BreakCard title="Gênero" rows={bdGenero} loading={ldBd(qGenero)} type="pie" />
+                  <BreakCard title="Faixa Etária" rows={bdIdade} loading={ldBd(qIdade)} type="bar" />
                 </div>
 
                 <Card>
