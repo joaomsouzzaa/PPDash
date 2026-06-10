@@ -142,6 +142,23 @@ async function graphApiFetch<T>(path: string, params: Record<string, string> = {
   return res.json();
 }
 
+/** Busca TODAS as páginas de um endpoint de lista (segue o cursor `after`),
+ *  agregando `data`. Necessário p/ breakdowns combinados que estouram o limit
+ *  (ex.: publisher_platform,platform_position) e ficavam subcontados. */
+async function graphApiFetchAll(path: string, params: Record<string, string> = {}, maxPages = 25): Promise<any[]> {
+  const out: any[] = [];
+  let after: string | undefined;
+  for (let i = 0; i < maxPages; i++) {
+    const p = { ...params };
+    if (after) p.after = after;
+    const res = await graphApiFetch<{ data: any[]; paging?: { next?: string; cursors?: { after?: string } } }>(path, p);
+    out.push(...(res.data || []));
+    if (res.paging?.next && res.paging?.cursors?.after) after = res.paging.cursors.after;
+    else break;
+  }
+  return out;
+}
+
 /** Exchange a short-lived token for a long-lived one via the backend. */
 export async function exchangeForLongLivedToken(shortLivedToken: string): Promise<{ access_token: string; expires_in: number }> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -606,8 +623,8 @@ export async function fetchBreakdown(
     const params: Record<string, string> = campaignSlug
       ? { level: "campaign", breakdowns: breakdown, fields: "campaign_name,spend,impressions,clicks,actions", time_range, limit: "500" }
       : { breakdowns: breakdown, fields: "spend,impressions,clicks,actions", time_range, limit: "500" };
-    const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, params);
-    for (const r of res.data || []) {
+    const rows = await graphApiFetchAll(`/${id}/insights`, params);
+    for (const r of rows) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
       const key = String(r[kf] ?? "—");
       const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0 };
