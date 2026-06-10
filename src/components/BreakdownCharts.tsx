@@ -28,7 +28,7 @@ const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any)
   return <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700}>{(percent * 100).toFixed(0)}%</text>;
 };
 
-function BreakCard({ title, rows, type, max }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number }) {
+export function BreakCard({ title, rows, type, max }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number }) {
   const [tipo, setTipo] = useState<"pie" | "bar">(type);
   const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0).slice(0, max ?? 99);
   return (
@@ -84,21 +84,27 @@ interface Props {
   startDate?: Date; endDate?: Date; dateRange: string; slug?: string;
 }
 
-export function BreakdownCharts({ enabled, getAccountIds, startDate, endDate, dateRange, slug }: Props) {
+// Hook que busca os 6 breakdowns (reaproveitável p/ compor os gráficos avulsos).
+export function useBreakdownData({ enabled, getAccountIds, startDate, endDate, dateRange, slug }: Props) {
   const qkey = [dateRange, startDate?.toISOString(), endDate?.toISOString(), slug];
   const bq = (breakdown: string, keyField?: string) => ({
     queryKey: ["bd", breakdown, keyField || "", ...qkey],
     enabled,
     queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, startDate, endDate, dateRange, slug, true, keyField),
   });
-  const { data: bdGenero = [] } = useQuery(bq("gender"));
-  const { data: bdIdade = [] } = useQuery(bq("age"));
-  const { data: bdDispositivo = [] } = useQuery(bq("impression_device"));
-  const { data: bdPlataforma = [] } = useQuery(bq("publisher_platform"));
-  const { data: bdMobileDesktop = [] } = useQuery(bq("device_platform"));
-  const { data: bdPosicao = [] } = useQuery(bq("publisher_platform,platform_position", "platform_position"));
+  const { data: genero = [] } = useQuery(bq("gender"));
+  const { data: idade = [] } = useQuery(bq("age"));
+  const { data: dispositivo = [] } = useQuery(bq("impression_device"));
+  const { data: plataforma = [] } = useQuery(bq("publisher_platform"));
+  const { data: mobileDesktop = [] } = useQuery(bq("device_platform"));
+  const { data: posicao = [] } = useQuery(bq("publisher_platform,platform_position", "platform_position"));
+  return { genero, idade, dispositivo, plataforma, mobileDesktop, posicao };
+}
 
-  if (!enabled) return null;
+export function BreakdownCharts(props: Props) {
+  const { genero: bdGenero, idade: bdIdade, dispositivo: bdDispositivo, plataforma: bdPlataforma, mobileDesktop: bdMobileDesktop, posicao: bdPosicao } = useBreakdownData(props);
+
+  if (!props.enabled) return null;
   return (
     <div className="space-y-4">
       <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Público &amp; Dispositivos · por compras</div>

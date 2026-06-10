@@ -20,7 +20,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { BreakdownCharts } from "@/components/BreakdownCharts";
+import { useBreakdownData, BreakCard } from "@/components/BreakdownCharts";
 import { toast } from "sonner";
 
 import { KpiCard } from "@/components/KpiCard";
@@ -84,6 +84,16 @@ const Index = () => {
   // Para os gráficos de público/dispositivos (Meta breakdowns)
   const getAccountIds = async () => filters.adAccount !== "all" ? [filters.adAccount] : (await fetchAdAccounts()).map((a) => a.id);
   const breakdownSlug = filters.city !== "all" ? selectedCidade?.slug : undefined;
+
+  // Dados dos breakdowns (gráficos pizza/barra) — reaproveitados no layout normal e no TV 3:1.
+  const bd = useBreakdownData({
+    enabled: isMetaConnected,
+    getAccountIds,
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    dateRange: filters.dateRange,
+    slug: breakdownSlug,
+  });
 
   // TV Mode: fullscreen + rotate through active cities every 20s
   const [tvMode, setTvMode] = useState(false);
@@ -356,6 +366,68 @@ const Index = () => {
     calcProjection();
   }, [selectedCidade, isMetaConnected, filters.adAccount, kpi.participantes, cacParticipanteDisplay, loadingVendas]);
 
+  // Série diária (faturamento x investimento) já combinada com o gasto Meta.
+  const salesData = (() => {
+    const merged = kpi.chartData.map((d) => {
+      const [day, month] = d.name.split("/");
+      const year = new Date().getFullYear();
+      const dateKey = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      return { ...d, investimento: dailySpendMap.get(dateKey) || 0 };
+    });
+    for (const [dateKey, spend] of dailySpendMap) {
+      const date = new Date(dateKey);
+      const label = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      if (!merged.find((m) => m.name === label)) {
+        merged.push({ name: label, investimento: spend, faturamento: 0 });
+      }
+    }
+    merged.sort((a, b) => {
+      const [da, ma] = a.name.split("/").map(Number);
+      const [db, mb] = b.name.split("/").map(Number);
+      return ma !== mb ? ma - mb : da - db;
+    });
+    return merged;
+  })();
+
+  // Gráficos avulsos reaproveitados nos layouts (normal e TV 3:1).
+  const cPlataforma = <BreakCard title="Plataforma" rows={bd.plataforma} type="pie" />;
+  const cPosicao = <BreakCard title="Posição (Feed/Reels/Stories)" rows={bd.posicao} type="pie" max={8} />;
+  const cDispositivo = <BreakCard title="Dispositivo" rows={bd.dispositivo} type="pie" />;
+  const cMobile = <BreakCard title="Mobile vs Desktop" rows={bd.mobileDesktop} type="pie" />;
+  const cGenero = <BreakCard title="Gênero" rows={bd.genero} type="pie" />;
+  const cIdade = <BreakCard title="Faixa Etária" rows={bd.idade} type="bar" />;
+
+  const kpisBlock = (
+    <div ref={kpisRef} className="space-y-4">
+      {/* Row 1 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard title="Investimento Total" value={svMeta(fmt(investimentoDisplay))} icon={DollarSign} />
+        <KpiCard title="Bilheteria Total" value={sv(fmt(kpi.bilheteriaTotal))} icon={TrendingUp} />
+        <KpiCard title="CAC por Venda" value={svMeta(fmt(cacVendaDisplay))} icon={Target} />
+        <KpiCard title="CAC por Participante" value={svMeta(fmt(cacParticipanteDisplay))} icon={Users} />
+      </div>
+      {/* Row 2 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard title="Total de Participantes" value={sv(String(kpi.participantes))} icon={Users} />
+        <KpiCard title="Total de VIPs" value={sv(String(kpi.totalVips))} icon={Crown} />
+        <KpiCard title="Convidados" value={sv(String(kpi.totalConvidados))} icon={Gift} />
+        <KpiCard title="Projeção de Participantes" value={(carregando || loadingProjecao) ? "Carregando..." : (projecaoParticipantes !== null ? String(projecaoParticipantes) : "—")} icon={BarChart3} />
+      </div>
+      {/* Row 2b */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <KpiCard title="Vendas Individuais" value={sv(String(kpi.vendasIndividuais))} icon={User} />
+        <KpiCard title="Vendas Duplas" value={sv(String(kpi.vendasDuplas))} icon={Users2} />
+        <KpiCard title="Ticket Médio" value={sv(fmt(kpi.ticketMedio))} icon={ShoppingCart} />
+      </div>
+      {/* Row 3 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <KpiCard title="Bilheteria Ingressos" value={sv(fmt(kpi.bilheteriaIngressos))} icon={Ticket} />
+        <KpiCard title="Bilheteria VIP" value={sv(fmt(kpi.bilheteriaVip))} icon={Gift} />
+        <KpiCard title="Bilheteria (+/-)" value={svMeta(fmt(lucroDisplay))} icon={Banknote} />
+      </div>
+    </div>
+  );
+
   return (
     <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
       
@@ -406,146 +478,57 @@ const Index = () => {
             )}
           </header>
 
-          <div className={tvMode ? "tv-content" : "p-6 space-y-6"}>
+          <div className={tvMode ? (tvLayout === "3:1" ? "tv-content tv-3col" : "tv-content") : "p-6 space-y-6"}>
             {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} />}
 
-            <div ref={kpisRef} className="space-y-4">
-            {/* Row 1 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard
-                title="Investimento Total"
-                value={svMeta(fmt(investimentoDisplay))}
-                icon={DollarSign}
-              />
-              <KpiCard
-                title="Bilheteria Total"
-                value={sv(fmt(kpi.bilheteriaTotal))}
-                icon={TrendingUp}
-              />
-              <KpiCard
-                title="CAC por Venda"
-                value={svMeta(fmt(cacVendaDisplay))}
-                icon={Target}
-              />
-              <KpiCard
-                title="CAC por Participante"
-                value={svMeta(fmt(cacParticipanteDisplay))}
-                icon={Users}
-              />
-            </div>
-
-            {/* Row 2 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard
-                title="Total de Participantes"
-                value={sv(String(kpi.participantes))}
-                icon={Users}
-              />
-              <KpiCard
-                title="Total de VIPs"
-                value={sv(String(kpi.totalVips))}
-                icon={Crown}
-              />
-              <KpiCard
-                title="Convidados"
-                value={sv(String(kpi.totalConvidados))}
-                icon={Gift}
-              />
-              <KpiCard
-                title="Projeção de Participantes"
-                value={(carregando || loadingProjecao) ? "Carregando..." : (projecaoParticipantes !== null ? String(projecaoParticipantes) : "—")}
-                icon={BarChart3}
-              />
-            </div>
-
-            {/* Row 2b */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Vendas Individuais"
-                value={sv(String(kpi.vendasIndividuais))}
-                icon={User}
-              />
-              <KpiCard
-                title="Vendas Duplas"
-                value={sv(String(kpi.vendasDuplas))}
-                icon={Users2}
-              />
-              <KpiCard
-                title="Ticket Médio"
-                value={sv(fmt(kpi.ticketMedio))}
-                icon={ShoppingCart}
-              />
-            </div>
-
-            {/* Row 3 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Bilheteria Ingressos"
-                value={sv(fmt(kpi.bilheteriaIngressos))}
-                icon={Ticket}
-              />
-              <KpiCard
-                title="Bilheteria VIP"
-                value={sv(fmt(kpi.bilheteriaVip))}
-                icon={Gift}
-              />
-              <KpiCard
-                title="Bilheteria (+/-)"
-                value={svMeta(fmt(lucroDisplay))}
-                icon={Banknote}
-              />
-            </div>
-            </div>
-            {/* fim dos KPIs (kpisRef) */}
-
-            {/* Público & Dispositivos (Meta) — só fora do modo TV */}
-            {!tvMode && isMetaConnected && (
-              <BreakdownCharts
-                enabled={isMetaConnected}
-                getAccountIds={getAccountIds}
-                startDate={filters.startDate}
-                endDate={filters.endDate}
-                dateRange={filters.dateRange}
-                slug={breakdownSlug}
-              />
+            {tvMode && tvLayout === "3:1" ? (
+              <>
+                {/* Tela 1 — KPIs */}
+                <div className="tv-col tv-col-kpis">{kpisBlock}</div>
+                {/* Tela 2 — 4 gráficos (Plataforma, Posição, Dispositivo, Mobile vs Desktop) */}
+                <div className="tv-col">
+                  <div className="tv-quad">{cPlataforma}{cPosicao}{cDispositivo}{cMobile}</div>
+                </div>
+                {/* Tela 3 — 4 gráficos (Gênero, Faixa Etária, Pagamento, Investimento x Faturamento) */}
+                <div className="tv-col">
+                  <div className="tv-quad">
+                    {cGenero}
+                    {cIdade}
+                    <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
+                    <SalesChart data={salesData} />
+                  </div>
+                </div>
+              </>
+            ) : tvMode ? (
+              <>
+                {/* TV 16:9 — KPIs + gráficos empilhados */}
+                {kpisBlock}
+                <div className="tv-charts">
+                  <div className="tv-chart"><SalesChart data={salesData} /></div>
+                  <div className="tv-pay"><PaymentMethodChart data={kpi.pagamentoPorMetodo} /></div>
+                </div>
+              </>
+            ) : (
+              <>
+                {kpisBlock}
+                {/* Gráficos na sequência: Plataforma, Posição, Dispositivo, Mobile, Gênero, Faixa Etária, Pagamento, Investimento x Faturamento */}
+                {isMetaConnected ? (
+                  <div className="space-y-4">
+                    <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Público &amp; Dispositivos · por compras</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {cPlataforma}{cPosicao}{cDispositivo}{cMobile}{cGenero}{cIdade}
+                      <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
+                      <SalesChart data={salesData} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
+                    <SalesChart data={salesData} />
+                  </div>
+                )}
+              </>
             )}
-
-            {/* Charts */}
-            <div className={tvMode ? "tv-charts" : "space-y-6"}>
-            {/* Investimento x Faturamento primeiro */}
-            <div className={tvMode ? "tv-chart" : ""}>
-            <SalesChart data={(() => {
-              // Merge daily Meta spend into chart data
-              const merged = kpi.chartData.map((d) => {
-                // Convert chart label "dd/mm" to "YYYY-MM-DD" to match Meta's date_start
-                const [day, month] = d.name.split("/");
-                const year = new Date().getFullYear();
-                const dateKey = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-                return { ...d, investimento: dailySpendMap.get(dateKey) || 0 };
-              });
-              // Add days with spend but no sales
-              for (const [dateKey, spend] of dailySpendMap) {
-                const date = new Date(dateKey);
-                const label = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-                if (!merged.find((m) => m.name === label)) {
-                  merged.push({ name: label, investimento: spend, faturamento: 0 });
-                }
-              }
-              // Sort by date
-              merged.sort((a, b) => {
-                const [da, ma] = a.name.split("/").map(Number);
-                const [db, mb] = b.name.split("/").map(Number);
-                return ma !== mb ? ma - mb : da - db;
-              });
-              return merged;
-            })()} />
-            </div>
-
-            {/* Método de Pagamento depois */}
-            <div className={tvMode ? "tv-pay" : ""}>
-              <PaymentMethodChart data={kpi.pagamentoPorMetodo} />
-            </div>
-            </div>
           </div>
         </main>
       </div>

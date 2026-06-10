@@ -253,4 +253,29 @@ main { min-width: 0; }
 /* donut = 1º filho do flex; altura fixa (Recharts precisa) — mira por estrutura, não por classe arbitrária */
 .tv-mode.tv-3x1 .tv-pay .flex.items-center > div:first-child { height: 42vh !important; min-height: 280px; }
 
+/* ===== 3:1 (nova estrutura): Tela 1 = KPIs · Tela 2 e 3 = 4 gráficos cada ===== */
+/* Desce um pouco o cabeçalho (mesma margem em todas as telas). */
+.tv-mode header { padding-top: 1.1rem; padding-bottom: 1.1rem; }
+
+/* Cada tela é uma coluna que preenche a altura. */
+.tv-mode.tv-3x1 .tv-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.tv-mode.tv-3x1 .tv-col-kpis { justify-content: center; }
+
+/* Telas 2 e 3: 4 quadrantes (2x2). */
+.tv-mode.tv-3x1 .tv-quad {
+  flex: 1 1 0; min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1.25rem;
+}
+/* Cada card preenche a célula do quadrante. */
+.tv-mode.tv-3x1 .tv-quad > * { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.tv-mode.tv-3x1 .tv-quad > * > :last-child { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+/* Containers de gráfico com altura fixa (h-[240px]/h-[300px]) passam a preencher a célula. */
+.tv-mode.tv-3x1 .tv-quad [class*="h-[240px]"],
+.tv-mode.tv-3x1 .tv-quad [class*="h-[300px]"] { height: 100% !important; min-height: 0; flex: 1 1 0; }
+/* Pagamento no quadrante: empilha donut + lista (não lado a lado) e centraliza. */
+.tv-mode.tv-3x1 .tv-quad .lg\:flex-row { flex-direction: column !important; gap: 0.75rem !important; }
+
 
