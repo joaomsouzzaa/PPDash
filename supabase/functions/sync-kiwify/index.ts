@@ -37,7 +37,7 @@ function authHeaders(token: string) {
   };
 }
 
-// Busca todas as páginas de um endpoint de listagem do Kiwify ({ data, pagination }).
+// Lista paginada onde `data` é um ARRAY (ex.: /products).
 async function listarTudo(path: string, token: string, maxPages = 50): Promise<any[]> {
   const out: any[] = [];
   for (let page = 1; page <= maxPages; page++) {
@@ -45,10 +45,25 @@ async function listarTudo(path: string, token: string, maxPages = 50): Promise<a
     const r = await fetch(`${BASE}${path}${sep}page_size=100&page_number=${page}`, { headers: authHeaders(token) });
     if (!r.ok) break;
     const j = await r.json().catch(() => ({}));
-    const data = j.data || [];
+    const data = Array.isArray(j.data) ? j.data : [];
     out.push(...data);
     const count = j.pagination?.count ?? out.length;
     if (data.length === 0 || out.length >= count) break;
+  }
+  return out;
+}
+
+// Participantes de um evento: a resposta é { pagination, data: { ...metadados, participants: [...] } }.
+async function listarParticipantes(productId: string, token: string, maxPages = 50): Promise<any[]> {
+  const out: any[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const r = await fetch(`${BASE}/events/${productId}/participants?page_size=100&page_number=${page}`, { headers: authHeaders(token) });
+    if (!r.ok) break;
+    const j = await r.json().catch(() => ({}));
+    const parts = j.data?.participants || [];
+    out.push(...parts);
+    const count = j.pagination?.count ?? out.length;
+    if (parts.length === 0 || out.length >= count) break;
   }
   return out;
 }
@@ -88,7 +103,7 @@ Deno.serve(async (req) => {
       const cidade = matchCidade(p.name || "");
       if (!cidade) continue; // produto que não é de cidade ativa
       let participantes: any[] = [];
-      try { participantes = await listarTudo(`/events/${p.id}/participants`, token); } catch { continue; }
+      try { participantes = await listarParticipantes(p.id, token); } catch { continue; }
 
       for (const part of participantes) {
         const ehCortesia = /convite|cortesia/i.test(String(part.batch_name || "")) || !part.order_id;
