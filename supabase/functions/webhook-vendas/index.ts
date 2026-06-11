@@ -280,7 +280,8 @@ function mapStatus(status: string): string {
   const s = status.toLowerCase().replace(/_/g, " ");
   if (s.includes("approved") || s.includes("purchase approved") || s.includes("paid") || s.includes("completed") || s.includes("ready")) return "aprovada";
   if (s.includes("refund")) return "reembolsada";
-  if (s.includes("cancel") || s.includes("chargeback")) return "cancelada";
+  // Kiwify manda chargeback como "chargedback"; cobre as duas grafias + cancel/refused.
+  if (s.includes("cancel") || s.includes("chargeback") || s.includes("chargedback") || s.includes("charged back") || s.includes("refused") || s.includes("declined")) return "cancelada";
   if (s.includes("pending") || s.includes("waiting")) return "pendente";
   return status;
 }
