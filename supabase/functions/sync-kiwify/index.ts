@@ -83,8 +83,9 @@ Deno.serve(async (req) => {
     const ativas = (cids || []).filter((c: any) => !c.data_evento || String(c.data_evento).slice(0, 10) >= hoje);
     if (ativas.length === 0) return json({ success: true, msg: "Nenhuma cidade ativa", inseridos: 0 });
 
-    // Convites já existentes no banco (dedup por e-mail).
-    const { data: existentes } = await supabase.from("vendas").select("email_comprador").eq("tipo_ingresso", "convite");
+    // Dedup por e-mail contra TODAS as vendas (qualquer tipo/plataforma) — evita
+    // duplicar quem já existe (mesmo com tipo "Convite"/"cconvite"/pago).
+    const { data: existentes } = await supabase.from("vendas").select("email_comprador");
     const jaTem = new Set((existentes || []).map((r: any) => norm(r.email_comprador)).filter(Boolean));
 
     // Produtos do Kiwify → casa cada um com uma cidade ativa pelo nome.
