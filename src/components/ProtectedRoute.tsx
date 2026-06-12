@@ -26,6 +26,10 @@ export function ProtectedRoute({ children, modulo, papeis }: Props) {
   if (loading) return <TelaCarregando />;
   if (!session) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
 
+  // Sessão existe mas o perfil ainda está carregando: aguarda (evita redirecionar
+  // ou negar acesso indevidamente logo após o login → tela em branco).
+  if (!profile) return <TelaCarregando />;
+
   // Conta criada mas ainda sem organização/aprovação
   if (profile && profile.status !== "ativo") {
     return <Navigate to="/aguardando" replace />;

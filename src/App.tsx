@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SaleNotificationBanner } from "@/components/SaleNotificationBanner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandingEffect } from "@/components/BrandingEffect";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import DefinirSenha from "./pages/DefinirSenha";
@@ -58,6 +59,7 @@ const App = () => (
         <BrandingEffect />
         <SaleNotificationBanner />
         <BrowserRouter>
+          <ErrorBoundary>
           <Routes>
             {/* Públicas */}
             <Route path="/login" element={<Login />} />
@@ -91,9 +93,9 @@ const App = () => (
             <Route path="/modulos" element={<Priv><Modulos /></Priv>} />
             <Route path="/configuracoes" element={<Priv><Configuracoes /></Priv>} />
 
-            {/* Admin do cliente */}
-            <Route path="/equipe" element={<Priv papeis={["client_admin", "super_admin"]}><Equipe /></Priv>} />
-            <Route path="/plano" element={<Priv papeis={["client_admin", "super_admin"]}><Plano /></Priv>} />
+            {/* Admin do cliente (super admin gerencia tudo pelo Painel SaaS) */}
+            <Route path="/equipe" element={<Priv papeis={["client_admin"]}><Equipe /></Priv>} />
+            <Route path="/plano" element={<Priv papeis={["client_admin"]}><Plano /></Priv>} />
 
             {/* Super admin (dono do SaaS) */}
             <Route path="/admin" element={<Priv papeis={["super_admin"]}><AdminSaaS /></Priv>} />
@@ -101,6 +103,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </ErrorBoundary>
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

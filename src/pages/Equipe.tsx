@@ -62,9 +62,11 @@ export default function Equipe() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
+    if (!profile?.org_id) { setMembros([]); setLoading(false); return; }
     const { data: profs } = await supabase
       .from("profiles")
       .select("id, nome, email, papel, status")
+      .eq("org_id", profile.org_id)
       .order("created_at");
     const ids = ((profs as Membro[]) ?? []).map((p) => p.id);
     const { data: ums } = ids.length
@@ -76,7 +78,7 @@ export default function Equipe() {
     });
     setMembros(((profs as Membro[]) ?? []).map((p) => ({ ...p, modulos: mapMods.get(p.id) ?? [] })));
     setLoading(false);
-  }, []);
+  }, [profile?.org_id]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 

@@ -205,7 +205,7 @@ export function AppSidebar() {
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          {podeAdmin && (
+          {isClientAdmin && (
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Gerenciar Plano">
               <NavLink
@@ -220,7 +220,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           )}
-          {podeAdmin && (
+          {isClientAdmin && (
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Minha Equipe">
               <NavLink
