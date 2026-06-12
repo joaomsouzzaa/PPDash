@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Smartphone, Plus, QrCode, Trash2, RefreshCw, Loader2, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -115,48 +114,51 @@ export function WhatsAppConexao() {
 
       {insts.map((i) => {
         const on = conectadoStatus(i.status);
+        const showQr = qr?.id === i.id;
         return (
           <Card key={i.id}>
-            <CardContent className="flex items-center justify-between gap-3 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
-                  <Smartphone className="h-4 w-4 text-green-600" />
+            <CardContent className="py-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-9 w-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                    <Smartphone className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{i.nome}</p>
+                    <p className="text-xs text-muted-foreground truncate">{i.numero || "sem número"}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{i.nome}</p>
-                  <p className="text-xs text-muted-foreground truncate">{i.numero || "sem número"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant={on ? "default" : "outline"} className="gap-1">
-                  {on ? <><Wifi className="h-3 w-3" /> Conectado</> : <><WifiOff className="h-3 w-3" /> {i.status}</>}
-                </Badge>
-                {!on && (
-                  <Button size="sm" variant="outline" disabled={busyId === i.id} onClick={() => conectar(i.id)}>
-                    <QrCode className="mr-1 h-4 w-4" /> Conectar
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant={on ? "default" : "outline"} className="gap-1">
+                    {on ? <><Wifi className="h-3 w-3" /> Conectado</> : <><WifiOff className="h-3 w-3" /> {i.status}</>}
+                  </Badge>
+                  {!on && (
+                    <Button size="sm" variant="outline" disabled={busyId === i.id} onClick={() => conectar(i.id)}>
+                      <QrCode className="mr-1 h-4 w-4" /> {showQr ? "Atualizar QR" : "Conectar"}
+                    </Button>
+                  )}
+                  <Button size="icon" variant="ghost" className="h-8 w-8" disabled={busyId === i.id} onClick={() => atualizar(i.id)} title="Atualizar status">
+                    <RefreshCw className="h-4 w-4" />
                   </Button>
-                )}
-                <Button size="icon" variant="ghost" className="h-8 w-8" disabled={busyId === i.id} onClick={() => atualizar(i.id)} title="Atualizar status">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" disabled={busyId === i.id} onClick={() => excluir(i.id)} title="Excluir">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" disabled={busyId === i.id} onClick={() => excluir(i.id)} title="Excluir">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
+
+              {showQr && !on && (
+                <div className="flex flex-col items-center gap-2 border-t pt-3">
+                  <img src={qr!.img} alt="QR Code WhatsApp" className="h-56 w-56 rounded-lg border bg-white p-2" />
+                  <p className="text-xs text-muted-foreground text-center">
+                    No celular: WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie.
+                    Conecta sozinho ao escanear.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         );
       })}
-
-      <Dialog open={!!qr} onOpenChange={(o) => !o && setQr(null)}>
-        <DialogContent className="max-w-xs text-center">
-          <DialogHeader><DialogTitle>Conectar WhatsApp</DialogTitle></DialogHeader>
-          {qr && <img src={qr.img} alt="QR Code" className="mx-auto h-60 w-60 rounded-lg border bg-white p-2" />}
-          <p className="text-xs text-muted-foreground">
-            No celular: WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie. A janela fecha sozinha ao conectar.
-          </p>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
