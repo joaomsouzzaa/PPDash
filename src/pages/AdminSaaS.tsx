@@ -26,14 +26,14 @@ const MODULOS: { key: ModuloKey; nome: string }[] = [
 
 interface Plano {
   id: string; nome: string; slug: string; preco: number;
-  modulos: ModuloKey[]; max_usuarios: number; ativo: boolean; ordem: number;
+  modulos: ModuloKey[]; max_usuarios: number; max_instancias: number; ativo: boolean; ordem: number;
 }
 interface Org {
   id: string; nome: string; status: string; plano_id: string | null;
   plano_nome?: string; usuarios?: number;
 }
 
-const PLANO_VAZIO = { nome: "", slug: "", preco: 0, max_usuarios: 5, modulos: [] as ModuloKey[], ordem: 0 };
+const PLANO_VAZIO = { nome: "", slug: "", preco: 0, max_usuarios: 5, max_instancias: 1, modulos: [] as ModuloKey[], ordem: 0 };
 
 export default function AdminSaaS() {
   const [planos, setPlanos] = useState<Plano[]>([]);
@@ -101,13 +101,13 @@ export default function AdminSaaS() {
   const abrirNovoPlano = () => { setEditId(null); setFormPlano({ ...PLANO_VAZIO, ordem: planos.length + 1 }); setOpenPlano(true); };
   const abrirEditarPlano = (p: Plano) => {
     setEditId(p.id);
-    setFormPlano({ nome: p.nome, slug: p.slug, preco: Number(p.preco), max_usuarios: p.max_usuarios, modulos: p.modulos ?? [], ordem: p.ordem });
+    setFormPlano({ nome: p.nome, slug: p.slug, preco: Number(p.preco), max_usuarios: p.max_usuarios, max_instancias: p.max_instancias ?? 1, modulos: p.modulos ?? [], ordem: p.ordem });
     setOpenPlano(true);
   };
   const salvarPlano = async () => {
     if (!formPlano.nome.trim()) return toast.error("Informe o nome do plano.");
     const slug = (formPlano.slug.trim() || formPlano.nome.trim().toLowerCase().replace(/\s+/g, "-")).replace(/[^a-z0-9-]/g, "");
-    const dados = { nome: formPlano.nome.trim(), slug, preco: Number(formPlano.preco) || 0, max_usuarios: Number(formPlano.max_usuarios) || 1, modulos: formPlano.modulos, ordem: Number(formPlano.ordem) || 0 };
+    const dados = { nome: formPlano.nome.trim(), slug, preco: Number(formPlano.preco) || 0, max_usuarios: Number(formPlano.max_usuarios) || 1, max_instancias: Number(formPlano.max_instancias) || 0, modulos: formPlano.modulos, ordem: Number(formPlano.ordem) || 0 };
     setSavingPlano(true);
     try {
       const q = editId
@@ -227,7 +227,7 @@ export default function AdminSaaS() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div className="text-muted-foreground">R$ {Number(p.preco).toFixed(2)} · até {p.max_usuarios} usuários</div>
+                    <div className="text-muted-foreground">R$ {Number(p.preco).toFixed(2)} · {p.max_usuarios} usuários · {p.max_instancias ?? 0} WhatsApp</div>
                     <div className="flex flex-wrap gap-1">
                       {(p.modulos ?? []).map((m) => <Badge key={m} variant="secondary">{MODULOS.find((x) => x.key === m)?.nome ?? m}</Badge>)}
                       {(!p.modulos || p.modulos.length === 0) && <span className="text-xs text-muted-foreground">Sem módulos</span>}
@@ -243,11 +243,13 @@ export default function AdminSaaS() {
                 <div className="space-y-3">
                   <div className="space-y-1"><Label>Nome</Label>
                     <Input value={formPlano.nome} onChange={(e) => setFormPlano({ ...formPlano, nome: e.target.value })} /></div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1"><Label>Preço (R$)</Label>
                       <Input type="number" value={formPlano.preco} onChange={(e) => setFormPlano({ ...formPlano, preco: Number(e.target.value) })} /></div>
                     <div className="space-y-1"><Label>Máx. usuários</Label>
                       <Input type="number" value={formPlano.max_usuarios} onChange={(e) => setFormPlano({ ...formPlano, max_usuarios: Number(e.target.value) })} /></div>
+                    <div className="space-y-1"><Label>Máx. WhatsApp</Label>
+                      <Input type="number" value={formPlano.max_instancias} onChange={(e) => setFormPlano({ ...formPlano, max_instancias: Number(e.target.value) })} /></div>
                   </div>
                   <div className="space-y-2">
                     <Label>Módulos incluídos</Label>

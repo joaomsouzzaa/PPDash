@@ -711,6 +711,7 @@ export type Database = {
           ativo: boolean
           created_at: string
           id: string
+          max_instancias: number
           max_usuarios: number
           modulos: Json
           nome: string
@@ -722,6 +723,7 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           id?: string
+          max_instancias?: number
           max_usuarios?: number
           modulos?: Json
           nome: string
@@ -733,6 +735,7 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           id?: string
+          max_instancias?: number
           max_usuarios?: number
           modulos?: Json
           nome?: string
@@ -1157,6 +1160,44 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      whatsapp_instancias: {
+        Row: {
+          created_at: string
+          id: string
+          instance_token: string | null
+          nome: string
+          numero: string | null
+          org_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_token?: string | null
+          nome: string
+          numero?: string | null
+          org_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_token?: string | null
+          nome?: string
+          numero?: string | null
+          org_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instancias_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
