@@ -11,32 +11,64 @@ const corsHeaders = {
 //   - header "admintoken" para criar/instanciar
 //   - header "token" para operações da instância (status, send, grupos)
 // ===================================================================
+// Servidor e admin token GLOBAIS (modelo revenda — a conta UAZAPI é do dono do SaaS).
+const BASE = (Deno.env.get("UAZAPI_SERVER_URL") || "").replace(/\/$/, "");
+const ADMIN = Deno.env.get("UAZAPI_ADMIN_TOKEN") || "";
+
 const UAZAPI = {
-  connect: (base: string) => `${base}/instance/connect`,
-  status: (base: string) => `${base}/instance/status`,
-  groups: (base: string) => `${base}/group/list`,
-  sendText: (base: string) => `${base}/send/text`,
+  init: () => `${BASE}/instance/init`,
+  del: () => `${BASE}/instance`,
+  connect: () => `${BASE}/instance/connect`,
+  status: () => `${BASE}/instance/status`,
+  groups: () => `${BASE}/group/list`,
+  sendText: () => `${BASE}/send/text`,
 };
 
 function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-async function getConfig(supabase: any) {
-  const { data } = await supabase.from("whatsapp_config").select("*").maybeSingle();
-  return data;
+// Resolve a organização: via JWT (UI do cliente) ou via body.org_id (chamadas internas).
+async function getOrgId(supabase: any, req: Request, body: any): Promise<string | null> {
+  const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+  if (token) {
+    const { data: u } = await supabase.auth.getUser(token);
+    if (u?.user) {
+      const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
+      if (p?.org_id) return p.org_id as string;
+    }
+  }
+  return body?.org_id ?? null;
 }
 
-async function uazFetch(base: string, path: string, token: string, body?: unknown) {
+// Token de uma instância conectada da org (para enviar mensagens).
+async function getOrgToken(supabase: any, orgId: string | null): Promise<string | null> {
+  if (!orgId) return null;
+  const { data } = await supabase.from("whatsapp_instancias")
+    .select("instance_token,status").eq("org_id", orgId).not("instance_token", "is", null);
+  const list = data || [];
+  const conn = list.find((i: any) => i.status === "connected");
+  return (conn || list[0])?.instance_token || null;
+}
+
+// Limite de instâncias do plano da org.
+async function limiteInstancias(supabase: any, orgId: string): Promise<number> {
+  const { data: org } = await supabase.from("organizations").select("plano_id").eq("id", orgId).maybeSingle();
+  if (!org?.plano_id) return 0;
+  const { data: pl } = await supabase.from("planos").select("max_instancias").eq("id", org.plano_id).maybeSingle();
+  return pl?.max_instancias ?? 0;
+}
+
+async function uazFetch(path: string, token: string, body?: unknown, method?: string, admintoken?: string) {
   const res = await fetch(path, {
-    method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json", token, admintoken: token },
-    body: body ? JSON.stringify(body) : undefined,
+    method: method || (body !== undefined ? "POST" : "GET"),
+    headers: { "Content-Type": "application/json", token, admintoken: admintoken || token },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
   let json: any = {};
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
-  if (!res.ok) throw new Error(json?.error || json?.message || `UAZAPI ${res.status}`);
+  if (!res.ok) throw new Error(json?.error || json?.message || `WhatsApp API ${res.status}`);
   return json;
 }
 
@@ -48,11 +80,9 @@ function render(template: string, vars: Record<string, string | number>): string
 const fmtBRL = (n: number) => `R$ ${(Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Envia uma mensagem de texto via UAZAPI
-async function enviarTexto(cfg: any, destinatario: string, mensagem: string) {
-  const base = (cfg.server_url || "").replace(/\/$/, "");
-  const token = cfg.admin_token;
-  if (!base || !token) throw new Error("Configuração UAZAPI incompleta");
-  return uazFetch(base, UAZAPI.sendText(base), token, { number: destinatario, text: mensagem });
+async function enviarTexto(token: string | null, destinatario: string, mensagem: string) {
+  if (!BASE || !token) throw new Error("WhatsApp não conectado para esta organização");
+  return uazFetch(UAZAPI.sendText(), token, { number: destinatario, text: mensagem });
 }
 
 // Lista de destinatários de uma notificação (novo formato `destinatarios` ou legado)
@@ -340,35 +370,67 @@ Deno.serve(async (req) => {
   try {
     const supabase = svc();
     const { action, ...payload } = await req.json();
-    const cfg = await getConfig(supabase);
+    const orgId = await getOrgId(supabase, req, payload);
+
+    // helper: busca uma instância da org pelo id (com validação de propriedade)
+    const getInstancia = async (id: string) => {
+      const { data } = await supabase.from("whatsapp_instancias").select("*").eq("id", id).eq("org_id", orgId).maybeSingle();
+      return data;
+    };
 
     switch (action) {
-      case "connect": {
-        if (!cfg?.server_url || !cfg?.admin_token) return json({ error: "Configure URL e token primeiro" }, 400);
-        const base = cfg.server_url.replace(/\/$/, "");
-        const data = await uazFetch(base, UAZAPI.connect(base), cfg.admin_token, {});
+      // ---------- Gestão de instâncias (modelo revenda) ----------
+      case "list_instances": {
+        if (!orgId) return json({ instancias: [], limite: 0 });
+        const { data: inst } = await supabase.from("whatsapp_instancias").select("*").eq("org_id", orgId).order("created_at");
+        return json({ instancias: inst || [], limite: await limiteInstancias(supabase, orgId) });
+      }
+      case "create_instance": {
+        if (!orgId) return json({ error: "Organização não identificada" }, 401);
+        if (!BASE || !ADMIN) return json({ error: "WhatsApp não configurado pelo administrador do sistema" }, 400);
+        const limite = await limiteInstancias(supabase, orgId);
+        const { count } = await supabase.from("whatsapp_instancias").select("*", { count: "exact", head: true }).eq("org_id", orgId);
+        if (count !== null && count >= limite) return json({ error: `Limite do seu plano atingido (${limite} conexões de WhatsApp).` }, 400);
+        const nome = String(payload.nome || "WhatsApp").slice(0, 40);
+        const data = await uazFetch(UAZAPI.init(), ADMIN, { name: `${orgId.slice(0, 8)}_${Date.now().toString(36)}` });
+        const inst = data.instance || data;
+        const { data: row } = await supabase.from("whatsapp_instancias")
+          .insert({ org_id: orgId, nome, instance_token: inst.token, status: inst.status || "desconectado" })
+          .select().single();
+        return json({ ok: true, instancia: row });
+      }
+      case "connect_instance": {
+        const row = await getInstancia(payload.id);
+        if (!row) return json({ error: "Instância não encontrada" }, 404);
+        const data = await uazFetch(UAZAPI.connect(), row.instance_token, {});
         const inst = data.instance || {};
         const qrcode = inst.qrcode || data.qrcode || inst.paircode || null;
-        const status = inst.status || (data.connected ? "connected" : "aguardando_qr");
-        await supabase.from("whatsapp_config").update({ status }).eq("id", cfg.id);
+        const status = inst.status || (data.connected ? "connected" : "connecting");
+        await supabase.from("whatsapp_instancias").update({ status }).eq("id", row.id);
         return json({ qrcode, status });
       }
-      case "status": {
-        if (!cfg?.server_url || !cfg?.admin_token) return json({ status: "desconectado" });
-        const base = cfg.server_url.replace(/\/$/, "");
-        const data = await uazFetch(base, UAZAPI.status(base), cfg.admin_token);
+      case "status_instance": {
+        const row = await getInstancia(payload.id);
+        if (!row) return json({ error: "Instância não encontrada" }, 404);
+        const data = await uazFetch(UAZAPI.status(), row.instance_token);
         const inst = data.instance || {};
         const connected = inst.status === "connected" || data.connected === true;
         const status = connected ? "connected" : (inst.status || "desconectado");
-        const numero = inst.owner || inst.profileName || null;
-        const qrcode = inst.qrcode || null;
-        await supabase.from("whatsapp_config").update({ status, numero }).eq("id", cfg.id);
-        return json({ status, numero, connected, qrcode });
+        const numero = inst.owner || null;
+        await supabase.from("whatsapp_instancias").update({ status, numero }).eq("id", row.id);
+        return json({ status, numero, connected, qrcode: inst.qrcode || null });
+      }
+      case "delete_instance": {
+        const row = await getInstancia(payload.id);
+        if (!row) return json({ error: "Instância não encontrada" }, 404);
+        try { await uazFetch(UAZAPI.del(), row.instance_token, undefined, "DELETE", ADMIN); } catch (_) { /* segue e remove do banco */ }
+        await supabase.from("whatsapp_instancias").delete().eq("id", row.id);
+        return json({ ok: true });
       }
       case "groups": {
-        if (!cfg?.server_url || !cfg?.admin_token) return json({ groups: [] });
-        const base = cfg.server_url.replace(/\/$/, "");
-        const data = await uazFetch(base, UAZAPI.groups(base), cfg.admin_token);
+        const token = await getOrgToken(supabase, orgId);
+        if (!token) return json({ groups: [] });
+        const data = await uazFetch(UAZAPI.groups(), token);
         const list = data.groups || data.data || data || [];
         const groups = (Array.isArray(list) ? list : []).map((g: any) => ({
           id: g.JID || g.id || g.jid || g.gid || g.group_id,
@@ -377,12 +439,15 @@ Deno.serve(async (req) => {
         return json({ groups });
       }
       case "send": {
-        await enviarTexto(cfg, payload.destinatario, payload.mensagem);
+        const token = await getOrgToken(supabase, orgId);
+        await enviarTexto(token, payload.destinatario, payload.mensagem);
         return json({ success: true });
       }
       case "send_test": {
         const { data: n } = await supabase.from("notificacoes").select("*").eq("id", payload.notificacao_id).maybeSingle();
         if (!n) return json({ error: "Notificação não encontrada" }, 404);
+        const token = await getOrgToken(supabase, orgId ?? n.org_id);
+        if (!token) return json({ error: "Conecte um WhatsApp antes de enviar." }, 400);
         const ds = destinatariosDe(n);
         if (ds.length === 0) return json({ error: "Notificação sem destinatário" }, 400);
         // 1 mensagem por cidade ativa (quando "todas") — enviadas separadamente
@@ -393,7 +458,7 @@ Deno.serve(async (req) => {
           const msg = render(n.mensagem, vars) + "\n\n_(mensagem de teste)_";
           for (const dest of ds) {
             try {
-              await enviarTexto(cfg, dest, msg);
+              await enviarTexto(token, dest, msg);
               await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
               enviados++;
             } catch (e) {
@@ -410,7 +475,9 @@ Deno.serve(async (req) => {
         // Chamado pelo trigger do banco quando uma venda é inserida
         const v = payload.venda;
         if (!v) return json({ error: "venda ausente" }, 400);
-        const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).eq("gatilho", "nova_venda");
+        // só as notificações da MESMA organização da venda
+        const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).eq("gatilho", "nova_venda").eq("org_id", v.org_id);
+        const tokenVenda = await getOrgToken(supabase, v.org_id);
         const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s-]/g, "");
         let enviados = 0;
         for (const n of notifs || []) {
@@ -423,7 +490,7 @@ Deno.serve(async (req) => {
           const msg = render(n.mensagem, vendaVars);
           for (const dest of destinatariosDe(n)) {
             try {
-              await enviarTexto(cfg, dest, msg);
+              await enviarTexto(tokenVenda, dest, msg);
               await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: v.cidade || null });
               enviados++;
             } catch (e) {
@@ -440,6 +507,12 @@ Deno.serve(async (req) => {
         const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).in("gatilho", ["resumo_cidade", "resumo_geral"]);
         let enviados = 0;
         const hhmm = agora.slice(0, 5);
+        const tokenCache = new Map<string, string | null>();
+        const tokenDaOrg = async (oid: string | null) => {
+          if (!oid) return null;
+          if (!tokenCache.has(oid)) tokenCache.set(oid, await getOrgToken(supabase, oid));
+          return tokenCache.get(oid)!;
+        };
         for (const n of notifs || []) {
           // Disparo normal (ex.: 9h): todas as cidades ativas.
           const normalMatch = (n.horario || "").slice(0, 5) === hhmm;
@@ -460,11 +533,12 @@ Deno.serve(async (req) => {
           // No disparo do dia do evento: só números (ignora grupos). No normal: todos.
           const soEventoDia = eventoMatch && !normalMatch;
           const dests = destinatariosDe(n, soEventoDia);
+          const tokenN = await tokenDaOrg(n.org_id);
           for (const vars of varsList) {
             const msg = render(n.mensagem, vars);
             for (const dest of dests) {
               try {
-                await enviarTexto(cfg, dest, msg);
+                await enviarTexto(tokenN, dest, msg);
                 await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
                 enviados++;
               } catch (e) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { WhatsAppConexao } from "@/components/WhatsAppConexao";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -241,7 +242,7 @@ export default function Notificacoes() {
 
   // Carrega os grupos automaticamente ao abrir o dialog (se ainda não carregou)
   useEffect(() => {
-    if (dialogOpen && isConnected && grupos.length === 0 && !loadingGrupos) {
+    if (dialogOpen && grupos.length === 0 && !loadingGrupos) {
       carregarGrupos();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,89 +471,33 @@ export default function Notificacoes() {
           </header>
 
           <div className="p-6 space-y-6">
-            {/* Conexão WhatsApp */}
+            {/* Conexão WhatsApp (modelo revenda — instâncias por organização) */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  {isConnected ? <Wifi className="h-4 w-4 text-success" /> : <WifiOff className="h-4 w-4 text-muted-foreground" />}
-                  Conexão WhatsApp (UAZAPI)
-                  <Badge variant={isConnected ? "default" : "secondary"} className="ml-2">
-                    {isConnected ? `Conectado${numeroConectado ? ` · ${numeroConectado}` : ""}` : cfgStatus}
-                  </Badge>
+                  <Wifi className="h-4 w-4 text-success" /> Conexões de WhatsApp
                 </CardTitle>
                 <CardDescription>
-                  Informe os dados da sua instância UAZAPI e conecte escaneando o QR Code no WhatsApp.
+                  Crie as conexões de WhatsApp do seu plano e conecte escaneando o QR Code no celular.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label>URL do servidor UAZAPI</Label>
-                    <Input placeholder="https://sua-instancia.uazapi.com"
-                      value={cfg.server_url} onChange={(e) => setCfg({ ...cfg, server_url: e.target.value })} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="flex items-center gap-2">
-                      Token (admin/instância)
-                      {tokenSalvo && <Badge variant="secondary" className="text-[10px]">salvo</Badge>}
-                    </Label>
-                    <div className="relative">
-                      <Input type={showToken ? "text" : "password"}
-                        placeholder={tokenSalvo ? "•••••••• (salvo — deixe em branco p/ manter)" : "cole o token"}
-                        className="pr-9"
-                        value={cfg.admin_token} onChange={(e) => setCfg({ ...cfg, admin_token: e.target.value })} />
-                      <button type="button" onClick={() => setShowToken((s) => !s)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        aria-label={showToken ? "Ocultar token" : "Mostrar token"}>
-                        {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {tokenSalvo && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Token já salvo (oculto por segurança). Deixe em branco para manter, ou cole um novo para substituir.
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Nome da instância</Label>
-                    <Input placeholder="ex: scaledash"
-                      value={cfg.instance} onChange={(e) => setCfg({ ...cfg, instance: e.target.value })} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={conectar} disabled={connecting}>
-                    <QrCode className="mr-2 h-4 w-4" /> {connecting ? "Conectando..." : "Conectar / Gerar QR"}
-                  </Button>
-                  <Button variant="outline" onClick={() => refreshStatus(false)} disabled={loadingStatus}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${loadingStatus ? "animate-spin" : ""}`} />
-                    {loadingStatus ? "Atualizando..." : "Atualizar status"}
-                  </Button>
-                  <Button variant="outline" onClick={carregarGrupos} disabled={!isConnected || loadingGrupos}>
+                <WhatsAppConexao />
+                <div className="pt-2 border-t">
+                  <Button variant="outline" size="sm" onClick={carregarGrupos} disabled={loadingGrupos}>
                     {loadingGrupos && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-                    {loadingGrupos ? "Carregando..." : "Carregar grupos"}
+                    {loadingGrupos ? "Carregando..." : "Carregar grupos do WhatsApp"}
                   </Button>
+                  <p className="text-[11px] text-muted-foreground mt-1">Use após conectar, para listar grupos ao escolher destinatários.</p>
                 </div>
-                {qrCode && (
-                  <div className="flex flex-col items-center gap-2 pt-2">
-                    <img
-                      src={qrCode.startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`}
-                      alt="QR Code WhatsApp" className="h-56 w-56 rounded-lg border border-border bg-white p-2"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      WhatsApp → Aparelhos conectados → Conectar aparelho → escaneie
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
             {/* Lista de notificações */}
             <div className="space-y-3">
-              {!isConnected && (
-                <p className="text-sm text-muted-foreground">
-                  Você pode criar e configurar notificações normalmente. Conecte o WhatsApp acima para <strong>enviar</strong> (testes e disparos).
-                </p>
-              )}
+              <p className="text-sm text-muted-foreground">
+                Configure suas notificações abaixo. Conecte um WhatsApp acima para <strong>enviar</strong> (testes e disparos).
+              </p>
               {notificacoes.length === 0 ? (
                 <Card><CardContent className="py-10 text-center text-muted-foreground">
                   Nenhuma notificação configurada ainda.
