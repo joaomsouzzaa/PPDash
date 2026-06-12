@@ -197,20 +197,22 @@ const InsideSales = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AppSidebar />
+        {!tvMode && <AppSidebar />}
         <main className={tvMode ? "flex-1 tv-mode" : "flex-1 min-w-0 overflow-y-auto overflow-x-hidden"}>
           <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-background/80 backdrop-blur-sm px-6 py-3">
-            <SidebarTrigger />
+            {!tvMode && <SidebarTrigger />}
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold tracking-tight">Inside Sales</h1>
               <p className="text-sm text-muted-foreground">
                 Métricas de funil e qualificação de leads
               </p>
             </div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={gerarPrint} disabled={capturando}>
-              {capturando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-              {capturando ? "Gerando..." : "Print relatório"}
-            </Button>
+            {!tvMode && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={gerarPrint} disabled={capturando}>
+                {capturando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                {capturando ? "Gerando..." : "Print relatório"}
+              </Button>
+            )}
             {tvMode ? (
               <Button variant="default" size="sm" className="gap-2" onClick={sairTvMode}><Tv className="h-4 w-4" /> Sair do Modo TV</Button>
             ) : (
