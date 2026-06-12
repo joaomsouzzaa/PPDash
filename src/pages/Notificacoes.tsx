@@ -89,44 +89,10 @@ export default function Notificacoes() {
   const queryClient = useQueryClient();
   const { data: cidades = [] } = useCidades();
 
-  // ---- Conexão WhatsApp (UAZAPI) ----
-  const [cfg, setCfg] = useState({ server_url: "", admin_token: "", instance: "" });
-  const [cfgStatus, setCfgStatus] = useState<string>("desconectado");
-  const [connecting, setConnecting] = useState(false);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [numeroConectado, setNumeroConectado] = useState<string | null>(null);
-  const [showToken, setShowToken] = useState(false);
-  const [tokenSalvo, setTokenSalvo] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState(false);
+  // ---- Grupos do WhatsApp (para escolher destinatários) ----
   const [loadingGrupos, setLoadingGrupos] = useState(false);
   const [testando, setTestando] = useState(false);     // botão do dialog
   const [testandoId, setTestandoId] = useState<string | null>(null); // botão da linha
-
-  useEffect(() => {
-    (supabase as any).from("whatsapp_config").select("server_url,instance,status,numero").maybeSingle().then(({ data }: any) => {
-      if (data) {
-        setCfg({ server_url: data.server_url || "", admin_token: "", instance: data.instance || "" });
-        setCfgStatus(data.status || "desconectado");
-        setNumeroConectado(data.numero || null);
-        setTokenSalvo(!!data.server_url);
-      }
-    });
-  }, []);
-
-  const salvarConfig = async () => {
-    // Salva a config (uma linha). admin_token só é gravado se preenchido.
-    const { data: existing } = await (supabase as any).from("whatsapp_config").select("id").maybeSingle();
-    const patch: Record<string, unknown> = {
-      server_url: cfg.server_url.replace(/\/$/, ""),
-      instance: cfg.instance,
-    };
-    if (cfg.admin_token) patch.admin_token = cfg.admin_token;
-    const res = existing
-      ? await (supabase as any).from("whatsapp_config").update(patch).eq("id", existing.id)
-      : await (supabase as any).from("whatsapp_config").insert(patch);
-    if (res.error) { toast.error("Erro ao salvar configuração"); return; }
-    toast.success("Configuração salva");
-  };
 
   const chamarUazapi = useCallback(async (action: string, payload: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("uazapi", { body: { action, ...payload } });
@@ -139,60 +105,6 @@ export default function Notificacoes() {
     if (data?.error) throw new Error(data.error);
     return data;
   }, []);
-
-  // Atualiza o status. silent=true não mostra toasts (usado no auto-poll).
-  const refreshStatus = useCallback(async (silent = false): Promise<boolean> => {
-    if (!silent) setLoadingStatus(true);
-    try {
-      const data = await chamarUazapi("status");
-      const connected = data?.status === "connected" || data?.connected;
-      setCfgStatus(data?.status || "desconectado");
-      setNumeroConectado(data?.numero || null);
-      if (connected) { setQrCode(null); if (!silent) toast.success("Conectado!"); }
-      else if (data?.qrcode) setQrCode(data.qrcode);
-      return !!connected;
-    } catch (e: any) {
-      if (!silent) toast.error(e?.message || "Falha ao consultar status");
-      else setCfgStatus("erro");
-      return false;
-    } finally {
-      if (!silent) setLoadingStatus(false);
-    }
-  }, [chamarUazapi]);
-
-  // Após conectar, consulta o status a cada 3s por ~1min até conectar (detecta o scan sozinho)
-  const pollUntilConnected = useCallback(() => {
-    let tries = 0;
-    const id = setInterval(async () => {
-      tries++;
-      const ok = await refreshStatus(true);
-      if (ok || tries >= 20) clearInterval(id);
-    }, 3000);
-  }, [refreshStatus]);
-
-  const conectar = async () => {
-    setConnecting(true);
-    setQrCode(null);
-    try {
-      await salvarConfig();
-      const data = await chamarUazapi("connect");
-      if (data?.qrcode) setQrCode(data.qrcode);
-      if (data?.status) setCfgStatus(data.status);
-      toast.success("Escaneie o QR Code no WhatsApp");
-      pollUntilConnected();
-    } catch (e: any) {
-      toast.error(e?.message || "Falha ao conectar. Confira URL e token.");
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  // Auto-poll do status: ao abrir e a cada 30s (reflete desconexões sozinho)
-  useEffect(() => {
-    refreshStatus(true);
-    const id = setInterval(() => refreshStatus(true), 30000);
-    return () => clearInterval(id);
-  }, [refreshStatus]);
 
   // Grupos do WhatsApp (carregados sob demanda)
   const [grupos, setGrupos] = useState<Array<{ id: string; name: string }>>([]);
@@ -445,7 +357,6 @@ export default function Notificacoes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogOpen]);
 
-  const isConnected = cfgStatus === "connected" || cfgStatus === "conectado";
   const gatilhoAtual = GATILHOS[form.gatilho];
   const precisaCidade = form.gatilho === "nova_venda" || form.gatilho === "resumo_cidade" || form.gatilho === "manual";
   const precisaHorario = form.gatilho === "resumo_cidade" || form.gatilho === "resumo_geral";

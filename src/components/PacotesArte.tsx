@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2, Upload, ArrowLeft, Loader2, Wand2, Download, Move, Package as PackageIcon, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getOrgId } from "@/lib/org";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import JSZip from "jszip";
@@ -167,8 +168,9 @@ function PacoteDetalhe({ pacote, onBack }: { pacote: Pacote; onBack: () => void 
     setUploading(true);
     try {
       let ordem = artes.length;
+      const orgId = await getOrgId();
       for (const file of Array.from(files)) {
-        const path = `${pacote.id}/${crypto.randomUUID()}.${(file.name.split(".").pop() || "png").toLowerCase()}`;
+        const path = `${orgId}/${pacote.id}/${crypto.randomUUID()}.${(file.name.split(".").pop() || "png").toLowerCase()}`;
         const up = await supabase.storage.from("artes-base").upload(path, file);
         if (up.error) throw up.error;
         const url = supabase.storage.from("artes-base").getPublicUrl(path).data.publicUrl;
@@ -438,7 +440,8 @@ function GerarDialog({ pacote, artes, onClose, onDone }: { pacote: Pacote; artes
 
       // Salva no histórico (storage + tabela)
       try {
-        const path = `${pacote.id}/${crypto.randomUUID()}.zip`;
+        const orgId = await getOrgId();
+        const path = `${orgId}/${pacote.id}/${crypto.randomUUID()}.zip`;
         const up = await supabase.storage.from("pacotes-gerados").upload(path, zipBlob, { contentType: "application/zip" });
         const zipUrl = up.error ? null : supabase.storage.from("pacotes-gerados").getPublicUrl(path).data.publicUrl;
         await (supabase as any).from("pacote_geracoes").insert({ pacote_id: pacote.id, pacote_nome: pacote.nome, valores, zip_url: zipUrl, qtd: n });

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Palette, Plus, Trash2, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getOrgId } from "@/lib/org";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import PacotesArte from "@/components/PacotesArte";
@@ -161,7 +162,8 @@ function ProjetoCard({ projeto, onEdit, onDelete }: { projeto: Projeto; onEdit: 
     setUploading(tipo);
     try {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
-      const path = `${projeto.id}/${tipo}-${crypto.randomUUID()}.${ext}`;
+      const orgId = await getOrgId();
+      const path = `${orgId}/${projeto.id}/${tipo}-${crypto.randomUUID()}.${ext}`;
       const up = await supabase.storage.from("projeto-assets").upload(path, file, { upsert: false });
       if (up.error) throw up.error;
       const url = supabase.storage.from("projeto-assets").getPublicUrl(path).data.publicUrl;

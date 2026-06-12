@@ -23,7 +23,7 @@ async function bytesDe(url: string): Promise<Uint8Array> {
 }
 
 // Sobrepõe a logo do projeto na arte (topo-centro ou base-centro, tamanho discreto).
-async function aplicarLogo(supabase: any, baseUrl: string, logoUrl: string, posicao: string): Promise<string> {
+async function aplicarLogo(supabase: any, baseUrl: string, logoUrl: string, posicao: string, orgId: string | null): Promise<string> {
   const [baseBytes, logoBytes] = await Promise.all([bytesDe(baseUrl), bytesDe(logoUrl)]);
   const base = await Image.decode(baseBytes);
   const logo = await Image.decode(logoBytes);
@@ -36,7 +36,7 @@ async function aplicarLogo(supabase: any, baseUrl: string, logoUrl: string, posi
   const y = posicao === "cima-centro" ? margem : base.height - targetH - margem;
   base.composite(logo, x, y);
   const out = await base.encode();
-  const path = `${crypto.randomUUID()}.png`;
+  const path = `${orgId || "global"}/${crypto.randomUUID()}.png`;
   await supabase.storage.createBucket("artes-tarefas", { public: true }).catch(() => {});
   const up = await supabase.storage.from("artes-tarefas").upload(path, out, { contentType: "image/png" });
   if (up.error) throw new Error(up.error.message);
@@ -54,7 +54,7 @@ function extrairUrl(obj: any): string | null {
 // Gera imagem na OpenAI (gpt-image-1) e sobe no Storage (devolve base64).
 // Se houver refUrls (imagens de referência do projeto), usa images/edits (image-to-image)
 // para que a arte seja GUIADA pelas referências; senão usa text-to-image (generations).
-async function gerarOpenAI(supabase: any, apiKey: string, prompt: string, aspect: string, refUrls: string[] = []): Promise<string> {
+async function gerarOpenAI(supabase: any, apiKey: string, prompt: string, aspect: string, refUrls: string[] = [], orgId: string | null = null): Promise<string> {
   const size = aspect === "9:16" ? "1024x1536" : aspect === "16:9" ? "1536x1024" : "1024x1024";
   let res: Response;
   if (refUrls.length > 0) {
@@ -87,7 +87,7 @@ async function gerarOpenAI(supabase: any, apiKey: string, prompt: string, aspect
   const b64 = j.data?.[0]?.b64_json;
   if (!b64) throw new Error("OpenAI não retornou a imagem");
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const path = `${crypto.randomUUID()}.png`;
+  const path = `${orgId || "global"}/${crypto.randomUUID()}.png`;
   // Garante que o bucket existe (cria na hora se a migration não rodou).
   await supabase.storage.createBucket("artes-tarefas", { public: true }).catch(() => {});
   let up = await supabase.storage.from("artes-tarefas").upload(path, bytes, { contentType: "image/png", upsert: false });
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
         : { data: null };
       const oaKey = oa?.api_key || Deno.env.get("OPENAI_API_KEY");
       if (!oaKey) throw new Error("Configure a chave da OpenAI em Agentes → Configurar modelos");
-      url = await gerarOpenAI(supabase, oaKey, prompt, aspect, refUrls);
+      url = await gerarOpenAI(supabase, oaKey, prompt, aspect, refUrls, orgId);
     } else {
       const { data: cfg } = orgId
         ? await supabase.from("ai_config").select("api_key").eq("provider", "higgsfield").eq("org_id", orgId).maybeSingle()
@@ -235,7 +235,7 @@ Deno.serve(async (req) => {
 
     // Sobrepõe a logo do projeto (apenas em imagem).
     if (logoUrl && tipo === "imagem") {
-      try { url = await aplicarLogo(supabase, url, logoUrl, logoPos); }
+      try { url = await aplicarLogo(supabase, url, logoUrl, logoPos, orgId); }
       catch (e) { console.log("overlay da logo falhou:", (e as any)?.message || e); }
     }
 
