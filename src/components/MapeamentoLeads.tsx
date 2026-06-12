@@ -3,11 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { Loader2, Save, Plus, Pencil, Trash2, Check, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
 
-interface Campo { key: string; label: string; isCustom: boolean; chave?: string; }
+interface Campo { key: string; label: string; isCustom: boolean; chave?: string; oculto: boolean; }
 
 function slugify(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -24,17 +24,27 @@ export function MapeamentoLeads() {
   const [novo, setNovo] = useState("");
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!orgId) return;
     setLoading(true);
-    const [{ data: custom }, { data: mapRows }] = await Promise.all([
-      (supabase as any).from("lead_campos").select("chave, label").eq("org_id", orgId).order("ordem"),
+    const [{ data: rows }, { data: mapRows }] = await Promise.all([
+      (supabase as any).from("lead_campos").select("chave, label, padrao, oculto").eq("org_id", orgId).order("ordem"),
       (supabase as any).from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId),
     ]);
-    const padrao: Campo[] = LEAD_CAMPOS_PADRAO.map((f) => ({ key: f.key, label: f.label, isCustom: false }));
-    const customs: Campo[] = ((custom as any[]) ?? []).map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave }));
-    setCampos([...padrao, ...customs]);
+    const overrides = new Map<string, { label: string; oculto: boolean }>();
+    const customs: any[] = [];
+    ((rows as any[]) ?? []).forEach((r) => {
+      if (r.padrao) overrides.set(r.chave, { label: r.label, oculto: r.oculto });
+      else customs.push(r);
+    });
+    const padrao: Campo[] = LEAD_CAMPOS_PADRAO.map((f) => {
+      const o = overrides.get(f.key);
+      return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto };
+    });
+    const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto }));
+    setCampos([...padrao, ...customDefs]);
     const m: Record<string, string> = {};
     ((mapRows as any[]) ?? []).forEach((r) => { m[r.app_field] = r.crm_key; });
     setMapa(m);
@@ -64,67 +74,102 @@ export function MapeamentoLeads() {
     if (!label) return;
     const chave = slugify(label);
     if (!chave) return toast.error("Nome inválido.");
-    if (campos.some((c) => c.chave === chave)) return toast.error("Já existe um campo com esse nome.");
+    if (campos.some((c) => c.chave === chave || c.key === chave)) return toast.error("Já existe um campo com esse nome.");
     try {
-      const { error } = await (supabase as any).from("lead_campos").insert({ label, chave, ordem: campos.length });
+      const { error } = await (supabase as any).from("lead_campos").insert({ label, chave, ordem: campos.length, padrao: false });
       if (error) throw new Error(error.message);
       setNovo(""); await carregar();
     } catch (e) { toast.error((e as Error).message); }
   };
 
-  const renomearCampo = async (chave: string) => {
-    if (!editLabel.trim()) return;
+  // Renomeia o rótulo de qualquer campo (padrão vira override; custom altera o label).
+  const salvarRename = async (c: Campo) => {
+    const label = editLabel.trim();
+    if (!label) return;
     try {
-      const { error } = await (supabase as any).from("lead_campos").update({ label: editLabel.trim() }).eq("org_id", orgId).eq("chave", chave);
-      if (error) throw new Error(error.message);
+      if (c.isCustom) {
+        const { error } = await (supabase as any).from("lead_campos").update({ label }).eq("org_id", orgId).eq("chave", c.chave);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await (supabase as any).from("lead_campos")
+          .upsert({ chave: c.key, padrao: true, label, oculto: c.oculto }, { onConflict: "org_id,chave" });
+        if (error) throw new Error(error.message);
+      }
       setEditKey(null); await carregar();
     } catch (e) { toast.error((e as Error).message); }
   };
 
-  const excluirCampo = async (c: Campo) => {
-    if (!confirm(`Excluir o campo "${c.label}"? A coluna some da tabela de Leads (os valores recebidos ficam guardados).`)) return;
+  // Padrão: oculta (esconde da visão). Custom: exclui de vez.
+  const removerCampo = async (c: Campo) => {
+    if (c.isCustom) {
+      if (!confirm(`Excluir o campo "${c.label}"? A coluna some da tabela de Leads (os valores recebidos ficam guardados).`)) return;
+      try {
+        await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
+        await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+        await carregar();
+      } catch (e) { toast.error((e as Error).message); }
+    } else {
+      try {
+        const { error } = await (supabase as any).from("lead_campos")
+          .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true }, { onConflict: "org_id,chave" });
+        if (error) throw new Error(error.message);
+        await carregar();
+      } catch (e) { toast.error((e as Error).message); }
+    }
+  };
+
+  const restaurarCampo = async (c: Campo) => {
     try {
-      await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
-      await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+      const { error } = await (supabase as any).from("lead_campos")
+        .upsert({ chave: c.key, padrao: true, label: c.label, oculto: false }, { onConflict: "org_id,chave" });
+      if (error) throw new Error(error.message);
       await carregar();
     } catch (e) { toast.error((e as Error).message); }
   };
 
   if (loading) return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
+  const visiveis = campos.filter((c) => mostrarOcultos || !c.oculto);
+
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Para cada campo, informe o <strong>nome exato da variável</strong> que o webhook do seu CRM envia
-        (ex.: <code className="px-1 rounded bg-muted">contact_name</code>). Campos personalizados podem ser renomeados/excluídos.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs text-muted-foreground flex-1">
+          Para cada campo, informe o <strong>nome exato da variável</strong> que o webhook do seu CRM envia
+          (ex.: <code className="px-1 rounded bg-muted">contact_name</code>). Use o lápis para renomear e a lixeira para
+          ocultar (padrão) ou excluir (personalizado).
+        </p>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setMostrarOcultos((v) => !v)}>
+          {mostrarOcultos ? <EyeOff className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" />}
+          {mostrarOcultos ? "Ocultar" : "Ver ocultos"}
+        </Button>
+      </div>
 
       <div className="space-y-1.5">
-        {campos.map((c) => (
-          <div key={c.key} className="flex items-center gap-2">
+        {visiveis.map((c) => (
+          <div key={c.key} className={`flex items-center gap-2 ${c.oculto ? "opacity-50" : ""}`}>
             {editKey === c.key ? (
               <Input autoFocus value={editLabel} onChange={(e) => setEditLabel(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") renomearCampo(c.chave!); if (e.key === "Escape") setEditKey(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter") salvarRename(c); if (e.key === "Escape") setEditKey(null); }}
                 className="h-8 w-44 shrink-0" />
             ) : (
               <span className="text-sm text-muted-foreground truncate w-44 shrink-0 flex items-center gap-1" title={c.label}>
-                {c.label}
-                {c.isCustom && <span className="text-[10px] text-primary" title="campo personalizado">•</span>}
+                {c.label}{c.isCustom && <span className="text-[10px] text-primary" title="personalizado">•</span>}
               </span>
             )}
             <Input value={mapa[c.key] ?? ""} onChange={(e) => setMapa((m) => ({ ...m, [c.key]: e.target.value }))}
               placeholder="campo do CRM" className="h-8 flex-1 font-mono text-xs" />
-            {c.isCustom ? (
-              editKey === c.key ? (
-                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => renomearCampo(c.chave!)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
-              ) : (
-                <>
-                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear campo"><Pencil className="h-3.5 w-3.5" /></Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive" onClick={() => excluirCampo(c)} title="Excluir campo"><Trash2 className="h-3.5 w-3.5" /></Button>
-                </>
-              )
+            {editKey === c.key ? (
+              <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => salvarRename(c)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
             ) : (
-              <span className="w-[72px] shrink-0" />
+              <>
+                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear"><Pencil className="h-3.5 w-3.5" /></Button>
+                {c.oculto ? (
+                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => restaurarCampo(c)} title="Restaurar"><Eye className="h-3.5 w-3.5" /></Button>
+                ) : (
+                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive" onClick={() => removerCampo(c)} title={c.isCustom ? "Excluir" : "Ocultar"}><Trash2 className="h-3.5 w-3.5" /></Button>
+                )}
+              </>
             )}
           </div>
         ))}

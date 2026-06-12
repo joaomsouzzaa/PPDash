@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     const { data: mapRows } = await supabase.from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId);
     const mapa: Record<string, string> = {};
     for (const r of mapRows ?? []) mapa[(r as any).app_field] = (r as any).crm_key;
-    const { data: customDefs } = await supabase.from("lead_campos").select("chave").eq("org_id", orgId);
+    const { data: customDefs } = await supabase.from("lead_campos").select("chave").eq("org_id", orgId).eq("padrao", false);
 
     // Lê o valor de um campo da app a partir do payload, conforme o mapeamento.
     const val = (appField: string): any => {

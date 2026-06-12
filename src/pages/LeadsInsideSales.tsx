@@ -220,7 +220,7 @@ const LeadsInsideSales = () => {
   const { data: campos = [], refetch: refetchCampos } = useQuery({
     queryKey: ["lead_campos"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem").order("ordem");
+      const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem").eq("padrao", false).eq("oculto", false).order("ordem");
       return (data || []) as CampoLead[];
     },
   });
