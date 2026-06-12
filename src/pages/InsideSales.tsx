@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   DollarSign,
   Users,
@@ -12,7 +12,12 @@ import {
   ShoppingCart,
   BadgeDollarSign,
   TrendingUp,
+  Camera,
+  Tv,
+  Loader2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { KpiCard } from "@/components/KpiCard";
@@ -133,24 +138,90 @@ const InsideSales = () => {
     { label: "ROAS", value: `${roas.toFixed(2)}x`, count: null, conversionLabel: null },
   ];
 
+  // ---- Print relatório (16:9) + Modo TV (tela cheia fixa) ----
+  const kpisRef = useRef<HTMLDivElement>(null);
+  const [capturando, setCapturando] = useState(false);
+  const [tvMode, setTvMode] = useState(false);
+
+  const gerarPrint = async () => {
+    if (!kpisRef.current) return;
+    setCapturando(true);
+    try {
+      const { default: html2canvas } = await import("html2canvas");
+      const bg = getComputedStyle(document.body).backgroundColor || "#0a0a0a";
+      const shot = await html2canvas(kpisRef.current, {
+        backgroundColor: bg, scale: 2, useCORS: true, logging: false,
+        windowWidth: kpisRef.current.scrollWidth, windowHeight: kpisRef.current.scrollHeight,
+      });
+      const W = 1920, H = 1080, pad = 90, titleH = 110;
+      const out = document.createElement("canvas");
+      out.width = W; out.height = H;
+      const ctx = out.getContext("2d")!;
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#ffffff"; ctx.textBaseline = "middle";
+      ctx.font = "bold 44px Inter, system-ui, sans-serif";
+      ctx.fillText("Inside Sales", pad, pad + 22);
+      ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.font = "26px Inter, system-ui, sans-serif";
+      ctx.textAlign = "right"; ctx.fillText(new Date().toLocaleDateString("pt-BR"), W - pad, pad + 22); ctx.textAlign = "left";
+      const availW = W - pad * 2, availH = H - pad - titleH - pad;
+      const scale = Math.min(availW / shot.width, availH / shot.height);
+      const dw = shot.width * scale, dh = shot.height * scale;
+      const dx = (W - dw) / 2, dy = titleH + pad + (availH - dh) / 2;
+      ctx.drawImage(shot, dx, dy, dw, dh);
+      const link = document.createElement("a");
+      link.download = `inside-sales-${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = out.toDataURL("image/png");
+      link.click();
+      toast.success("Print 16:9 gerado e baixado!");
+    } catch (e: any) {
+      toast.error(`Erro ao gerar print: ${e?.message || "falhou"}`);
+    } finally {
+      setCapturando(false);
+    }
+  };
+
+  const entrarTvMode = async () => {
+    try { await document.documentElement.requestFullscreen(); } catch { /* ignore */ }
+    setTvMode(true);
+  };
+  const sairTvMode = async () => {
+    if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch { /* ignore */ } }
+    setTvMode(false);
+  };
+  useEffect(() => {
+    const onFs = () => { if (!document.fullscreenElement) setTvMode(false); };
+    document.addEventListener("fullscreenchange", onFs);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
         <AppSidebar />
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+        <main className={tvMode ? "flex-1 tv-mode" : "flex-1 min-w-0 overflow-y-auto overflow-x-hidden"}>
           <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-background/80 backdrop-blur-sm px-6 py-3">
             <SidebarTrigger />
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold tracking-tight">Inside Sales</h1>
               <p className="text-sm text-muted-foreground">
                 Métricas de funil e qualificação de leads
               </p>
             </div>
+            <Button variant="outline" size="sm" className="gap-2" onClick={gerarPrint} disabled={capturando}>
+              {capturando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              {capturando ? "Gerando..." : "Print relatório"}
+            </Button>
+            {tvMode ? (
+              <Button variant="default" size="sm" className="gap-2" onClick={sairTvMode}><Tv className="h-4 w-4" /> Sair do Modo TV</Button>
+            ) : (
+              <Button variant="outline" size="sm" className="gap-2" onClick={entrarTvMode}><Tv className="h-4 w-4" /> Modo TV</Button>
+            )}
           </header>
 
-          <div className="p-6 space-y-6">
-            <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showProductFilter />
+          <div className={tvMode ? "tv-content" : "p-6 space-y-6"}>
+            {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showProductFilter />}
 
+            <div ref={kpisRef} className="space-y-6">
             {/* Row 1: Investimento, Leads, CPL */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <KpiCard
@@ -248,6 +319,7 @@ const InsideSales = () => {
 
             {/* Funnel */}
             <SalesFunnel steps={funnelSteps} />
+            </div>
           </div>
         </main>
       </div>

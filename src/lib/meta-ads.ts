@@ -15,10 +15,15 @@ export async function syncMetaTokenToServer(): Promise<void> {
     const token = localStorage.getItem("meta_access_token");
     if (!token) return;
     const acc = localStorage.getItem("selected_ad_account");
-    const account_id = acc && acc !== "all" ? acc : "act_1207875286360718";
+    // conta específica selecionada; se "all"/nenhuma, usa a 1ª conta disponível
+    let account_id: string | null = acc && acc !== "all" ? acc : null;
+    if (!account_id) {
+      try { account_id = (await fetchAdAccounts())[0]?.id ?? null; } catch { account_id = null; }
+    }
     const expires = localStorage.getItem("meta_token_expires_at");
     const user_name = localStorage.getItem("meta_user_name");
-    const payload: any = { access_token: token, account_id };
+    const payload: any = { access_token: token };
+    if (account_id) payload.account_id = account_id;
     if (expires) payload.token_expires_at = Number(expires);
     if (user_name) payload.user_name = user_name;
     const { data: existing } = await (supabase as any)
@@ -179,9 +184,6 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
 let _adAccountsCache: { data: AdAccount[]; ts: number } | null = null;
 const AD_ACCOUNTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Apenas a conta Scale Company é usada no dashboard (as demais não são necessárias)
-const ALLOWED_ACCOUNT_IDS = ["1207875286360718"];
-
 export async function fetchAdAccounts(skipCache = false): Promise<AdAccount[]> {
   if (!skipCache && _adAccountsCache && Date.now() - _adAccountsCache.ts < AD_ACCOUNTS_CACHE_TTL) {
     return _adAccountsCache.data;
@@ -190,7 +192,8 @@ export async function fetchAdAccounts(skipCache = false): Promise<AdAccount[]> {
     fields: "name,account_id,currency",
     limit: "100",
   });
-  const accounts = (res.data || []).filter((a) => ALLOWED_ACCOUNT_IDS.includes(a.account_id));
+  // Mostra todas as contas que o token autorizou na conexão (sem filtro fixo).
+  const accounts = res.data || [];
   _adAccountsCache = { data: accounts, ts: Date.now() };
   return accounts;
 }
