@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const REDIRECT_URI = "https://app.scalehacking.com.br/integracoes";
+const REDIRECT_URI = "https://pp-dash.vercel.app/integracoes";
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive.readonly",
