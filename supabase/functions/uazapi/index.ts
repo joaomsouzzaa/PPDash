@@ -80,7 +80,7 @@ async function enviarSheets(n: any, vars: Record<string, string | number>) {
     await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/google-sheets`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-      body: JSON.stringify({ action: "append", spreadsheet_id: n.sheets_spreadsheet_id, aba: n.sheets_aba, valores }),
+      body: JSON.stringify({ action: "append", org_id: n.org_id, spreadsheet_id: n.sheets_spreadsheet_id, aba: n.sheets_aba, valores }),
     });
   } catch (e) { console.log("Sheets append falhou:", (e as any)?.message || e); }
 }

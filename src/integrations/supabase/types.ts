@@ -65,19 +65,19 @@ export type Database = {
       ai_config: {
         Row: {
           api_key: string | null
-          org_id: string | null
+          org_id: string
           provider: string
           updated_at: string | null
         }
         Insert: {
           api_key?: string | null
-          org_id?: string | null
+          org_id: string
           provider: string
           updated_at?: string | null
         }
         Update: {
           api_key?: string | null
-          org_id?: string | null
+          org_id?: string
           provider?: string
           updated_at?: string | null
         }
@@ -223,8 +223,7 @@ export type Database = {
           client_id: string | null
           client_secret: string | null
           email: string | null
-          id: number
-          org_id: string | null
+          org_id: string
           refresh_token: string | null
           token_expiry: string | null
           updated_at: string
@@ -234,8 +233,7 @@ export type Database = {
           client_id?: string | null
           client_secret?: string | null
           email?: string | null
-          id?: number
-          org_id?: string | null
+          org_id: string
           refresh_token?: string | null
           token_expiry?: string | null
           updated_at?: string
@@ -245,8 +243,7 @@ export type Database = {
           client_id?: string | null
           client_secret?: string | null
           email?: string | null
-          id?: number
-          org_id?: string | null
+          org_id?: string
           refresh_token?: string | null
           token_expiry?: string | null
           updated_at?: string
@@ -574,6 +571,7 @@ export type Database = {
           plano_id: string | null
           slug: string | null
           status: string
+          webhook_token: string | null
         }
         Insert: {
           created_at?: string
@@ -583,6 +581,7 @@ export type Database = {
           plano_id?: string | null
           slug?: string | null
           status?: string
+          webhook_token?: string | null
         }
         Update: {
           created_at?: string
@@ -592,6 +591,7 @@ export type Database = {
           plano_id?: string | null
           slug?: string | null
           status?: string
+          webhook_token?: string | null
         }
         Relationships: [
           {

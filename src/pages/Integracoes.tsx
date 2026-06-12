@@ -393,8 +393,6 @@ const Integracoes = () => {
 
 const GoogleSheetsSection = () => {
   const [open, setOpen] = useState(false);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
   const [hasClient, setHasClient] = useState(false);
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
@@ -423,21 +421,8 @@ const GoogleSheetsSection = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const salvarCreds = async () => {
-    const patch: any = {};
-    if (clientId.trim()) patch.client_id = clientId.trim();
-    if (clientSecret.trim()) patch.client_secret = clientSecret.trim();
-    if (Object.keys(patch).length) {
-      await (supabase as any).from("google_config").update(patch).eq("id", 1);
-      setClientId(""); setClientSecret("");
-      sonner.success("Credenciais salvas");
-      status();
-    }
-  };
-
   const conectar = async () => {
     setLoading(true);
-    await salvarCreds();
     const { data, error } = await (supabase as any).functions.invoke("google-sheets", { body: { action: "get_auth_url" } });
     setLoading(false);
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
@@ -472,30 +457,28 @@ const GoogleSheetsSection = () => {
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-0 space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Crie credenciais OAuth no Google Cloud (Sheets API + Drive API) com redirect
-              <code className="mx-1 px-1 rounded bg-muted">https://app.scalehacking.com.br/integracoes</code>
-              e cole abaixo.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1"><Label>Client ID</Label>
-                <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={hasClient ? "•••••• (salvo)" : "cole o Client ID"} />
-              </div>
-              <div className="space-y-1"><Label>Client Secret</Label>
-                <Input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder={hasClient ? "•••••• (salvo)" : "cole o Client Secret"} />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {!connected ? (
-                <Button onClick={conectar} disabled={loading}>
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sheet className="mr-2 h-4 w-4" />} Conectar Google
-                </Button>
-              ) : (
-                <Button variant="destructive" onClick={desconectar}>Desconectar</Button>
-              )}
-              <Button variant="outline" onClick={salvarCreds}>Salvar credenciais</Button>
-            </div>
-            {connected && <p className="text-xs text-muted-foreground">Conectado. Configure a planilha em cada notificação (Notificações → editar).</p>}
+            {!hasClient ? (
+              <p className="text-xs text-muted-foreground">
+                A integração com o Google ainda não foi habilitada pelo administrador do sistema.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Conecte sua conta Google para enviar os dados das notificações para as suas planilhas.
+                  Você só precisa autorizar com o seu e-mail — nada de configuração técnica.
+                </p>
+                <div className="flex gap-2">
+                  {!connected ? (
+                    <Button onClick={conectar} disabled={loading}>
+                      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sheet className="mr-2 h-4 w-4" />} Conectar Google
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" onClick={desconectar}>Desconectar</Button>
+                  )}
+                </div>
+                {connected && <p className="text-xs text-muted-foreground">Conectado. Configure a planilha em cada notificação (Notificações → editar).</p>}
+              </>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>

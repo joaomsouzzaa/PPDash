@@ -15,27 +15,53 @@ const SCOPES = [
 function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
-async function getCfg(supabase: any) {
-  const { data } = await supabase.from("google_config").select("*").eq("id", 1).maybeSingle();
+
+// client_id/secret do app OAuth são GLOBAIS (do dono do SaaS).
+function clientCreds() {
+  return {
+    client_id: Deno.env.get("GOOGLE_CLIENT_ID") || "",
+    client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET") || "",
+  };
+}
+
+// Resolve a organização: via JWT do usuário logado, ou via body.org_id (chamadas server-side).
+async function getOrgId(supabase: any, req: Request, body: any): Promise<string | null> {
+  const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+  if (token) {
+    const { data: u } = await supabase.auth.getUser(token);
+    if (u?.user) {
+      const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
+      if (p?.org_id) return p.org_id as string;
+    }
+  }
+  return body?.org_id ?? null;
+}
+
+async function getCfg(supabase: any, orgId: string) {
+  const { data } = await supabase.from("google_config").select("*").eq("org_id", orgId).maybeSingle();
   return data || {};
+}
+async function saveCfg(supabase: any, orgId: string, patch: Record<string, unknown>) {
+  await supabase.from("google_config").upsert({ org_id: orgId, ...patch }, { onConflict: "org_id" });
 }
 
 // Token de acesso válido (renova com refresh_token se expirado).
-async function getAccessToken(supabase: any): Promise<string> {
-  const cfg = await getCfg(supabase);
+async function getAccessToken(supabase: any, orgId: string): Promise<string> {
+  const cfg = await getCfg(supabase, orgId);
   if (!cfg.refresh_token) throw new Error("Google não conectado");
   const exp = cfg.token_expiry ? new Date(cfg.token_expiry).getTime() : 0;
   if (cfg.access_token && exp > Date.now() + 60000) return cfg.access_token;
   // refresh
+  const { client_id, client_secret } = clientCreds();
   const body = new URLSearchParams({
-    client_id: cfg.client_id, client_secret: cfg.client_secret,
+    client_id, client_secret,
     refresh_token: cfg.refresh_token, grant_type: "refresh_token",
   });
   const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body });
   const j = await r.json();
   if (!r.ok) throw new Error(`Falha ao renovar token Google: ${j.error_description || j.error}`);
   const expiry = new Date(Date.now() + (j.expires_in || 3600) * 1000).toISOString();
-  await supabase.from("google_config").update({ access_token: j.access_token, token_expiry: expiry }).eq("id", 1);
+  await saveCfg(supabase, orgId, { access_token: j.access_token, token_expiry: expiry });
   return j.access_token;
 }
 
@@ -47,8 +73,8 @@ async function gapi(token: string, url: string, init?: RequestInit) {
 }
 
 // Append de uma linha mapeando { "Coluna": "valor" } para a ordem do cabeçalho.
-async function appendRow(supabase: any, spreadsheetId: string, aba: string, valoresPorColuna: Record<string, string>) {
-  const token = await getAccessToken(supabase);
+async function appendRow(supabase: any, orgId: string, spreadsheetId: string, aba: string, valoresPorColuna: Record<string, string>) {
+  const token = await getAccessToken(supabase, orgId);
   const range = `${aba}!1:1`;
   const head = await gapi(token, `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`);
   const headers: string[] = head.values?.[0] || [];
@@ -66,12 +92,14 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const action = body.action;
+    const orgId = await getOrgId(supabase, req, body);
+    if (!orgId) return json({ error: "Organização não identificada (faça login)" }, 401);
 
     if (action === "get_auth_url") {
-      const cfg = await getCfg(supabase);
-      if (!cfg.client_id) throw new Error("Cadastre o Client ID/Secret do Google primeiro");
+      const { client_id } = clientCreds();
+      if (!client_id) throw new Error("O Google Sheets ainda não foi configurado pelo administrador do sistema.");
       const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      u.searchParams.set("client_id", cfg.client_id);
+      u.searchParams.set("client_id", client_id);
       u.searchParams.set("redirect_uri", REDIRECT_URI);
       u.searchParams.set("response_type", "code");
       u.searchParams.set("scope", SCOPES);
@@ -81,9 +109,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "exchange") {
-      const cfg = await getCfg(supabase);
+      const { client_id, client_secret } = clientCreds();
       const form = new URLSearchParams({
-        code: body.code, client_id: cfg.client_id, client_secret: cfg.client_secret,
+        code: body.code, client_id, client_secret,
         redirect_uri: REDIRECT_URI, grant_type: "authorization_code",
       });
       const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body: form });
@@ -97,22 +125,22 @@ Deno.serve(async (req) => {
       } catch { /* ignore */ }
       const patch: any = { access_token: j.access_token, token_expiry: expiry, email, updated_at: new Date().toISOString() };
       if (j.refresh_token) patch.refresh_token = j.refresh_token; // só vem na 1ª vez
-      await supabase.from("google_config").update(patch).eq("id", 1);
+      await saveCfg(supabase, orgId, patch);
       return json({ ok: true, email });
     }
 
     if (action === "status") {
-      const cfg = await getCfg(supabase);
-      return json({ connected: !!cfg.refresh_token, email: cfg.email, has_client: !!cfg.client_id });
+      const cfg = await getCfg(supabase, orgId);
+      return json({ connected: !!cfg.refresh_token, email: cfg.email, has_client: !!clientCreds().client_id });
     }
 
     if (action === "disconnect") {
-      await supabase.from("google_config").update({ access_token: null, refresh_token: null, token_expiry: null, email: null }).eq("id", 1);
+      await saveCfg(supabase, orgId, { access_token: null, refresh_token: null, token_expiry: null, email: null });
       return json({ ok: true });
     }
 
     if (action === "list_spreadsheets") {
-      const token = await getAccessToken(supabase);
+      const token = await getAccessToken(supabase, orgId);
       // Pagina por TODAS as planilhas (não só as 100 recentes) p/ aparecer renomeadas/antigas.
       const files: any[] = [];
       let pageToken = "";
@@ -130,21 +158,21 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list_tabs") {
-      const token = await getAccessToken(supabase);
+      const token = await getAccessToken(supabase, orgId);
       const j = await gapi(token, `https://sheets.googleapis.com/v4/spreadsheets/${body.spreadsheet_id}?fields=properties.title,sheets.properties.title`);
       const tabs = (j.sheets || []).map((s: any) => s.properties.title);
       return json({ tabs, title: j.properties?.title });
     }
 
     if (action === "list_headers") {
-      const token = await getAccessToken(supabase);
+      const token = await getAccessToken(supabase, orgId);
       const range = `${body.aba}!1:1`;
       const j = await gapi(token, `https://sheets.googleapis.com/v4/spreadsheets/${body.spreadsheet_id}/values/${encodeURIComponent(range)}`);
       return json({ headers: j.values?.[0] || [] });
     }
 
     if (action === "append") {
-      await appendRow(supabase, body.spreadsheet_id, body.aba, body.valores || {});
+      await appendRow(supabase, orgId, body.spreadsheet_id, body.aba, body.valores || {});
       return json({ ok: true });
     }
 
