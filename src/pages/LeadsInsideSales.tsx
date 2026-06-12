@@ -48,7 +48,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal } from "lucide-react";
-import { GerenciarCamposLead } from "@/components/GerenciarCamposLead";
+import { MapeamentoLeads } from "@/components/MapeamentoLeads";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -445,11 +445,16 @@ const LeadsInsideSales = () => {
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setGerenciarCampos(true)}>
-              <SlidersHorizontal className="mr-2 h-4 w-4" /> Campos
+              <SlidersHorizontal className="mr-2 h-4 w-4" /> Gerenciar campos
             </Button>
           </header>
 
-          <GerenciarCamposLead open={gerenciarCampos} onOpenChange={setGerenciarCampos} onChanged={refetchCampos} />
+          <Dialog open={gerenciarCampos} onOpenChange={(v) => { setGerenciarCampos(v); if (!v) refetchCampos(); }}>
+            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Gerenciar campos e mapeamento do CRM</DialogTitle></DialogHeader>
+              <MapeamentoLeads />
+            </DialogContent>
+          </Dialog>
 
           <div className="p-6 space-y-4">
             {/* Filters */}
