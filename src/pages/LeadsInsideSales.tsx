@@ -47,7 +47,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal } from "lucide-react";
+import { GerenciarCamposLead } from "@/components/GerenciarCamposLead";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -85,7 +86,10 @@ type LeadRow = {
   is_venda_realizada: string | null;
   faturamento_venda: number | null;
   data_venda_realizada: string | null;
+  custom: Record<string, unknown> | null;
 };
+
+type CampoLead = { id: string; chave: string; label: string; ordem: number };
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
   if (startDate && endDate) {
@@ -196,7 +200,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name")
+        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, custom")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
@@ -211,6 +215,16 @@ const LeadsInsideSales = () => {
     },
     refetchInterval: 60_000,
   });
+
+  // Campos personalizados da organização (colunas dinâmicas).
+  const { data: campos = [], refetch: refetchCampos } = useQuery({
+    queryKey: ["lead_campos"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem").order("ordem");
+      return (data || []) as CampoLead[];
+    },
+  });
+  const [gerenciarCampos, setGerenciarCampos] = useState(false);
 
   const toggleSort = useCallback((key: SortKey) => {
     if (sortKey === key) {
@@ -424,13 +438,18 @@ const LeadsInsideSales = () => {
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
           <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-background/80 backdrop-blur-sm px-6 py-3">
             <SidebarTrigger />
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold tracking-tight">Leads</h1>
               <p className="text-sm text-muted-foreground">
                 Espelho completo de todos os leads cadastrados
               </p>
             </div>
+            <Button variant="outline" size="sm" onClick={() => setGerenciarCampos(true)}>
+              <SlidersHorizontal className="mr-2 h-4 w-4" /> Campos
+            </Button>
           </header>
+
+          <GerenciarCamposLead open={gerenciarCampos} onOpenChange={setGerenciarCampos} onChanged={refetchCampos} />
 
           <div className="p-6 space-y-4">
             {/* Filters */}
@@ -538,6 +557,9 @@ const LeadsInsideSales = () => {
                     {sortableHead("Nome Anúncio", "ad_name")}
                     {sortableHead("Responsável", "deal_user")}
                     {sortableHead("Tags", "tags")}
+                    {campos.map((c) => (
+                      <TableHead key={c.id} style={{ minWidth: 100 }} className="whitespace-nowrap">{c.label}</TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -636,6 +658,10 @@ const LeadsInsideSales = () => {
                             </div>
                           ) : "—"}
                         </TableCell>
+                        {campos.map((c) => {
+                          const v = (l.custom as Record<string, unknown> | null)?.[c.chave];
+                          return <TableCell key={c.id} className="max-w-[150px] truncate">{v != null && v !== "" ? String(v) : "—"}</TableCell>;
+                        })}
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
