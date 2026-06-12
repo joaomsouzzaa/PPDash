@@ -216,14 +216,24 @@ const LeadsInsideSales = () => {
     refetchInterval: 60_000,
   });
 
-  // Campos personalizados da organização (colunas dinâmicas).
-  const { data: campos = [], refetch: refetchCampos } = useQuery({
-    queryKey: ["lead_campos"],
+  // Configuração de campos da organização (custom + overrides dos padrão).
+  const { data: camposRaw = [], refetch: refetchCampos } = useQuery({
+    queryKey: ["lead_campos_all"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem").eq("padrao", false).eq("oculto", false).order("ordem");
-      return (data || []) as CampoLead[];
+      const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem, padrao, oculto").order("ordem");
+      return (data || []) as Array<CampoLead & { padrao: boolean; oculto: boolean }>;
     },
   });
+  // Overrides dos campos padrão: rótulo customizado e ocultar.
+  const overrides = useMemo(() => {
+    const m = new Map<string, { label: string; oculto: boolean }>();
+    camposRaw.filter((r) => r.padrao).forEach((r) => m.set(r.chave, { label: r.label, oculto: r.oculto }));
+    return m;
+  }, [camposRaw]);
+  // Campos personalizados visíveis (colunas dinâmicas).
+  const campos = useMemo(() => camposRaw.filter((r) => !r.padrao && !r.oculto) as CampoLead[], [camposRaw]);
+  const lbl = (key: string, def: string) => overrides.get(key)?.label ?? def;
+  const vis = (key: string) => !overrides.get(key)?.oculto;
   const [gerenciarCampos, setGerenciarCampos] = useState(false);
 
   const toggleSort = useCallback((key: SortKey) => {
@@ -542,26 +552,26 @@ const LeadsInsideSales = () => {
                     {sortableHead("Nome", "nome")}
                     {sortableHead("Email", "email")}
                     {sortableHead("Telefone", "telefone")}
-                    {sortableHead("WhatsApp Digitado", "whatsapp")}
-                    {sortableHead("Instagram", "instagram")}
-                    {sortableHead("SQL", "is_sql")}
-                    {sortableHead("Reunião Agendada", "is_reuniao_agendada")}
-                    {sortableHead("Reunião Realizada", "is_reuniao_realizada")}
-                    {sortableHead("Venda Realizada", "is_venda_realizada")}
-                    {sortableHead("Faturamento Venda", "faturamento_venda")}
-                    {sortableHead("Data Venda", "data_venda_realizada")}
-                    {sortableHead("Área de Atuação", "area_atuacao")}
-                    {sortableHead("Papel na Empresa", "papel")}
-                    {sortableHead("Faturamento Atual", "faturamento")}
-                    {sortableHead("Situação Atual", "situacao_atual")}
+                    {vis("whatsapp") && sortableHead(lbl("whatsapp", "WhatsApp Digitado"), "whatsapp")}
+                    {vis("instagram") && sortableHead(lbl("instagram", "Instagram"), "instagram")}
+                    {vis("is_sql") && sortableHead(lbl("is_sql", "SQL"), "is_sql")}
+                    {vis("is_reuniao_agendada") && sortableHead(lbl("is_reuniao_agendada", "Reunião Agendada"), "is_reuniao_agendada")}
+                    {vis("is_reuniao_realizada") && sortableHead(lbl("is_reuniao_realizada", "Reunião Realizada"), "is_reuniao_realizada")}
+                    {vis("is_venda_realizada") && sortableHead(lbl("is_venda_realizada", "Venda Realizada"), "is_venda_realizada")}
+                    {vis("faturamento_venda") && sortableHead(lbl("faturamento_venda", "Faturamento Venda"), "faturamento_venda")}
+                    {vis("data_venda_realizada") && sortableHead(lbl("data_venda_realizada", "Data Venda"), "data_venda_realizada")}
+                    {vis("area_atuacao") && sortableHead(lbl("area_atuacao", "Área de Atuação"), "area_atuacao")}
+                    {vis("papel") && sortableHead(lbl("papel", "Papel na Empresa"), "papel")}
+                    {vis("faturamento") && sortableHead(lbl("faturamento", "Faturamento Atual"), "faturamento")}
+                    {vis("situacao_atual") && sortableHead(lbl("situacao_atual", "Situação Atual"), "situacao_atual")}
                     {sortableHead("Utm Campaign", "utm_campaign")}
                     {sortableHead("UTM Medium", "utm_medium")}
                     {sortableHead("UTM Content", "utm_content")}
                     {sortableHead("UTM Term", "utm_term")}
-                    {sortableHead("Nome Campanha", "campaign_name")}
-                    {sortableHead("Nome Anúncio", "ad_name")}
-                    {sortableHead("Responsável", "deal_user")}
-                    {sortableHead("Tags", "tags")}
+                    {vis("campaign_name") && sortableHead(lbl("campaign_name", "Nome Campanha"), "campaign_name")}
+                    {vis("ad_name") && sortableHead(lbl("ad_name", "Nome Anúncio"), "ad_name")}
+                    {vis("deal_user") && sortableHead(lbl("deal_user", "Responsável"), "deal_user")}
+                    {vis("tags") && sortableHead(lbl("tags", "Tags"), "tags")}
                     {campos.map((c) => (
                       <TableHead key={c.id} style={{ minWidth: 100 }} className="whitespace-nowrap">{c.label}</TableHead>
                     ))}
@@ -605,8 +615,9 @@ const LeadsInsideSales = () => {
                         <TableCell className="font-medium">{l.nome || "—"}</TableCell>
                         <TableCell><span className="text-sm">{l.email || "—"}</span></TableCell>
                         <TableCell>{l.telefone || "—"}</TableCell>
-                        <TableCell>{l.whatsapp || "—"}</TableCell>
-                        <TableCell>{l.instagram || "—"}</TableCell>
+                        {vis("whatsapp") && <TableCell>{l.whatsapp || "—"}</TableCell>}
+                        {vis("instagram") && <TableCell>{l.instagram || "—"}</TableCell>}
+                        {vis("is_sql") && (
                         <TableCell>
                           {l.is_sql ? (
                             <Badge variant="default">Sim</Badge>
@@ -614,6 +625,8 @@ const LeadsInsideSales = () => {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
+                        {vis("is_reuniao_agendada") && (
                         <TableCell>
                           {l.is_reuniao_agendada ? (
                             <Badge variant="default">Sim</Badge>
@@ -621,6 +634,8 @@ const LeadsInsideSales = () => {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
+                        {vis("is_reuniao_realizada") && (
                         <TableCell>
                           {l.is_reuniao_realizada ? (
                             <Badge variant="default">Sim</Badge>
@@ -628,6 +643,8 @@ const LeadsInsideSales = () => {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
+                        {vis("is_venda_realizada") && (
                         <TableCell>
                           {l.is_venda_realizada ? (
                             <Badge variant="default">Sim</Badge>
@@ -635,23 +652,29 @@ const LeadsInsideSales = () => {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
+                        {vis("faturamento_venda") && (
                         <TableCell>
                           {l.faturamento_venda != null ? `R$ ${Number(l.faturamento_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}
                         </TableCell>
+                        )}
+                        {vis("data_venda_realizada") && (
                         <TableCell className="whitespace-nowrap">
                           {l.data_venda_realizada ? new Date(l.data_venda_realizada).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
                         </TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>
-                        <TableCell>{l.papel || "—"}</TableCell>
-                        <TableCell>{l.faturamento || "—"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.situacao_atual || "—"}</TableCell>
+                        )}
+                        {vis("area_atuacao") && <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>}
+                        {vis("papel") && <TableCell>{l.papel || "—"}</TableCell>}
+                        {vis("faturamento") && <TableCell>{l.faturamento || "—"}</TableCell>}
+                        {vis("situacao_atual") && <TableCell className="max-w-[150px] truncate">{l.situacao_atual || "—"}</TableCell>}
                         <TableCell className="max-w-[150px] truncate">{l.utm_campaign || "—"}</TableCell>
                         <TableCell>{l.utm_medium || "—"}</TableCell>
                         <TableCell className="max-w-[150px] truncate">{l.utm_content || "—"}</TableCell>
                         <TableCell>{l.utm_term || "—"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>
+                        {vis("campaign_name") && <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>}
+                        {vis("ad_name") && <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>}
+                        {vis("deal_user") && <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>}
+                        {vis("tags") && (
                         <TableCell>
                           {l.tags ? (
                             <div className="flex flex-wrap gap-1">
@@ -663,6 +686,7 @@ const LeadsInsideSales = () => {
                             </div>
                           ) : "—"}
                         </TableCell>
+                        )}
                         {campos.map((c) => {
                           const v = (l.custom as Record<string, unknown> | null)?.[c.chave];
                           return <TableCell key={c.id} className="max-w-[150px] truncate">{v != null && v !== "" ? String(v) : "—"}</TableCell>;
