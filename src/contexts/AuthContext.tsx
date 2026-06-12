@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import type { ModuloKey } from "@/hooks/useModulos";
+import { TODOS_OS_ITENS, expandirItens } from "@/lib/modulos";
+
+export interface Marca { nome: string | null; logo: string | null; }
 
 export type Papel = "super_admin" | "client_admin" | "user";
 
@@ -18,7 +20,7 @@ export interface Plano {
   id: string;
   nome: string;
   slug: string;
-  modulos: ModuloKey[];
+  modulos: string[];
   max_usuarios: number;
 }
 
@@ -28,8 +30,9 @@ interface AuthState {
   user: User | null;
   profile: Profile | null;
   plano: Plano | null;
-  /** Módulos liberados = (plano da org) ∩ (módulos do usuário, se restrito). Super admin = todos. */
-  modulosPermitidos: ModuloKey[];
+  marca: Marca;
+  /** Itens liberados = (plano da org) ∩ (itens do usuário, se restrito). Super admin = todos. */
+  modulosPermitidos: string[];
   isSuperAdmin: boolean;
   isClientAdmin: boolean;
   signIn: (email: string, senha: string) => Promise<{ error: string | null }>;
@@ -37,7 +40,7 @@ interface AuthState {
   refresh: () => Promise<void>;
 }
 
-const TODOS_MODULOS: ModuloKey[] = ["eventos", "inside", "analytics", "growth"];
+const MARCA_PADRAO: Marca = { nome: null, logo: null };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
@@ -46,7 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plano, setPlano] = useState<Plano | null>(null);
-  const [modulosPermitidos, setModulosPermitidos] = useState<ModuloKey[]>([]);
+  const [marca, setMarca] = useState<Marca>(MARCA_PADRAO);
+  const [modulosPermitidos, setModulosPermitidos] = useState<string[]>([]);
 
   const carregarPerfil = useCallback(async (uid: string) => {
     const { data: prof } = await supabase
@@ -59,26 +63,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(p);
 
     if (!p) {
-      setPlano(null);
-      setModulosPermitidos([]);
+      setPlano(null); setMarca(MARCA_PADRAO); setModulosPermitidos([]);
       return;
     }
 
     if (p.papel === "super_admin") {
-      setPlano(null);
-      setModulosPermitidos(TODOS_MODULOS);
+      setPlano(null); setMarca(MARCA_PADRAO); setModulosPermitidos(TODOS_OS_ITENS);
       return;
     }
 
-    // Plano da organização
-    let modsPlano: ModuloKey[] = [];
+    // Organização: plano + marca
+    let modsPlano: string[] = [];
     if (p.org_id) {
       const { data: org } = await supabase
         .from("organizations")
-        .select("plano_id")
+        .select("plano_id, marca_nome, marca_logo_url")
         .eq("id", p.org_id)
         .maybeSingle();
-      const planoId = (org as { plano_id: string | null } | null)?.plano_id;
+      const o = org as { plano_id: string | null; marca_nome: string | null; marca_logo_url: string | null } | null;
+      setMarca({ nome: o?.marca_nome ?? null, logo: o?.marca_logo_url ?? null });
+      const planoId = o?.plano_id;
       if (planoId) {
         const { data: pl } = await supabase
           .from("planos")
@@ -88,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (pl) {
           const plano = pl as unknown as Plano;
           setPlano(plano);
-          modsPlano = (plano.modulos ?? []) as ModuloKey[];
+          modsPlano = expandirItens(plano.modulos ?? []);
         }
       }
     }
@@ -98,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from("user_modulos")
       .select("modulo_key")
       .eq("user_id", uid);
-    const userMods = ((um as { modulo_key: ModuloKey }[]) ?? []).map((r) => r.modulo_key);
+    const userMods = expandirItens(((um as { modulo_key: string }[]) ?? []).map((r) => r.modulo_key));
 
     const efetivos = userMods.length > 0
       ? modsPlano.filter((m) => userMods.includes(m))
@@ -113,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setProfile(null);
       setPlano(null);
+      setMarca(MARCA_PADRAO);
       setModulosPermitidos([]);
     }
   }, [carregarPerfil]);
@@ -159,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: session?.user ?? null,
     profile,
     plano,
+    marca,
     modulosPermitidos,
     isSuperAdmin: profile?.papel === "super_admin",
     isClientAdmin: profile?.papel === "client_admin",

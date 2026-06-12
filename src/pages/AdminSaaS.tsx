@@ -15,25 +15,18 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Shield, Plus, Loader2, Building2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ModuloKey } from "@/hooks/useModulos";
-
-const MODULOS: { key: ModuloKey; nome: string }[] = [
-  { key: "eventos", nome: "Eventos" },
-  { key: "inside", nome: "Inside Sales" },
-  { key: "analytics", nome: "Analytics" },
-  { key: "growth", nome: "Growth" },
-];
+import { MODULOS_CATALOGO, expandirItens, itensDoModulo } from "@/lib/modulos";
 
 interface Plano {
   id: string; nome: string; slug: string; preco: number;
-  modulos: ModuloKey[]; max_usuarios: number; max_instancias: number; ativo: boolean; ordem: number;
+  modulos: string[]; max_usuarios: number; max_instancias: number; ativo: boolean; ordem: number;
 }
 interface Org {
   id: string; nome: string; status: string; plano_id: string | null;
   plano_nome?: string; usuarios?: number;
 }
 
-const PLANO_VAZIO = { nome: "", slug: "", preco: 0, max_usuarios: 5, max_instancias: 1, modulos: [] as ModuloKey[], ordem: 0 };
+const PLANO_VAZIO = { nome: "", slug: "", preco: 0, max_usuarios: 5, max_instancias: 1, modulos: [] as string[], ordem: 0 };
 
 export default function AdminSaaS() {
   const [planos, setPlanos] = useState<Plano[]>([]);
@@ -101,8 +94,15 @@ export default function AdminSaaS() {
   const abrirNovoPlano = () => { setEditId(null); setFormPlano({ ...PLANO_VAZIO, ordem: planos.length + 1 }); setOpenPlano(true); };
   const abrirEditarPlano = (p: Plano) => {
     setEditId(p.id);
-    setFormPlano({ nome: p.nome, slug: p.slug, preco: Number(p.preco), max_usuarios: p.max_usuarios, max_instancias: p.max_instancias ?? 1, modulos: p.modulos ?? [], ordem: p.ordem });
+    setFormPlano({ nome: p.nome, slug: p.slug, preco: Number(p.preco), max_usuarios: p.max_usuarios, max_instancias: p.max_instancias ?? 1, modulos: expandirItens(p.modulos ?? []), ordem: p.ordem });
     setOpenPlano(true);
+  };
+  const toggleAtivoPlano = async (p: Plano) => {
+    try {
+      const { error } = await (supabase as any).from("planos").update({ ativo: !p.ativo }).eq("id", p.id);
+      if (error) throw new Error(error.message);
+      await carregar();
+    } catch (e) { toast.error((e as Error).message); }
   };
   const salvarPlano = async () => {
     if (!formPlano.nome.trim()) return toast.error("Informe o nome do plano.");
@@ -155,7 +155,7 @@ export default function AdminSaaS() {
                     <div className="space-y-1"><Label>Plano</Label>
                       <Select value={formOrg.plano_id} onValueChange={(v) => setFormOrg({ ...formOrg, plano_id: v })}>
                         <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{planos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+                        <SelectContent>{planos.filter((p) => p.ativo).map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
                       </Select></div>
                     <div className="border-t pt-3 text-sm font-medium text-muted-foreground">Admin do cliente</div>
                     <div className="space-y-1"><Label>Nome</Label>
@@ -194,7 +194,7 @@ export default function AdminSaaS() {
                           <Label className="text-xs">Plano</Label>
                           <Select value={o.plano_id ?? ""} onValueChange={(v) => mudarPlano(o.id, v)}>
                             <SelectTrigger className="h-8"><SelectValue placeholder="Sem plano" /></SelectTrigger>
-                            <SelectContent>{planos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+                            <SelectContent>{planos.filter((p) => p.ativo || p.id === o.plano_id).map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}{!p.ativo ? " (inativo)" : ""}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
                         <Button variant="outline" size="sm" className="w-full"
@@ -219,7 +219,10 @@ export default function AdminSaaS() {
                 <Card key={p.id}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center justify-between gap-2">
-                      <span className="truncate">{p.nome}</span>
+                      <span className="truncate flex items-center gap-2">
+                        {p.nome}
+                        {!p.ativo && <Badge variant="outline" className="text-[10px]">inativo</Badge>}
+                      </span>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => abrirEditarPlano(p)}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => excluirPlano(p)}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -229,9 +232,15 @@ export default function AdminSaaS() {
                   <CardContent className="space-y-2 text-sm">
                     <div className="text-muted-foreground">R$ {Number(p.preco).toFixed(2)} · {p.max_usuarios} usuários · {p.max_instancias ?? 0} WhatsApp</div>
                     <div className="flex flex-wrap gap-1">
-                      {(p.modulos ?? []).map((m) => <Badge key={m} variant="secondary">{MODULOS.find((x) => x.key === m)?.nome ?? m}</Badge>)}
-                      {(!p.modulos || p.modulos.length === 0) && <span className="text-xs text-muted-foreground">Sem módulos</span>}
+                      {MODULOS_CATALOGO.map((mod) => {
+                        const n = expandirItens(p.modulos).filter((k) => itensDoModulo(mod.key).includes(k)).length;
+                        return n > 0 ? <Badge key={mod.key} variant="secondary">{mod.nome} ({n}/{mod.itens.length})</Badge> : null;
+                      })}
+                      {expandirItens(p.modulos).length === 0 && <span className="text-xs text-muted-foreground">Sem itens</span>}
                     </div>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => toggleAtivoPlano(p)}>
+                      {p.ativo ? "Desativar plano" : "Ativar plano"}
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -251,18 +260,38 @@ export default function AdminSaaS() {
                     <div className="space-y-1"><Label>Máx. WhatsApp</Label>
                       <Input type="number" value={formPlano.max_instancias} onChange={(e) => setFormPlano({ ...formPlano, max_instancias: Number(e.target.value) })} /></div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Módulos incluídos</Label>
-                    {MODULOS.map((m) => (
-                      <div key={m.key} className="flex items-center gap-2">
-                        <Checkbox checked={formPlano.modulos.includes(m.key)}
-                          onCheckedChange={(v) => setFormPlano({
-                            ...formPlano,
-                            modulos: v ? [...formPlano.modulos, m.key] : formPlano.modulos.filter((k) => k !== m.key),
-                          })} />
-                        <span className="text-sm">{m.nome}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <Label>Itens incluídos no plano</Label>
+                    {MODULOS_CATALOGO.map((mod) => {
+                      const allKeys = itensDoModulo(mod.key);
+                      const todos = allKeys.every((k) => formPlano.modulos.includes(k));
+                      return (
+                        <div key={mod.key} className="space-y-1">
+                          <label className="flex items-center gap-2 text-sm font-medium">
+                            <Checkbox checked={todos}
+                              onCheckedChange={(v) => setFormPlano({
+                                ...formPlano,
+                                modulos: v
+                                  ? [...new Set([...formPlano.modulos, ...allKeys])]
+                                  : formPlano.modulos.filter((k) => !allKeys.includes(k)),
+                              })} />
+                            {mod.nome}
+                          </label>
+                          <div className="pl-6 space-y-1">
+                            {mod.itens.map((it) => (
+                              <label key={it.key} className="flex items-center gap-2 text-sm">
+                                <Checkbox checked={formPlano.modulos.includes(it.key)}
+                                  onCheckedChange={(v) => setFormPlano({
+                                    ...formPlano,
+                                    modulos: v ? [...formPlano.modulos, it.key] : formPlano.modulos.filter((k) => k !== it.key),
+                                  })} />
+                                {it.nome}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <DialogFooter>

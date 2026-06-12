@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Loader2 } from "lucide-react";
+import { Settings, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { getOrgId } from "@/lib/org";
+import { useRef, useEffect } from "react";
 
 const PAPEL_LABEL: Record<string, string> = {
   super_admin: "Super Admin",
@@ -17,10 +19,50 @@ const PAPEL_LABEL: Record<string, string> = {
 };
 
 export default function Configuracoes() {
-  const { profile, plano, isSuperAdmin } = useAuth();
+  const { profile, plano, isSuperAdmin, isClientAdmin, marca, refresh } = useAuth();
   const [senha, setSenha] = useState("");
   const [senha2, setSenha2] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // ---- Marca (admin do cliente) ----
+  const [marcaNome, setMarcaNome] = useState("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [salvandoMarca, setSalvandoMarca] = useState(false);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMarcaNome(marca.nome || "");
+    setLogoUrl(marca.logo || null);
+  }, [marca]);
+
+  const enviarLogo = async (file: File) => {
+    if (!profile?.org_id) return;
+    setEnviandoLogo(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const orgId = await getOrgId();
+      const path = `${orgId}/logo-${crypto.randomUUID()}.${ext}`;
+      const up = await supabase.storage.from("branding").upload(path, file, { upsert: true });
+      if (up.error) throw up.error;
+      const url = supabase.storage.from("branding").getPublicUrl(path).data.publicUrl;
+      setLogoUrl(url);
+      toast.success("Logo carregada. Clique em Salvar marca para aplicar.");
+    } catch (e: any) { toast.error(`Erro no upload: ${e?.message || "falhou"}`); }
+    setEnviandoLogo(false);
+  };
+
+  const salvarMarca = async () => {
+    if (!profile?.org_id) return;
+    setSalvandoMarca(true);
+    const { error } = await (supabase as any).from("organizations")
+      .update({ marca_nome: marcaNome.trim() || null, marca_logo_url: logoUrl })
+      .eq("id", profile.org_id);
+    setSalvandoMarca(false);
+    if (error) return toast.error(error.message);
+    await refresh();
+    toast.success("Marca atualizada.");
+  };
 
   const trocarSenha = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +93,38 @@ export default function Configuracoes() {
             )}
           </CardContent>
         </Card>
+
+        {isClientAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Marca</CardTitle>
+              <CardDescription>Personalize o nome e o logo (aparecem no menu e na aba do navegador)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-lg border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                  {logoUrl ? <img src={logoUrl} alt="logo" className="h-full w-full object-cover" /> : <span className="text-xs text-muted-foreground">sem logo</span>}
+                </div>
+                <div>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { if (e.target.files?.[0]) enviarLogo(e.target.files[0]); e.target.value = ""; }} />
+                  <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={enviandoLogo}>
+                    {enviandoLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    Enviar logo
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground mt-1">PNG/JPG quadrado fica melhor.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="marca">Nome da marca</Label>
+                <Input id="marca" value={marcaNome} onChange={(e) => setMarcaNome(e.target.value)} placeholder="Ex.: Minha Empresa" />
+              </div>
+              <Button onClick={salvarMarca} disabled={salvandoMarca}>
+                {salvandoMarca && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salvar marca
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

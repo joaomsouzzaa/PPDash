@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SaleNotificationBanner } from "@/components/SaleNotificationBanner";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { BrandingEffect } from "@/components/BrandingEffect";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import DefinirSenha from "./pages/DefinirSenha";
@@ -54,6 +55,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
+        <BrandingEffect />
         <SaleNotificationBanner />
         <BrowserRouter>
           <Routes>
@@ -63,24 +65,24 @@ const App = () => (
             <Route path="/aguardando" element={<Aguardando />} />
 
             {/* Eventos */}
-            <Route path="/" element={<Priv modulo="eventos"><Index /></Priv>} />
-            <Route path="/eventos-geral" element={<Priv modulo="eventos"><DashboardGeral /></Priv>} />
-            <Route path="/vendas-eventos" element={<Priv modulo="eventos"><VendasEventos /></Priv>} />
+            <Route path="/" element={<Priv modulo="eventos.dashboard"><Index /></Priv>} />
+            <Route path="/eventos-geral" element={<Priv modulo="eventos.resumo"><DashboardGeral /></Priv>} />
+            <Route path="/vendas-eventos" element={<Priv modulo="eventos.vendas"><VendasEventos /></Priv>} />
 
             {/* Inside Sales */}
-            <Route path="/inside-sales" element={<Priv modulo="inside"><InsideSales /></Priv>} />
-            <Route path="/leads" element={<Priv modulo="inside"><LeadsInsideSales /></Priv>} />
+            <Route path="/inside-sales" element={<Priv modulo="inside.dashboard"><InsideSales /></Priv>} />
+            <Route path="/leads" element={<Priv modulo="inside.leads"><LeadsInsideSales /></Priv>} />
 
             {/* Analytics */}
-            <Route path="/performance" element={<Priv modulo="analytics"><Performance /></Priv>} />
-            <Route path="/campanhas" element={<Priv modulo="analytics"><Campanhas /></Priv>} />
+            <Route path="/performance" element={<Priv modulo="analytics.performance"><Performance /></Priv>} />
+            <Route path="/campanhas" element={<Priv modulo="analytics.campanhas"><Campanhas /></Priv>} />
 
             {/* Growth */}
-            <Route path="/notificacoes" element={<Priv modulo="growth"><Notificacoes /></Priv>} />
-            <Route path="/agentes" element={<Priv modulo="growth"><Agentes /></Priv>} />
-            <Route path="/chat" element={<Priv modulo="growth"><Chat /></Priv>} />
-            <Route path="/workflow" element={<Priv modulo="growth"><Workflow /></Priv>} />
-            <Route path="/designer" element={<Priv modulo="growth"><Designer /></Priv>} />
+            <Route path="/notificacoes" element={<Priv modulo="growth.notificacoes"><Notificacoes /></Priv>} />
+            <Route path="/agentes" element={<Priv modulo="growth.agentes"><Agentes /></Priv>} />
+            <Route path="/chat" element={<Priv modulo="growth.chat"><Chat /></Priv>} />
+            <Route path="/workflow" element={<Priv modulo="growth.workflow"><Workflow /></Priv>} />
+            <Route path="/designer" element={<Priv modulo="growth.designer"><Designer /></Priv>} />
 
             {/* Configurações (apenas autenticação) */}
             <Route path="/integracoes" element={<Priv><Integracoes /></Priv>} />

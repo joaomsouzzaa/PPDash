@@ -23,7 +23,8 @@ import {
   LayoutGrid,
   Shield,
 } from "lucide-react";
-import { useModulos, type ModuloKey } from "@/hooks/useModulos";
+import { useItensOcultos } from "@/hooks/useModulos";
+import { MODULOS_CATALOGO } from "@/lib/modulos";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
@@ -42,29 +43,20 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const eventosItems = [
-  { title: "Dashboard WS", url: "/", icon: LayoutDashboard },
-  { title: "Resumo City", url: "/eventos-geral", icon: LayoutDashboard },
-  { title: "Vendas", url: "/vendas-eventos", icon: ShoppingCart },
-];
-
-const insideSalesItems = [
-  { title: "Dashboard Geral", url: "/inside-sales", icon: LayoutDashboard },
-  { title: "Leads", url: "/leads", icon: Users },
-];
-
-const analyticsItems = [
-  { title: "Performance", url: "/performance", icon: TrendingUp },
-  { title: "Campanhas", url: "/campanhas", icon: BarChart3 },
-];
-
-const growthItems = [
-  { title: "Notificações", url: "/notificacoes", icon: Bot },
-  { title: "Agentes", url: "/agentes", icon: Sparkles },
-  { title: "Chat", url: "/chat", icon: MessageSquare },
-  { title: "Workflow", url: "/workflow", icon: KanbanSquare },
-  { title: "Designer", url: "/designer", icon: Palette },
-];
+const ICONS: Record<string, any> = {
+  "eventos.dashboard": LayoutDashboard,
+  "eventos.resumo": LayoutDashboard,
+  "eventos.vendas": ShoppingCart,
+  "inside.dashboard": LayoutDashboard,
+  "inside.leads": Users,
+  "analytics.performance": TrendingUp,
+  "analytics.campanhas": BarChart3,
+  "growth.notificacoes": Bot,
+  "growth.agentes": Sparkles,
+  "growth.chat": MessageSquare,
+  "growth.workflow": KanbanSquare,
+  "growth.designer": Palette,
+};
 
 export function AppSidebar() {
   const [isDark, setIsDark] = useState(() => {
@@ -75,13 +67,13 @@ export function AppSidebar() {
 
   // Seção "Configurações" começa minimizada; abre apenas ao clicar.
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const modulos = useModulos();
-  const { modulosPermitidos, isSuperAdmin, isClientAdmin, signOut } = useAuth();
+  const ocultos = useItensOcultos();
+  const { modulosPermitidos, isSuperAdmin, isClientAdmin, signOut, marca } = useAuth();
   const navigate = useNavigate();
   const podeAdmin = isSuperAdmin || isClientAdmin;
 
-  // Grupo visível = liberado pelo plano/usuário E não ocultado manualmente.
-  const podeVer = (k: ModuloKey) => modulosPermitidos.includes(k) && modulos[k];
+  // Item visível = liberado pelo plano/usuário E não ocultado manualmente.
+  const itemVisivel = (key: string) => (isSuperAdmin || modulosPermitidos.includes(key)) && !ocultos.has(key);
 
   const handleSair = async () => {
     await signOut();
@@ -97,12 +89,14 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-            <BarChart3 className="h-5 w-5 text-primary-foreground" />
+          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
+            {marca.logo
+              ? <img src={marca.logo} alt="logo" className="h-full w-full object-cover" />
+              : <BarChart3 className="h-5 w-5 text-primary-foreground" />}
           </div>
           <div>
             <h2 className="text-sm font-bold text-sidebar-accent-foreground tracking-tight">
-              Scale Hacking
+              {marca.nome || "Scale Hacking"}
             </h2>
             <p className="text-xs text-sidebar-foreground">Dashboard</p>
           </div>
@@ -110,113 +104,39 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
-        {podeVer("eventos") && (
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
-            Eventos
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {eventosItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      end
-                      className="hover:bg-sidebar-accent/80"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        )}
-
-        {podeVer("inside") && (
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
-            Inside Sales
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {insideSalesItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      end
-                      className="hover:bg-sidebar-accent/80"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        )}
-
-        {podeVer("analytics") && (
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
-            Analytics
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {analyticsItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      end
-                      className="hover:bg-sidebar-accent/80"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        )}
-
-        {podeVer("growth") && (
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
-            Growth
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {growthItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      end
-                      className="hover:bg-sidebar-accent/80"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        )}
+        {MODULOS_CATALOGO.map((mod) => {
+          const itens = mod.itens.filter((it) => itemVisivel(it.key));
+          if (itens.length === 0) return null;
+          return (
+            <SidebarGroup key={mod.key}>
+              <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
+                {mod.nome}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {itens.map((it) => {
+                    const Icon = ICONS[it.key] || LayoutDashboard;
+                    return (
+                      <SidebarMenuItem key={it.key}>
+                        <SidebarMenuButton asChild tooltip={it.nome}>
+                          <NavLink
+                            to={it.url}
+                            end
+                            className="hover:bg-sidebar-accent/80"
+                            activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span>{it.nome}</span>
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3 space-y-1">

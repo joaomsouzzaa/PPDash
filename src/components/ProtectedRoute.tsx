@@ -1,12 +1,12 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import type { ModuloKey } from "@/hooks/useModulos";
+import { MODULOS_CATALOGO } from "@/lib/modulos";
 import { Loader2 } from "lucide-react";
 
 interface Props {
   children: React.ReactNode;
-  /** Se definido, exige que o módulo esteja liberado para o usuário. */
-  modulo?: ModuloKey;
+  /** Se definido, exige que o item (ex.: "eventos.vendas") esteja liberado. */
+  modulo?: string;
   /** Se definido, exige um destes papéis. */
   papeis?: Array<"super_admin" | "client_admin" | "user">;
 }
@@ -31,13 +31,34 @@ export function ProtectedRoute({ children, modulo, papeis }: Props) {
     return <Navigate to="/aguardando" replace />;
   }
 
+  // Primeiro item liberado (destino seguro quando a home não está acessível).
+  const primeiraUrl = (() => {
+    for (const m of MODULOS_CATALOGO) for (const it of m.itens) {
+      if (isSuperAdmin || modulosPermitidos.includes(it.key)) return it.url;
+    }
+    return "/configuracoes";
+  })();
+
   if (papeis && profile && !papeis.includes(profile.papel)) {
-    return <Navigate to="/" replace />;
+    return primeiraUrl === location.pathname ? <>{children}</> : <Navigate to={primeiraUrl} replace />;
   }
 
   if (modulo && !isSuperAdmin && !modulosPermitidos.includes(modulo)) {
-    return <Navigate to="/" replace />;
+    return primeiraUrl === location.pathname
+      ? <SemAcesso />
+      : <Navigate to={primeiraUrl} replace />;
   }
 
   return <>{children}</>;
+}
+
+function SemAcesso() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6 text-center">
+      <div>
+        <p className="text-lg font-medium">Sem acesso a nenhum módulo</p>
+        <p className="text-sm text-muted-foreground mt-1">Fale com o administrador para liberar seus acessos.</p>
+      </div>
+    </div>
+  );
 }

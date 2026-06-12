@@ -14,30 +14,48 @@ import {
 } from "@/components/ui/dialog";
 import { Users, Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ModuloKey } from "@/hooks/useModulos";
-
-const MODULOS: { key: ModuloKey; nome: string }[] = [
-  { key: "eventos", nome: "Eventos" },
-  { key: "inside", nome: "Inside Sales" },
-  { key: "analytics", nome: "Analytics" },
-  { key: "growth", nome: "Growth" },
-];
+import { MODULOS_CATALOGO, TODOS_OS_ITENS, expandirItens } from "@/lib/modulos";
 
 interface Membro {
   id: string; nome: string | null; email: string | null; papel: string; status: string;
-  modulos: ModuloKey[];
+  modulos: string[];
+}
+
+/** Itens (filtrados ao que o plano libera) agrupados por módulo, para render. */
+function ModulosCheckboxes({ valor, disponiveis, onToggle }: {
+  valor: string[]; disponiveis: string[]; onToggle: (key: string, on: boolean) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {MODULOS_CATALOGO.map((mod) => {
+        const itens = mod.itens.filter((it) => disponiveis.includes(it.key));
+        if (itens.length === 0) return null;
+        return (
+          <div key={mod.key} className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground">{mod.nome}</p>
+            <div className="pl-1 grid grid-cols-2 gap-1">
+              {itens.map((it) => (
+                <label key={it.key} className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={valor.includes(it.key)} onCheckedChange={(v) => onToggle(it.key, !!v)} />
+                  {it.nome}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function Equipe() {
   const { plano, profile, isSuperAdmin } = useAuth();
-  const disponiveis = isSuperAdmin
-    ? MODULOS.map((m) => m.key)
-    : ((plano?.modulos ?? []) as ModuloKey[]);
+  const disponiveis = isSuperAdmin ? TODOS_OS_ITENS : expandirItens(plano?.modulos ?? []);
   const [membros, setMembros] = useState<Membro[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [form, setForm] = useState<{ nome: string; email: string; senha: string; modulos: ModuloKey[] }>(
+  const [form, setForm] = useState<{ nome: string; email: string; senha: string; modulos: string[] }>(
     { nome: "", email: "", senha: "", modulos: [] }
   );
   const [convidar, setConvidar] = useState(true);
@@ -51,9 +69,9 @@ export default function Equipe() {
     const ids = ((profs as Membro[]) ?? []).map((p) => p.id);
     const { data: ums } = ids.length
       ? await supabase.from("user_modulos").select("user_id, modulo_key").in("user_id", ids)
-      : { data: [] as { user_id: string; modulo_key: ModuloKey }[] };
-    const mapMods = new Map<string, ModuloKey[]>();
-    ((ums as { user_id: string; modulo_key: ModuloKey }[]) ?? []).forEach((r) => {
+      : { data: [] as { user_id: string; modulo_key: string }[] };
+    const mapMods = new Map<string, string[]>();
+    ((ums as { user_id: string; modulo_key: string }[]) ?? []).forEach((r) => {
       mapMods.set(r.user_id, [...(mapMods.get(r.user_id) ?? []), r.modulo_key]);
     });
     setMembros(((profs as Membro[]) ?? []).map((p) => ({ ...p, modulos: mapMods.get(p.id) ?? [] })));
@@ -81,7 +99,7 @@ export default function Equipe() {
     setSalvando(false);
   };
 
-  const toggleModulo = async (m: Membro, key: ModuloKey, on: boolean) => {
+  const toggleModulo = async (m: Membro, key: string, on: boolean) => {
     const novos = on ? [...m.modulos, key] : m.modulos.filter((k) => k !== key);
     try {
       await adminAction("set_member_modules", { user_id: m.id, modulos: novos });
@@ -125,20 +143,16 @@ export default function Equipe() {
                   <Input type="text" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} /></div>
               )}
               <div className="space-y-2">
-                <Label>Módulos liberados</Label>
-                {disponiveis.length === 0 && <p className="text-xs text-muted-foreground">Seu plano não tem módulos definidos.</p>}
-                {MODULOS.filter((m) => disponiveis.includes(m.key)).map((m) => (
-                  <div key={m.key} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={form.modulos.includes(m.key)}
-                      onCheckedChange={(v) => setForm({
-                        ...form,
-                        modulos: v ? [...form.modulos, m.key] : form.modulos.filter((k) => k !== m.key),
-                      })}
-                    />
-                    <span className="text-sm">{m.nome}</span>
-                  </div>
-                ))}
+                <Label>Itens liberados</Label>
+                {disponiveis.length === 0 && <p className="text-xs text-muted-foreground">Seu plano não tem itens definidos.</p>}
+                <ModulosCheckboxes
+                  valor={form.modulos}
+                  disponiveis={disponiveis}
+                  onToggle={(key, on) => setForm({
+                    ...form,
+                    modulos: on ? [...form.modulos, key] : form.modulos.filter((k) => k !== key),
+                  })}
+                />
               </div>
             </div>
             <DialogFooter>
@@ -169,14 +183,11 @@ export default function Equipe() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {m.papel !== "client_admin" && (
-                  <div className="flex flex-wrap gap-4">
-                    {MODULOS.filter((mod) => disponiveis.includes(mod.key)).map((mod) => (
-                      <label key={mod.key} className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={m.modulos.includes(mod.key)} onCheckedChange={(v) => toggleModulo(m, mod.key, !!v)} />
-                        {mod.nome}
-                      </label>
-                    ))}
-                  </div>
+                  <ModulosCheckboxes
+                    valor={m.modulos}
+                    disponiveis={disponiveis}
+                    onToggle={(key, on) => toggleModulo(m, key, on)}
+                  />
                 )}
                 {m.id !== profile?.id && (
                   <div className="flex gap-2">

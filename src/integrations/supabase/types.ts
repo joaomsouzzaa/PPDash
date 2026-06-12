@@ -567,6 +567,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          marca_logo_url: string | null
+          marca_nome: string | null
           nome: string
           plano_id: string | null
           slug: string | null
@@ -577,6 +579,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          marca_logo_url?: string | null
+          marca_nome?: string | null
           nome: string
           plano_id?: string | null
           slug?: string | null
@@ -587,6 +591,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          marca_logo_url?: string | null
+          marca_nome?: string | null
           nome?: string
           plano_id?: string | null
           slug?: string | null
