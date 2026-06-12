@@ -32,7 +32,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-      <h3 className="text-base font-semibold text-card-foreground mb-8">
+      <h3 className="text-base font-semibold text-card-foreground mb-4">
         Funil de Conversão
       </h3>
       <div className="relative flex flex-col items-center">
@@ -59,7 +59,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
                 style={{
                   width: `${widthPercent}%`,
                   minWidth: "140px",
-                  height: "100px",
+                  height: "62px",
                   clipPath: isLast
                     ? `polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%)`
                     : `polygon(0% 0%, 100% 0%, ${100 - ((1 / Math.max(totalSteps - 1, 1)) * 35)}% 100%, ${(1 / Math.max(totalSteps - 1, 1)) * 35}% 100%)`,
@@ -83,7 +83,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
                   {step.label}
                 </span>
                 <span
-                  className="text-xl font-extrabold drop-shadow-md mt-0.5"
+                  className="text-base font-extrabold drop-shadow-md"
                   style={{ color: color.text }}
                 >
                   {step.value}

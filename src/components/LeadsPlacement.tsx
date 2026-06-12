@@ -65,14 +65,14 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
+          <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground">
             Sem leads no período (ou sem dado de posicionamento).
           </div>
         ) : (
           <div className="flex items-center gap-4">
-            <ResponsiveContainer width="60%" height={260}>
+            <ResponsiveContainer width="60%" height={320}>
               <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={50}
+                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={125} innerRadius={62}
                   labelLine={false} label={renderPct} stroke="hsl(var(--card))" strokeWidth={2}>
                   {data.map((d) => <Cell key={d.name} fill={COR_POR_NOME[d.name] ?? "#6b7280"} />)}
                 </Pie>
