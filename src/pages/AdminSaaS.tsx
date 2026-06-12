@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Plus, Loader2, Building2, Pencil, Trash2 } from "lucide-react";
+import { Shield, Plus, Loader2, Building2, Pencil, Trash2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { MODULOS_CATALOGO, expandirItens, itensDoModulo } from "@/lib/modulos";
 
@@ -36,6 +36,8 @@ export default function AdminSaaS() {
   // ----- diálogo de cliente -----
   const [openOrg, setOpenOrg] = useState(false);
   const [savingOrg, setSavingOrg] = useState(false);
+  const [editOrgId, setEditOrgId] = useState<string | null>(null);
+  const [editNome, setEditNome] = useState("");
   const [formOrg, setFormOrg] = useState({ nome: "", plano_id: "", admin_nome: "", admin_email: "", admin_senha: "" });
 
   // ----- diálogo de plano -----
@@ -89,11 +91,14 @@ export default function AdminSaaS() {
     try { await adminAction("set_org_status", { org_id, status }); await carregar(); }
     catch (e) { toast.error((e as Error).message); }
   };
-  const renomearOrg = async (o: Org) => {
-    const nome = window.prompt("Novo nome do cliente:", o.nome);
-    if (!nome || nome.trim() === o.nome) return;
-    try { await adminAction("rename_org", { org_id: o.id, nome: nome.trim() }); toast.success("Nome atualizado."); await carregar(); }
-    catch (e) { toast.error((e as Error).message); }
+  const salvarNomeOrg = async (org_id: string, nome: string) => {
+    if (!nome.trim()) return toast.error("Informe o nome.");
+    try {
+      await adminAction("rename_org", { org_id, nome: nome.trim() });
+      toast.success("Nome atualizado.");
+      setEditOrgId(null);
+      await carregar();
+    } catch (e) { toast.error((e as Error).message); }
   };
   const excluirOrg = async (o: Org) => {
     if (!window.confirm(`Excluir o cliente "${o.nome}" e TODOS os seus usuários? Esta ação não pode ser desfeita.`)) return;
@@ -195,12 +200,27 @@ export default function AdminSaaS() {
                     <Card key={o.id}>
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-2 min-w-0"><Building2 className="h-4 w-4 shrink-0" /><span className="truncate">{o.nome}</span></span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Badge variant={o.status === "ativo" ? "default" : "destructive"}>{o.status}</Badge>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => renomearOrg(o)}><Pencil className="h-3.5 w-3.5" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => excluirOrg(o)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                          </div>
+                          {editOrgId === o.id ? (
+                            <div className="flex items-center gap-1 w-full">
+                              <Input
+                                autoFocus value={editNome}
+                                onChange={(e) => setEditNome(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") salvarNomeOrg(o.id, editNome); if (e.key === "Escape") setEditOrgId(null); }}
+                                className="h-8"
+                              />
+                              <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => salvarNomeOrg(o.id, editNome)}><Check className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setEditOrgId(null)}><X className="h-4 w-4" /></Button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="flex items-center gap-2 min-w-0"><Building2 className="h-4 w-4 shrink-0" /><span className="truncate">{o.nome}</span></span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Badge variant={o.status === "ativo" ? "default" : "destructive"}>{o.status}</Badge>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditOrgId(o.id); setEditNome(o.nome); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => excluirOrg(o)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            </>
+                          )}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3 text-sm">
