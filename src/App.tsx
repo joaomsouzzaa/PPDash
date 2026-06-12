@@ -4,6 +4,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SaleNotificationBanner } from "@/components/SaleNotificationBanner";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import Login from "./pages/Login";
+import Aguardando from "./pages/Aguardando";
 import Index from "./pages/Index";
 import Integracoes from "./pages/Integracoes";
 import VendasEventos from "./pages/VendasEventos";
@@ -20,6 +24,10 @@ import Designer from "./pages/Designer";
 import Modulos from "./pages/Modulos";
 import Performance from "./pages/Performance";
 import Campanhas from "./pages/Campanhas";
+import Configuracoes from "./pages/Configuracoes";
+import Equipe from "./pages/Equipe";
+import Plano from "./pages/Plano";
+import AdminSaaS from "./pages/AdminSaaS";
 import NotFound from "./pages/NotFound";
 
 // Auto-refresh: todas as queries re-buscam a cada 10 min (mesmo sem F5, e em background).
@@ -34,34 +42,63 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Atalho: rota protegida (autenticação + opcionalmente módulo/papel). */
+const Priv = ({ children, ...rest }: React.ComponentProps<typeof ProtectedRoute>) => (
+  <ProtectedRoute {...rest}>{children}</ProtectedRoute>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <SaleNotificationBanner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/vendas-eventos" element={<VendasEventos />} />
-          <Route path="/eventos-geral" element={<DashboardGeral />} />
-          <Route path="/integracoes" element={<Integracoes />} />
-          <Route path="/inside-sales" element={<InsideSales />} />
-          <Route path="/leads" element={<LeadsInsideSales />} />
-          <Route path="/cadastro-produtos" element={<CadastroProdutos />} />
-          <Route path="/cadastro-cidades" element={<CadastroCidades />} />
-          <Route path="/notificacoes" element={<Notificacoes />} />
-          <Route path="/agentes" element={<Agentes />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/workflow" element={<Workflow />} />
-          <Route path="/designer" element={<Designer />} />
-          <Route path="/modulos" element={<Modulos />} />
-          <Route path="/performance" element={<Performance />} />
-          <Route path="/campanhas" element={<Campanhas />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <SaleNotificationBanner />
+        <BrowserRouter>
+          <Routes>
+            {/* Públicas */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/aguardando" element={<Aguardando />} />
+
+            {/* Eventos */}
+            <Route path="/" element={<Priv modulo="eventos"><Index /></Priv>} />
+            <Route path="/eventos-geral" element={<Priv modulo="eventos"><DashboardGeral /></Priv>} />
+            <Route path="/vendas-eventos" element={<Priv modulo="eventos"><VendasEventos /></Priv>} />
+
+            {/* Inside Sales */}
+            <Route path="/inside-sales" element={<Priv modulo="inside"><InsideSales /></Priv>} />
+            <Route path="/leads" element={<Priv modulo="inside"><LeadsInsideSales /></Priv>} />
+
+            {/* Analytics */}
+            <Route path="/performance" element={<Priv modulo="analytics"><Performance /></Priv>} />
+            <Route path="/campanhas" element={<Priv modulo="analytics"><Campanhas /></Priv>} />
+
+            {/* Growth */}
+            <Route path="/notificacoes" element={<Priv modulo="growth"><Notificacoes /></Priv>} />
+            <Route path="/agentes" element={<Priv modulo="growth"><Agentes /></Priv>} />
+            <Route path="/chat" element={<Priv modulo="growth"><Chat /></Priv>} />
+            <Route path="/workflow" element={<Priv modulo="growth"><Workflow /></Priv>} />
+            <Route path="/designer" element={<Priv modulo="growth"><Designer /></Priv>} />
+
+            {/* Configurações (apenas autenticação) */}
+            <Route path="/integracoes" element={<Priv><Integracoes /></Priv>} />
+            <Route path="/cadastro-cidades" element={<Priv><CadastroCidades /></Priv>} />
+            <Route path="/cadastro-produtos" element={<Priv><CadastroProdutos /></Priv>} />
+            <Route path="/modulos" element={<Priv><Modulos /></Priv>} />
+            <Route path="/configuracoes" element={<Priv><Configuracoes /></Priv>} />
+
+            {/* Admin do cliente */}
+            <Route path="/equipe" element={<Priv papeis={["client_admin", "super_admin"]}><Equipe /></Priv>} />
+            <Route path="/plano" element={<Priv papeis={["client_admin", "super_admin"]}><Plano /></Priv>} />
+
+            {/* Super admin (dono do SaaS) */}
+            <Route path="/admin" element={<Priv papeis={["super_admin"]}><AdminSaaS /></Priv>} />
+
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

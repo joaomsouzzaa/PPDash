@@ -21,8 +21,11 @@ import {
   KanbanSquare,
   Palette,
   LayoutGrid,
+  Shield,
 } from "lucide-react";
-import { useModulos } from "@/hooks/useModulos";
+import { useModulos, type ModuloKey } from "@/hooks/useModulos";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -73,6 +76,17 @@ export function AppSidebar() {
   // Seção "Configurações" começa minimizada; abre apenas ao clicar.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const modulos = useModulos();
+  const { modulosPermitidos, isSuperAdmin, isClientAdmin, signOut } = useAuth();
+  const navigate = useNavigate();
+  const podeAdmin = isSuperAdmin || isClientAdmin;
+
+  // Grupo visível = liberado pelo plano/usuário E não ocultado manualmente.
+  const podeVer = (k: ModuloKey) => modulosPermitidos.includes(k) && modulos[k];
+
+  const handleSair = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
@@ -96,7 +110,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
-        {modulos.eventos && (
+        {podeVer("eventos") && (
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
             Eventos
@@ -123,7 +137,7 @@ export function AppSidebar() {
         </SidebarGroup>
         )}
 
-        {modulos.inside && (
+        {podeVer("inside") && (
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
             Inside Sales
@@ -150,7 +164,7 @@ export function AppSidebar() {
         </SidebarGroup>
         )}
 
-        {modulos.analytics && (
+        {podeVer("analytics") && (
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
             Analytics
@@ -177,7 +191,7 @@ export function AppSidebar() {
         </SidebarGroup>
         )}
 
-        {modulos.growth && (
+        {podeVer("growth") && (
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs uppercase tracking-wider text-sidebar-foreground/50 px-3 mb-1">
             Growth
@@ -271,6 +285,7 @@ export function AppSidebar() {
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {podeAdmin && (
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Gerenciar Plano">
               <NavLink
@@ -284,6 +299,8 @@ export function AppSidebar() {
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          )}
+          {podeAdmin && (
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Minha Equipe">
               <NavLink
@@ -297,6 +314,22 @@ export function AppSidebar() {
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          )}
+          {isSuperAdmin && (
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Painel SaaS">
+              <NavLink
+                to="/admin"
+                end
+                className="hover:bg-sidebar-accent/80"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+              >
+                <Shield className="h-4 w-4" />
+                <span>Painel SaaS</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Configurações da Conta">
               <NavLink
@@ -318,7 +351,7 @@ export function AppSidebar() {
         <div className="flex items-center justify-between px-2">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Sair" className="hover:bg-sidebar-accent/80">
+              <SidebarMenuButton tooltip="Sair" className="hover:bg-sidebar-accent/80" onClick={handleSair}>
                 <LogOut className="h-4 w-4" />
                 <span>Sair</span>
               </SidebarMenuButton>

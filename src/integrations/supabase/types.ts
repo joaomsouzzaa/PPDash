@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -22,6 +22,7 @@ export type Database = {
           id: string
           modelo: string | null
           nome: string
+          org_id: string | null
           parent_id: string | null
           pos_x: number | null
           pos_y: number | null
@@ -36,6 +37,7 @@ export type Database = {
           id?: string
           modelo?: string | null
           nome: string
+          org_id?: string | null
           parent_id?: string | null
           pos_x?: number | null
           pos_y?: number | null
@@ -50,6 +52,7 @@ export type Database = {
           id?: string
           modelo?: string | null
           nome?: string
+          org_id?: string | null
           parent_id?: string | null
           pos_x?: number | null
           pos_y?: number | null
@@ -62,16 +65,19 @@ export type Database = {
       ai_config: {
         Row: {
           api_key: string | null
+          org_id: string | null
           provider: string
           updated_at: string | null
         }
         Insert: {
           api_key?: string | null
+          org_id?: string | null
           provider: string
           updated_at?: string | null
         }
         Update: {
           api_key?: string | null
+          org_id?: string | null
           provider?: string
           updated_at?: string | null
         }
@@ -84,6 +90,7 @@ export type Database = {
           created_at: string
           id: string
           ordem: number
+          org_id: string | null
           titulo: string
           updated_at: string
         }
@@ -93,6 +100,7 @@ export type Database = {
           created_at?: string
           id?: string
           ordem?: number
+          org_id?: string | null
           titulo: string
           updated_at?: string
         }
@@ -102,6 +110,7 @@ export type Database = {
           created_at?: string
           id?: string
           ordem?: number
+          org_id?: string | null
           titulo?: string
           updated_at?: string
         }
@@ -113,6 +122,7 @@ export type Database = {
           data_evento: string
           id: string
           nome: string
+          org_id: string | null
           slug: string
         }
         Insert: {
@@ -120,6 +130,7 @@ export type Database = {
           data_evento: string
           id?: string
           nome: string
+          org_id?: string | null
           slug: string
         }
         Update: {
@@ -127,6 +138,7 @@ export type Database = {
           data_evento?: string
           id?: string
           nome?: string
+          org_id?: string | null
           slug?: string
         }
         Relationships: []
@@ -136,6 +148,7 @@ export type Database = {
           agente_id: string | null
           created_at: string | null
           id: string
+          org_id: string | null
           titulo: string | null
           updated_at: string | null
         }
@@ -143,6 +156,7 @@ export type Database = {
           agente_id?: string | null
           created_at?: string | null
           id?: string
+          org_id?: string | null
           titulo?: string | null
           updated_at?: string | null
         }
@@ -150,10 +164,58 @@ export type Database = {
           agente_id?: string | null
           created_at?: string | null
           id?: string
+          org_id?: string | null
           titulo?: string | null
           updated_at?: string | null
         }
         Relationships: []
+      }
+      convites: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          email: string
+          expires_at: string
+          id: string
+          modulos: Json
+          org_id: string
+          papel: string
+          status: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          modulos?: Json
+          org_id: string
+          papel?: string
+          status?: string
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          modulos?: Json
+          org_id?: string
+          papel?: string
+          status?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "convites_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       google_config: {
         Row: {
@@ -162,6 +224,7 @@ export type Database = {
           client_secret: string | null
           email: string | null
           id: number
+          org_id: string | null
           refresh_token: string | null
           token_expiry: string | null
           updated_at: string
@@ -172,6 +235,7 @@ export type Database = {
           client_secret?: string | null
           email?: string | null
           id?: number
+          org_id?: string | null
           refresh_token?: string | null
           token_expiry?: string | null
           updated_at?: string
@@ -182,6 +246,7 @@ export type Database = {
           client_secret?: string | null
           email?: string | null
           id?: number
+          org_id?: string | null
           refresh_token?: string | null
           token_expiry?: string | null
           updated_at?: string
@@ -192,16 +257,19 @@ export type Database = {
         Row: {
           cidade_slug: string
           insights: Json
+          org_id: string | null
           updated_at: string
         }
         Insert: {
           cidade_slug: string
           insights?: Json
+          org_id?: string | null
           updated_at?: string
         }
         Update: {
           cidade_slug?: string
           insights?: Json
+          org_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -213,6 +281,7 @@ export type Database = {
           id: string
           nome: string
           ordem: number | null
+          org_id: string | null
         }
         Insert: {
           agente_id?: string | null
@@ -220,6 +289,7 @@ export type Database = {
           id?: string
           nome: string
           ordem?: number | null
+          org_id?: string | null
         }
         Update: {
           agente_id?: string | null
@@ -227,6 +297,7 @@ export type Database = {
           id?: string
           nome?: string
           ordem?: number | null
+          org_id?: string | null
         }
         Relationships: []
       }
@@ -250,6 +321,7 @@ export type Database = {
           is_sql: string | null
           is_venda_realizada: string | null
           nome: string | null
+          org_id: string | null
           papel: string | null
           payload: Json | null
           situacao_atual: string | null
@@ -282,6 +354,7 @@ export type Database = {
           is_sql?: string | null
           is_venda_realizada?: string | null
           nome?: string | null
+          org_id?: string | null
           papel?: string | null
           payload?: Json | null
           situacao_atual?: string | null
@@ -314,6 +387,7 @@ export type Database = {
           is_sql?: string | null
           is_venda_realizada?: string | null
           nome?: string | null
+          org_id?: string | null
           papel?: string | null
           payload?: Json | null
           situacao_atual?: string | null
@@ -335,6 +409,7 @@ export type Database = {
           conversa_id: string | null
           created_at: string | null
           id: string
+          org_id: string | null
           role: string | null
         }
         Insert: {
@@ -342,6 +417,7 @@ export type Database = {
           conversa_id?: string | null
           created_at?: string | null
           id?: string
+          org_id?: string | null
           role?: string | null
         }
         Update: {
@@ -349,6 +425,7 @@ export type Database = {
           conversa_id?: string | null
           created_at?: string | null
           id?: string
+          org_id?: string | null
           role?: string | null
         }
         Relationships: []
@@ -358,6 +435,7 @@ export type Database = {
           access_token: string | null
           account_id: string | null
           id: string
+          org_id: string | null
           token_expires_at: number | null
           updated_at: string | null
           user_name: string | null
@@ -366,6 +444,7 @@ export type Database = {
           access_token?: string | null
           account_id?: string | null
           id?: string
+          org_id?: string | null
           token_expires_at?: number | null
           updated_at?: string | null
           user_name?: string | null
@@ -374,6 +453,7 @@ export type Database = {
           access_token?: string | null
           account_id?: string | null
           id?: string
+          org_id?: string | null
           token_expires_at?: number | null
           updated_at?: string | null
           user_name?: string | null
@@ -389,6 +469,7 @@ export type Database = {
           id: string
           mensagem: string | null
           notificacao_id: string | null
+          org_id: string | null
           status: string | null
         }
         Insert: {
@@ -399,6 +480,7 @@ export type Database = {
           id?: string
           mensagem?: string | null
           notificacao_id?: string | null
+          org_id?: string | null
           status?: string | null
         }
         Update: {
@@ -409,6 +491,7 @@ export type Database = {
           id?: string
           mensagem?: string | null
           notificacao_id?: string | null
+          org_id?: string | null
           status?: string | null
         }
         Relationships: []
@@ -429,6 +512,7 @@ export type Database = {
           id: string
           mensagem: string
           nome: string
+          org_id: string | null
           sheets_aba: string | null
           sheets_ativo: boolean
           sheets_mapa: Json
@@ -450,6 +534,7 @@ export type Database = {
           id?: string
           mensagem: string
           nome: string
+          org_id?: string | null
           sheets_aba?: string | null
           sheets_ativo?: boolean
           sheets_mapa?: Json
@@ -471,6 +556,7 @@ export type Database = {
           id?: string
           mensagem?: string
           nome?: string
+          org_id?: string | null
           sheets_aba?: string | null
           sheets_ativo?: boolean
           sheets_mapa?: Json
@@ -479,12 +565,51 @@ export type Database = {
         }
         Relationships: []
       }
+      organizations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          nome: string
+          plano_id: string | null
+          slug: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome: string
+          plano_id?: string | null
+          slug?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome?: string
+          plano_id?: string | null
+          slug?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organizations_plano_id_fkey"
+            columns: ["plano_id"]
+            isOneToOne: false
+            referencedRelation: "planos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pacote_artes: {
         Row: {
           campos: Json
           created_at: string
           id: string
           ordem: number
+          org_id: string | null
           pacote_id: string
           url: string
         }
@@ -493,6 +618,7 @@ export type Database = {
           created_at?: string
           id?: string
           ordem?: number
+          org_id?: string | null
           pacote_id: string
           url: string
         }
@@ -501,6 +627,7 @@ export type Database = {
           created_at?: string
           id?: string
           ordem?: number
+          org_id?: string | null
           pacote_id?: string
           url?: string
         }
@@ -518,6 +645,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          org_id: string | null
           pacote_id: string | null
           pacote_nome: string | null
           qtd: number
@@ -527,6 +655,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          org_id?: string | null
           pacote_id?: string | null
           pacote_nome?: string | null
           qtd?: number
@@ -536,6 +665,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          org_id?: string | null
           pacote_id?: string | null
           pacote_nome?: string | null
           qtd?: number
@@ -558,18 +688,57 @@ export type Database = {
           descricao: string | null
           id: string
           nome: string
+          org_id: string | null
         }
         Insert: {
           created_at?: string
           descricao?: string | null
           id?: string
           nome: string
+          org_id?: string | null
         }
         Update: {
           created_at?: string
           descricao?: string | null
           id?: string
           nome?: string
+          org_id?: string | null
+        }
+        Relationships: []
+      }
+      planos: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          max_usuarios: number
+          modulos: Json
+          nome: string
+          ordem: number
+          preco: number
+          slug: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          max_usuarios?: number
+          modulos?: Json
+          nome: string
+          ordem?: number
+          preco?: number
+          slug: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          max_usuarios?: number
+          modulos?: Json
+          nome?: string
+          ordem?: number
+          preco?: number
+          slug?: string
         }
         Relationships: []
       }
@@ -579,6 +748,7 @@ export type Database = {
           created_at: string
           id: string
           nome: string
+          org_id: string | null
           slug: string
         }
         Insert: {
@@ -586,6 +756,7 @@ export type Database = {
           created_at?: string
           id?: string
           nome: string
+          org_id?: string | null
           slug: string
         }
         Update: {
@@ -593,15 +764,55 @@ export type Database = {
           created_at?: string
           id?: string
           nome?: string
+          org_id?: string | null
           slug?: string
         }
         Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          nome: string | null
+          org_id: string | null
+          papel: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          nome?: string | null
+          org_id?: string | null
+          papel?: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome?: string | null
+          org_id?: string | null
+          papel?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projeto_assets: {
         Row: {
           created_at: string
           descricao: string | null
           id: string
+          org_id: string | null
           projeto_id: string
           tipo: string
           url: string
@@ -610,6 +821,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          org_id?: string | null
           projeto_id: string
           tipo?: string
           url: string
@@ -618,6 +830,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          org_id?: string | null
           projeto_id?: string
           tipo?: string
           url?: string
@@ -640,6 +853,7 @@ export type Database = {
           id: string
           logo_posicao: string
           nome: string
+          org_id: string | null
           palavras_chave: string | null
         }
         Insert: {
@@ -649,6 +863,7 @@ export type Database = {
           id?: string
           logo_posicao?: string
           nome: string
+          org_id?: string | null
           palavras_chave?: string | null
         }
         Update: {
@@ -658,6 +873,7 @@ export type Database = {
           id?: string
           logo_posicao?: string
           nome?: string
+          org_id?: string | null
           palavras_chave?: string | null
         }
         Relationships: []
@@ -667,23 +883,27 @@ export type Database = {
           created_at: string
           id: string
           nome: string
+          org_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           nome: string
+          org_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           nome?: string
+          org_id?: string | null
         }
         Relationships: []
       }
       tarefa_anexos: {
         Row: {
-          created_at: string
+          created_at: string | null
           id: string
+          org_id: string | null
           origem: string
           prompt: string | null
           status: string
@@ -692,8 +912,9 @@ export type Database = {
           url: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           id?: string
+          org_id?: string | null
           origem?: string
           prompt?: string | null
           status?: string
@@ -702,8 +923,9 @@ export type Database = {
           url?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           id?: string
+          org_id?: string | null
           origem?: string
           prompt?: string | null
           status?: string
@@ -727,6 +949,7 @@ export type Database = {
           conteudo: string | null
           created_at: string | null
           id: string
+          org_id: string | null
           tarefa_id: string | null
         }
         Insert: {
@@ -734,6 +957,7 @@ export type Database = {
           conteudo?: string | null
           created_at?: string | null
           id?: string
+          org_id?: string | null
           tarefa_id?: string | null
         }
         Update: {
@@ -741,6 +965,7 @@ export type Database = {
           conteudo?: string | null
           created_at?: string | null
           id?: string
+          org_id?: string | null
           tarefa_id?: string | null
         }
         Relationships: []
@@ -754,6 +979,7 @@ export type Database = {
           descricao: string | null
           id: string
           ordem: number | null
+          org_id: string | null
           origem: string | null
           prioridade: string | null
           titulo: string
@@ -767,6 +993,7 @@ export type Database = {
           descricao?: string | null
           id?: string
           ordem?: number | null
+          org_id?: string | null
           origem?: string | null
           prioridade?: string | null
           titulo: string
@@ -780,12 +1007,36 @@ export type Database = {
           descricao?: string | null
           id?: string
           ordem?: number | null
+          org_id?: string | null
           origem?: string | null
           prioridade?: string | null
           titulo?: string
           updated_at?: string | null
         }
         Relationships: []
+      }
+      user_modulos: {
+        Row: {
+          modulo_key: string
+          user_id: string
+        }
+        Insert: {
+          modulo_key: string
+          user_id: string
+        }
+        Update: {
+          modulo_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_modulos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendas: {
         Row: {
@@ -799,6 +1050,7 @@ export type Database = {
           id_transacao: string | null
           metodo_pagamento: string | null
           nome_comprador: string | null
+          org_id: string | null
           payload: Json | null
           plataforma: string
           produto: string | null
@@ -825,6 +1077,7 @@ export type Database = {
           id_transacao?: string | null
           metodo_pagamento?: string | null
           nome_comprador?: string | null
+          org_id?: string | null
           payload?: Json | null
           plataforma: string
           produto?: string | null
@@ -851,6 +1104,7 @@ export type Database = {
           id_transacao?: string | null
           metodo_pagamento?: string | null
           nome_comprador?: string | null
+          org_id?: string | null
           payload?: Json | null
           plataforma?: string
           produto?: string | null
@@ -875,6 +1129,7 @@ export type Database = {
           instance: string | null
           instance_token: string | null
           numero: string | null
+          org_id: string | null
           server_url: string | null
           status: string | null
           updated_at: string | null
@@ -885,6 +1140,7 @@ export type Database = {
           instance?: string | null
           instance_token?: string | null
           numero?: string | null
+          org_id?: string | null
           server_url?: string | null
           status?: string | null
           updated_at?: string | null
@@ -895,6 +1151,7 @@ export type Database = {
           instance?: string | null
           instance_token?: string | null
           numero?: string | null
+          org_id?: string | null
           server_url?: string | null
           status?: string | null
           updated_at?: string | null
@@ -924,6 +1181,7 @@ export type Database = {
           id_transacao: string | null
           metodo_pagamento: string | null
           nome_comprador: string | null
+          org_id: string | null
           payload: Json | null
           plataforma: string
           produto: string | null
@@ -946,7 +1204,11 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      current_org_id: { Args: never; Returns: string }
+      current_papel: { Args: never; Returns: string }
       immutable_unaccent: { Args: { "": string }; Returns: string }
+      is_client_admin: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
       unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
