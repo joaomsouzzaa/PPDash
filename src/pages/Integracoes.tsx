@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast as sonner } from "sonner";
 import {
   Collapsible,
@@ -22,14 +23,32 @@ import {
 } from "@/lib/facebook-sdk";
 import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache, clearRateLimitFlag, hydrateMetaTokenFromServer } from "@/lib/meta-ads";
 
-const WEBHOOK_VENDAS_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-vendas";
-const WEBHOOK_LEADS_URL = "https://dobexeqizssojpzuhkfn.supabase.co/functions/v1/webhook-leads";
+const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
+/** Carrega o token de webhook exclusivo da organização do usuário logado. */
+function useWebhookToken() {
+  const { profile } = useAuth();
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (!profile?.org_id) return;
+    (supabase as any)
+      .from("organizations")
+      .select("webhook_token")
+      .eq("id", profile.org_id)
+      .maybeSingle()
+      .then(({ data }: any) => setToken(data?.webhook_token ?? null));
+  }, [profile?.org_id]);
+  return token;
+}
 
 const WebhookSection = () => {
   const [copied, setCopied] = useState(false);
+  const token = useWebhookToken();
+  const url = token ? `${SB_URL}/functions/v1/webhook-vendas?token=${token}` : "Gerando sua URL exclusiva…";
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(WEBHOOK_VENDAS_URL);
+    if (!token) return;
+    await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -52,7 +71,7 @@ const WebhookSection = () => {
       <CardContent className="pt-0 space-y-3">
         <div className="flex items-center gap-2">
           <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono text-foreground break-all select-all">
-            {WEBHOOK_VENDAS_URL}
+            {url}
           </code>
           <Button variant="outline" size="icon" onClick={handleCopy} className="shrink-0">
             {copied ? <Check className="h-4 w-4 text-[hsl(var(--success))]" /> : <Copy className="h-4 w-4" />}
@@ -68,9 +87,12 @@ const WebhookSection = () => {
 
 const CrmWebhookSection = () => {
   const [copied, setCopied] = useState(false);
+  const token = useWebhookToken();
+  const url = token ? `${SB_URL}/functions/v1/webhook-leads?token=${token}` : "Gerando sua URL exclusiva…";
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(WEBHOOK_LEADS_URL);
+    if (!token) return;
+    await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -93,7 +115,7 @@ const CrmWebhookSection = () => {
       <CardContent className="pt-0 space-y-3">
         <div className="flex items-center gap-2">
           <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono text-foreground break-all select-all">
-            {WEBHOOK_LEADS_URL}
+            {url}
           </code>
           <Button variant="outline" size="icon" onClick={handleCopy} className="shrink-0">
             {copied ? <Check className="h-4 w-4 text-[hsl(var(--success))]" /> : <Copy className="h-4 w-4" />}

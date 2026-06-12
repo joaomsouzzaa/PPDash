@@ -26,11 +26,23 @@ Deno.serve(async (req) => {
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const webhookToken = req.headers.get("x-webhook-token") || req.headers.get("token");
   const providedKey = queryToken || bearerToken || webhookToken;
-  const expectedKey = Deno.env.get("WEBHOOK_LEADS_API_KEY");
 
-  // If a token is configured AND provided, validate it
-  // If no token is provided and none is required, allow through
-  if (expectedKey && providedKey && providedKey !== expectedKey) {
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  // Resolve a organização pelo token de webhook (multi-tenant).
+  let orgId: string | null = null;
+  if (providedKey) {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("id, status")
+      .eq("webhook_token", providedKey)
+      .maybeSingle();
+    if (org && org.status === "ativo") orgId = org.id as string;
+  }
+  if (!orgId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -70,12 +82,8 @@ Deno.serve(async (req) => {
       faturamento_venda: parseVendaValue(payload.deal_value),
       data_venda_realizada: parseDateValue(payload.deal_data_de_fechamento) || (detectVrTag(payload.contact_tag || payload.tags || "") ? new Date().toISOString() : null),
       payload,
+      org_id: orgId,
     };
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     // Auto-register new tags in the tags table
     if (lead.tags) {
@@ -96,6 +104,7 @@ Deno.serve(async (req) => {
         .from("leads")
         .select("id")
         .eq("email", email)
+        .eq("org_id", orgId)
         .order("data_lead", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -106,6 +115,7 @@ Deno.serve(async (req) => {
         .from("leads")
         .select("id")
         .eq("telefone", telefone)
+        .eq("org_id", orgId)
         .order("data_lead", { ascending: false })
         .limit(1)
         .maybeSingle();

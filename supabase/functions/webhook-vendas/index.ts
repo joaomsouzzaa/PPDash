@@ -26,9 +26,23 @@ Deno.serve(async (req) => {
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const webhookToken = req.headers.get("x-webhook-token") || req.headers.get("token");
   const providedKey = queryToken || bearerToken || webhookToken;
-  const expectedKey = Deno.env.get("WEBHOOK_API_KEY");
 
-  if (!expectedKey || providedKey !== expectedKey) {
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  // Resolve a organização pelo token de webhook (multi-tenant).
+  let orgId: string | null = null;
+  if (providedKey) {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("id, status")
+      .eq("webhook_token", providedKey)
+      .maybeSingle();
+    if (org && org.status === "ativo") orgId = org.id as string;
+  }
+  if (!orgId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -133,10 +147,8 @@ Deno.serve(async (req) => {
       };
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // carimba a organização dona deste webhook
+    venda.org_id = orgId;
 
     const status = venda.status as string;
     const idTransacao = venda.id_transacao as string | null;
@@ -147,13 +159,15 @@ Deno.serve(async (req) => {
         .from("vendas")
         .select("id")
         .eq("id_transacao", idTransacao)
+        .eq("org_id", orgId)
         .maybeSingle();
 
       if (existing) {
         const { error } = await supabase
           .from("vendas")
           .update({ status, payload: venda.payload })
-          .eq("id_transacao", idTransacao);
+          .eq("id_transacao", idTransacao)
+          .eq("org_id", orgId);
 
         if (error) {
           console.error("[Webhook Update Error]", { timestamp: new Date().toISOString(), code: error.code, message: error.message });
@@ -223,6 +237,7 @@ async function resolveUpgradeQuantity(supabase: any, venda: Record<string, unkno
       .select("quantidade")
       .eq("email_comprador", email)
       .eq("status", "aprovada")
+      .eq("org_id", venda.org_id)
       .not("produto", "ilike", "%upgrade%")
       .order("quantidade", { ascending: false })
       .limit(1);
@@ -256,6 +271,7 @@ async function syncUpgradesForCompra(supabase: any, venda: Record<string, unknow
       .update({ quantidade: qty })
       .eq("email_comprador", email)
       .eq("status", "aprovada")
+      .eq("org_id", venda.org_id)
       .ilike("produto", "%upgrade%");
     if (cidade) query = query.eq("cidade", cidade);
     await query;
@@ -267,6 +283,7 @@ async function syncUpgradesForCompra(supabase: any, venda: Record<string, unknow
       .update({ tipo_ingresso: vipTipo })
       .eq("email_comprador", email)
       .eq("status", "aprovada")
+      .eq("org_id", venda.org_id)
       .ilike("produto", "%upgrade%")
       .ilike("tipo_ingresso", "%vip%");
     if (cidade) q2 = q2.eq("cidade", cidade);
