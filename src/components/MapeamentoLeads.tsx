@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_CAMPOS_PADRAO, type LeadFieldDef } from "@/lib/leadFields";
+import { GerenciarCamposLead } from "@/components/GerenciarCamposLead";
 
 export function MapeamentoLeads() {
   const { profile } = useAuth();
@@ -14,6 +15,7 @@ export function MapeamentoLeads() {
   const [mapa, setMapa] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [gerenciar, setGerenciar] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!orgId) return;
@@ -53,10 +55,16 @@ export function MapeamentoLeads() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Para cada campo da aplicação, informe o <strong>nome exato da variável</strong> que o webhook do seu CRM envia
-        (ex.: <code className="px-1 rounded bg-muted">contact_name</code>). Deixe em branco os que não usa.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs text-muted-foreground flex-1">
+          Para cada campo da aplicação, informe o <strong>nome exato da variável</strong> que o webhook do seu CRM envia
+          (ex.: <code className="px-1 rounded bg-muted">contact_name</code>). Deixe em branco os que não usa.
+        </p>
+        <Button variant="outline" size="sm" className="shrink-0" onClick={() => setGerenciar(true)}>
+          <SlidersHorizontal className="mr-2 h-4 w-4" /> Gerenciar campos
+        </Button>
+      </div>
+      <GerenciarCamposLead open={gerenciar} onOpenChange={setGerenciar} onChanged={carregar} />
       <div className="grid gap-2 sm:grid-cols-2">
         {campos.map((c) => (
           <div key={c.key} className="grid grid-cols-[1fr_1.2fr] items-center gap-2">

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Check, Loader2 } from "lucide-react";
+import { Plus, Trash2, Check, Loader2, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface Campo { id: string; chave: string; label: string; ordem: number; }
@@ -92,14 +92,16 @@ export function GerenciarCamposLead({ open, onOpenChange, onChanged }: {
                       <Input autoFocus value={editLabel} onChange={(e) => setEditLabel(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") renomear(c.id); if (e.key === "Escape") setEditId(null); }}
                         className="h-8" />
-                      <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => renomear(c.id)}><Check className="h-4 w-4" /></Button>
+                      <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => renomear(c.id)} title="Salvar"><Check className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setEditId(null)} title="Cancelar"><X className="h-4 w-4" /></Button>
                     </>
                   ) : (
                     <>
-                      <button className="flex-1 text-left text-sm" onClick={() => { setEditId(c.id); setEditLabel(c.label); }}>
+                      <span className="flex-1 text-sm truncate">
                         {c.label} <span className="text-xs text-muted-foreground font-mono">({c.chave})</span>
-                      </button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => excluir(c)}><Trash2 className="h-4 w-4" /></Button>
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { setEditId(c.id); setEditLabel(c.label); }} title="Renomear"><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => excluir(c)} title="Excluir"><Trash2 className="h-4 w-4" /></Button>
                     </>
                   )}
                 </div>
