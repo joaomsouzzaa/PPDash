@@ -78,7 +78,7 @@ export default function Configuracoes() {
 
   return (
     <AppLayout titulo="Configurações da Conta" descricao="Seus dados de acesso" icone={<Settings className="h-5 w-5 text-primary" />}>
-      <div className="max-w-xl space-y-6">
+      <div className="grid gap-6 lg:grid-cols-2 items-start">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Perfil</CardTitle>

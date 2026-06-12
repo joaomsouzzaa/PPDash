@@ -23,7 +23,7 @@ export default function Plano() {
 
   return (
     <AppLayout titulo="Gerenciar Plano" descricao="Seu plano atual e uso" icone={<CreditCard className="h-5 w-5 text-primary" />}>
-      <div className="max-w-xl space-y-6">
+      <div className="max-w-3xl space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">

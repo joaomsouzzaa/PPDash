@@ -169,7 +169,7 @@ export default function Equipe() {
       {loading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
       ) : (
-        <div className="space-y-3 max-w-3xl">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 items-start">
           {membros.map((m) => (
             <Card key={m.id}>
               <CardHeader className="pb-2">

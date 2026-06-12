@@ -89,6 +89,17 @@ export default function AdminSaaS() {
     try { await adminAction("set_org_status", { org_id, status }); await carregar(); }
     catch (e) { toast.error((e as Error).message); }
   };
+  const renomearOrg = async (o: Org) => {
+    const nome = window.prompt("Novo nome do cliente:", o.nome);
+    if (!nome || nome.trim() === o.nome) return;
+    try { await adminAction("rename_org", { org_id: o.id, nome: nome.trim() }); toast.success("Nome atualizado."); await carregar(); }
+    catch (e) { toast.error((e as Error).message); }
+  };
+  const excluirOrg = async (o: Org) => {
+    if (!window.confirm(`Excluir o cliente "${o.nome}" e TODOS os seus usuários? Esta ação não pode ser desfeita.`)) return;
+    try { await adminAction("delete_org", { org_id: o.id }); toast.success("Cliente excluído."); await carregar(); }
+    catch (e) { toast.error((e as Error).message); }
+  };
 
   // ---------- Planos (super admin escreve direto via RLS) ----------
   const abrirNovoPlano = () => { setEditId(null); setFormPlano({ ...PLANO_VAZIO, ordem: planos.length + 1 }); setOpenPlano(true); };
@@ -185,7 +196,11 @@ export default function AdminSaaS() {
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base flex items-center justify-between gap-2">
                           <span className="flex items-center gap-2 min-w-0"><Building2 className="h-4 w-4 shrink-0" /><span className="truncate">{o.nome}</span></span>
-                          <Badge variant={o.status === "ativo" ? "default" : "destructive"}>{o.status}</Badge>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge variant={o.status === "ativo" ? "default" : "destructive"}>{o.status}</Badge>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => renomearOrg(o)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => excluirOrg(o)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          </div>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3 text-sm">

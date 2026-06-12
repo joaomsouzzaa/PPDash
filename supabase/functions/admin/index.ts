@@ -90,6 +90,24 @@ Deno.serve(async (req) => {
         const { error } = await admin.from("organizations").update({ status }).eq("id", org_id);
         return error ? json({ error: error.message }, 400) : json({ ok: true });
       }
+      case "rename_org": {
+        if (!isSuper) return json({ error: "Apenas super admin" }, 403);
+        const { org_id, nome } = payload;
+        if (!nome?.trim()) return json({ error: "Informe o nome" }, 400);
+        const { error } = await admin.from("organizations").update({ nome: nome.trim() }).eq("id", org_id);
+        return error ? json({ error: error.message }, 400) : json({ ok: true });
+      }
+      case "delete_org": {
+        if (!isSuper) return json({ error: "Apenas super admin" }, 403);
+        const { org_id } = payload;
+        // remove os usuários do cliente (cascata apaga os profiles), depois a org
+        const { data: membros } = await admin.from("profiles").select("id").eq("org_id", org_id);
+        for (const m of membros ?? []) {
+          await admin.auth.admin.deleteUser(m.id).catch(() => {});
+        }
+        const { error } = await admin.from("organizations").delete().eq("id", org_id);
+        return error ? json({ error: error.message }, 400) : json({ ok: true });
+      }
 
       // ---------- CLIENT ADMIN (ou super) ----------
       case "create_member": {
