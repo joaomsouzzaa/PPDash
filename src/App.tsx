@@ -7,6 +7,7 @@ import { SaleNotificationBanner } from "@/components/SaleNotificationBanner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
+import DefinirSenha from "./pages/DefinirSenha";
 import Aguardando from "./pages/Aguardando";
 import Index from "./pages/Index";
 import Integracoes from "./pages/Integracoes";
@@ -58,6 +59,7 @@ const App = () => (
           <Routes>
             {/* Públicas */}
             <Route path="/login" element={<Login />} />
+            <Route path="/definir-senha" element={<DefinirSenha />} />
             <Route path="/aguardando" element={<Aguardando />} />
 
             {/* Eventos */}

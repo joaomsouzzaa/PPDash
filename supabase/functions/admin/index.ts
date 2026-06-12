@@ -120,6 +120,37 @@ Deno.serve(async (req) => {
         }
         return json({ ok: true, user_id: created.user.id });
       }
+      case "invite_member": {
+        const orgId = isSuper ? payload.org_id : caller.org_id;
+        if (!orgId) return json({ error: "Organização não definida" }, 400);
+        const { email, nome, modulos = [], papel = "user" } = payload;
+        if (!email) return json({ error: "Informe o e-mail" }, 400);
+
+        // checa limite do plano
+        const { data: org } = await admin.from("organizations").select("plano_id").eq("id", orgId).maybeSingle();
+        if (org?.plano_id) {
+          const { data: plano } = await admin.from("planos").select("max_usuarios").eq("id", org.plano_id).maybeSingle();
+          const { count } = await admin.from("profiles").select("*", { count: "exact", head: true }).eq("org_id", orgId);
+          if (plano && count !== null && count >= plano.max_usuarios) {
+            return json({ error: `Limite do plano atingido (${plano.max_usuarios} usuários).` }, 400);
+          }
+        }
+
+        const redirectTo = (Deno.env.get("APP_URL") || "https://appgrowthstack.vercel.app") + "/definir-senha";
+        const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
+          data: { nome }, redirectTo,
+        });
+        if (invErr) return json({ error: invErr.message }, 400);
+
+        await admin.from("profiles").update({
+          papel: papel === "client_admin" ? "client_admin" : "user",
+          org_id: orgId, nome: nome || null, status: "ativo",
+        }).eq("id", invited.user.id);
+        if (Array.isArray(modulos) && modulos.length) {
+          await admin.from("user_modulos").insert(modulos.map((m: string) => ({ user_id: invited.user.id, modulo_key: m })));
+        }
+        return json({ ok: true, user_id: invited.user.id });
+      }
       case "set_member_modules": {
         const { user_id, modulos } = payload;
         if (!(await assertMesmaOrg(user_id))) return json({ error: "Fora da sua organização" }, 403);

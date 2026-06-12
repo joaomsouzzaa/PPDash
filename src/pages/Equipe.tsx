@@ -40,6 +40,7 @@ export default function Equipe() {
   const [form, setForm] = useState<{ nome: string; email: string; senha: string; modulos: ModuloKey[] }>(
     { nome: "", email: "", senha: "", modulos: [] }
   );
+  const [convidar, setConvidar] = useState(true);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -62,11 +63,17 @@ export default function Equipe() {
   useEffect(() => { void carregar(); }, [carregar]);
 
   const criar = async () => {
-    if (!form.email || form.senha.length < 6) return toast.error("Informe e-mail e senha (mín. 6 caracteres).");
+    if (!form.email) return toast.error("Informe o e-mail.");
+    if (!convidar && form.senha.length < 6) return toast.error("Defina uma senha (mín. 6 caracteres).");
     setSalvando(true);
     try {
-      await adminAction("create_member", form);
-      toast.success("Membro criado.");
+      if (convidar) {
+        await adminAction("invite_member", { email: form.email, nome: form.nome, modulos: form.modulos });
+        toast.success("Convite enviado por e-mail.");
+      } else {
+        await adminAction("create_member", form);
+        toast.success("Membro criado.");
+      }
       setOpen(false);
       setForm({ nome: "", email: "", senha: "", modulos: [] });
       await carregar();
@@ -109,8 +116,14 @@ export default function Equipe() {
                 <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
               <div className="space-y-1"><Label>E-mail</Label>
                 <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-              <div className="space-y-1"><Label>Senha inicial</Label>
-                <Input type="text" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} /></div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={convidar} onCheckedChange={(v) => setConvidar(!!v)} />
+                Enviar convite por e-mail (a pessoa define a própria senha)
+              </label>
+              {!convidar && (
+                <div className="space-y-1"><Label>Senha inicial</Label>
+                  <Input type="text" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} /></div>
+              )}
               <div className="space-y-2">
                 <Label>Módulos liberados</Label>
                 {disponiveis.length === 0 && <p className="text-xs text-muted-foreground">Seu plano não tem módulos definidos.</p>}
@@ -130,7 +143,7 @@ export default function Equipe() {
             </div>
             <DialogFooter>
               <Button onClick={criar} disabled={salvando}>
-                {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Criar
+                {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {convidar ? "Enviar convite" : "Criar"}
               </Button>
             </DialogFooter>
           </DialogContent>
