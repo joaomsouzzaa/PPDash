@@ -46,7 +46,7 @@ export async function hydrateMetaTokenFromServer(): Promise<boolean> {
     // Já tem token válido localmente? Não precisa.
     if (localStorage.getItem("meta_access_token") && isTokenValid()) return false;
     const { data } = await (supabase as any)
-      .from("meta_config").select("access_token,account_id,token_expires_at,user_name").maybeSingle();
+      .from("meta_config").select("access_token,account_id,token_expires_at,user_name,contas").maybeSingle();
     if (!data?.access_token) return false;
     // Token do banco expirado? Não hidrata (precisa reconectar de verdade).
     if (data.token_expires_at && Date.now() >= Number(data.token_expires_at)) return false;
@@ -55,6 +55,7 @@ export async function hydrateMetaTokenFromServer(): Promise<boolean> {
     if (data.token_expires_at) localStorage.setItem("meta_token_expires_at", String(data.token_expires_at));
     if (data.account_id) localStorage.setItem("selected_ad_account", data.account_id);
     if (data.user_name) localStorage.setItem("meta_user_name", data.user_name);
+    if (Array.isArray(data.contas)) localStorage.setItem("meta_contas", JSON.stringify(data.contas));
     localStorage.removeItem("meta_token_expired");
     return true;
   } catch {
@@ -184,16 +185,38 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
 let _adAccountsCache: { data: AdAccount[]; ts: number } | null = null;
 const AD_ACCOUNTS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Busca TODAS as contas que o perfil acessa (sem filtro) — para a tela de seleção.
+export async function fetchTodasAdAccounts(): Promise<AdAccount[]> {
+  const res = await graphApiFetch<{ data: AdAccount[] }>("/me/adaccounts", {
+    fields: "name,account_id,currency",
+    limit: "200",
+  });
+  return res.data || [];
+}
+
+// Contas escolhidas pelo cliente (filtro do dashboard). Vazio = todas.
+export function getContasSelecionadas(): string[] {
+  try { return JSON.parse(localStorage.getItem("meta_contas") || "[]"); } catch { return []; }
+}
+
+export async function setContasSelecionadas(ids: string[]): Promise<void> {
+  localStorage.setItem("meta_contas", JSON.stringify(ids));
+  clearAdAccountsCache();
+  try {
+    const { data: existing } = await (supabase as any).from("meta_config").select("id").maybeSingle();
+    if (existing?.id) await (supabase as any).from("meta_config").update({ contas: ids }).eq("id", existing.id);
+    else await (supabase as any).from("meta_config").insert({ contas: ids });
+  } catch { /* silencioso */ }
+}
+
 export async function fetchAdAccounts(skipCache = false): Promise<AdAccount[]> {
   if (!skipCache && _adAccountsCache && Date.now() - _adAccountsCache.ts < AD_ACCOUNTS_CACHE_TTL) {
     return _adAccountsCache.data;
   }
-  const res = await graphApiFetch<{ data: AdAccount[] }>("/me/adaccounts", {
-    fields: "name,account_id,currency",
-    limit: "100",
-  });
-  // Mostra todas as contas que o token autorizou na conexão (sem filtro fixo).
-  const accounts = res.data || [];
+  const todas = await fetchTodasAdAccounts();
+  // Mostra apenas as contas selecionadas pelo cliente (se houver seleção).
+  const sel = getContasSelecionadas();
+  const accounts = sel.length ? todas.filter((a) => sel.includes(a.account_id)) : todas;
   _adAccountsCache = { data: accounts, ts: Date.now() };
   return accounts;
 }

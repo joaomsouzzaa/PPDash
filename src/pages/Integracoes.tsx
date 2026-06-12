@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
+import { MetaContasSelecao } from "@/components/MetaContasSelecao";
 import { toast as sonner } from "sonner";
 import {
   Collapsible,
@@ -178,11 +179,21 @@ const Integracoes = () => {
       const result = await loginWithFacebook();
       console.log("[Integracoes] Login result:", { status: result.status, hasToken: !!result.accessToken });
       if (result.status === "connected") {
-        console.log("[Integracoes] Exchanging token...");
-        const longLived = await exchangeForLongLivedToken(result.accessToken!);
-        console.log("[Integracoes] Long-lived token OK, expires_in:", longLived.expires_in);
-        localStorage.setItem("meta_access_token", longLived.access_token);
-        const expiresAt = Date.now() + longLived.expires_in * 1000;
+        // Tenta trocar pelo token de longa duração; se falhar (ex.: META_APP_SECRET
+        // não configurado), usa o token curto mesmo — conecta sem erro falso.
+        let accessToken = result.accessToken!;
+        let expiresAt = Date.now() + 60 * 60 * 1000; // ~1h (token curto)
+        let longa = false;
+        try {
+          const longLived = await exchangeForLongLivedToken(result.accessToken!);
+          accessToken = longLived.access_token;
+          expiresAt = Date.now() + longLived.expires_in * 1000;
+          longa = true;
+        } catch (ex) {
+          console.warn("[Integracoes] Falha na troca por token longo, usando token curto:", (ex as Error)?.message);
+        }
+
+        localStorage.setItem("meta_access_token", accessToken);
         localStorage.setItem("meta_token_expires_at", String(expiresAt));
 
         clearTokenExpired();
@@ -192,14 +203,11 @@ const Integracoes = () => {
         localStorage.setItem("meta_connected", "true");
         localStorage.setItem("meta_user_name", result.userName ?? "");
 
-        console.log("[Integracoes] Stored:", {
-          connected: localStorage.getItem("meta_connected"),
-          tokenLen: localStorage.getItem("meta_access_token")?.length,
-        });
-
         toast({
           title: tokenExpired ? "Token renovado!" : "Conectado com sucesso!",
-          description: `Conta "${result.userName}" vinculada com token de longa duração.`,
+          description: longa
+            ? `Conta "${result.userName}" vinculada com token de longa duração.`
+            : `Conta "${result.userName}" conectada. (Token de curta duração — configure o META_APP_SECRET para sessão longa.)`,
         });
       } else {
         toast({
@@ -388,6 +396,13 @@ const Integracoes = () => {
                         Desconectar
                       </Button>
                     </div>
+
+                    {metaConnected && !tokenExpired && (
+                      <div className="border-t pt-4">
+                        <h4 className="text-sm font-medium mb-2">Contas de anúncio exibidas no dashboard</h4>
+                        <MetaContasSelecao />
+                      </div>
+                    )}
                   </CardContent>
                 </CollapsibleContent>
               </Card>
