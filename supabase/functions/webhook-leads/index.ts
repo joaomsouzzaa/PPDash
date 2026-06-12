@@ -52,38 +52,57 @@ Deno.serve(async (req) => {
   try {
     const payload = await req.json();
 
-    // Map CRM fields to database columns
+    // Mapeamento da org: campo da app  <-  chave do CRM (explícito).
+    const { data: mapRows } = await supabase.from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId);
+    const mapa: Record<string, string> = {};
+    for (const r of mapRows ?? []) mapa[(r as any).app_field] = (r as any).crm_key;
+    const { data: customDefs } = await supabase.from("lead_campos").select("chave").eq("org_id", orgId);
+
+    // Lê o valor de um campo da app a partir do payload, conforme o mapeamento.
+    const val = (appField: string): any => {
+      const k = mapa[appField];
+      return k != null ? payload[k] : undefined;
+    };
+    const tagsRaw = String(val("tags") ?? "");
+
     const lead: Record<string, unknown> = {
-      nome: payload.contact_name || payload.Nome || payload.nome || payload.name || payload.full_name || null,
-      email: payload.contact_email || payload.email || null,
-      telefone: payload.contact_phone || payload.telefone || payload.phone || payload.mobile || null,
-      status: mapLeadStatus(payload.status || payload.lead_status || "lead"),
-      utm_source: payload.deal_utm_source || payload["Utm-source"] || payload.utm_source || null,
-      utm_medium: payload.deal_utm_medium || payload.utm_medium || null,
-      utm_campaign: payload.deal_utm_campaign || payload["Utm_campaing"] || payload.utm_campaign || null,
-      utm_content: payload.deal_utm_content || payload.utm_content || null,
-      utm_term: payload.utm_term || null,
-      cidade: payload.cidade || payload.city || null,
-      data_lead: parseDateValue(payload.deal_created_at || payload["data da criação"] || payload.data_lead || payload.created_at) || new Date().toISOString(),
-      faturamento: payload.contact_scaleformatacao_fatu_1 || payload.faturamento || null,
-      ad_name: payload.deal_ad_name || payload["nome do anúncio"] || null,
-      campaign_name: payload.deal_campaign_name || payload["nome da campanha"] || payload.deal_utm_source || payload["Utm-source"] || payload.utm_source || null,
-      deal_user: payload.deal_user || payload["dono do negócio"] || null,
-      situacao_atual: payload.contact_quais_dessas_situaco || payload["situação atual?"] || payload["situacao atual"] || null,
-      whatsapp: payload.contact_qual_seu_whatsapp || payload.Whatsapp || payload.whatsapp || null,
-      instagram: payload.contact_qual_o_do_instagram || payload.Instagram || payload.instagram || null,
-      area_atuacao: payload.deal_qual_sua_area_de_atu || payload["área de atuação"] || payload.area_atuacao || null,
-      papel: payload.contact_qual_e_o_seu_papel_h || payload["Seu papel hoje?"] || payload.papel || null,
-      tags: normalizeTags(payload.contact_tag || payload.tags || null),
-      is_sql: detectSqlTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
-      is_reuniao_agendada: detectRaTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
-      is_reuniao_realizada: detectRrTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
-      is_venda_realizada: detectVrTag(payload.contact_tag || payload.tags || "") ? "Sim" : null,
-      faturamento_venda: parseVendaValue(payload.deal_value),
-      data_venda_realizada: parseDateValue(payload.deal_data_de_fechamento) || (detectVrTag(payload.contact_tag || payload.tags || "") ? new Date().toISOString() : null),
+      nome: val("nome") ?? null,
+      email: val("email") ?? null,
+      telefone: val("telefone") ?? null,
+      whatsapp: val("whatsapp") ?? null,
+      instagram: val("instagram") ?? null,
+      cidade: val("cidade") ?? null,
+      status: mapLeadStatus(val("status") || "lead"),
+      utm_source: val("utm_source") ?? null,
+      utm_medium: val("utm_medium") ?? null,
+      utm_campaign: val("utm_campaign") ?? null,
+      utm_content: val("utm_content") ?? null,
+      utm_term: val("utm_term") ?? null,
+      campaign_name: val("campaign_name") ?? null,
+      ad_name: val("ad_name") ?? null,
+      deal_user: val("deal_user") ?? null,
+      area_atuacao: val("area_atuacao") ?? null,
+      papel: val("papel") ?? null,
+      faturamento: val("faturamento") ?? null,
+      situacao_atual: val("situacao_atual") ?? null,
+      data_lead: parseDateValue(val("data_lead")) || new Date().toISOString(),
+      tags: normalizeTags(tagsRaw || null),
+      is_sql: (detectSqlTag(tagsRaw) || val("is_sql")) ? "Sim" : null,
+      is_reuniao_agendada: (detectRaTag(tagsRaw) || val("is_reuniao_agendada")) ? "Sim" : null,
+      is_reuniao_realizada: (detectRrTag(tagsRaw) || val("is_reuniao_realizada")) ? "Sim" : null,
+      is_venda_realizada: (detectVrTag(tagsRaw) || val("is_venda_realizada")) ? "Sim" : null,
+      faturamento_venda: parseVendaValue(val("faturamento_venda")),
+      data_venda_realizada: parseDateValue(val("data_venda_realizada")) || (detectVrTag(tagsRaw) ? new Date().toISOString() : null),
       payload,
       org_id: orgId,
     };
+    // Campos personalizados (JSONB).
+    const custom: Record<string, unknown> = {};
+    for (const d of customDefs ?? []) {
+      const v = val("custom:" + (d as any).chave);
+      if (v !== undefined) custom[(d as any).chave] = v;
+    }
+    lead.custom = custom;
 
     // Auto-register new tags in the tags table
     if (lead.tags) {
@@ -123,10 +142,10 @@ Deno.serve(async (req) => {
     }
 
     if (existingId) {
-      const hasSqlTag = detectSqlTag(payload.contact_tag || payload.tags || "");
-      const hasRaTag = detectRaTag(payload.contact_tag || payload.tags || "");
-      const hasRrTag = detectRrTag(payload.contact_tag || payload.tags || "");
-      const hasVrTag = detectVrTag(payload.contact_tag || payload.tags || "");
+      const hasSqlTag = detectSqlTag(tagsRaw) || !!val("is_sql");
+      const hasRaTag = detectRaTag(tagsRaw) || !!val("is_reuniao_agendada");
+      const hasRrTag = detectRrTag(tagsRaw) || !!val("is_reuniao_realizada");
+      const hasVrTag = detectVrTag(tagsRaw) || !!val("is_venda_realizada");
       let updateError: string | null = null;
 
       if (hasSqlTag || hasRaTag || hasRrTag || hasVrTag) {
@@ -160,14 +179,15 @@ Deno.serve(async (req) => {
         }
 
         const updateFields: Record<string, unknown> = { tags: mergedTags, payload: lead.payload };
+        if (Object.keys(custom).length) updateFields.custom = custom;
         if (hasSqlTag) updateFields.is_sql = "Sim";
         if (hasRaTag) updateFields.is_reuniao_agendada = "Sim";
         if (hasRrTag) updateFields.is_reuniao_realizada = "Sim";
         if (hasVrTag) {
           updateFields.is_venda_realizada = "Sim";
-          const vendaValue = parseVendaValue(payload.deal_value);
+          const vendaValue = parseVendaValue(val("faturamento_venda"));
           if (vendaValue !== null) updateFields.faturamento_venda = vendaValue;
-          updateFields.data_venda_realizada = parseDateValue(payload.deal_data_de_fechamento) || new Date().toISOString();
+          updateFields.data_venda_realizada = parseDateValue(val("data_venda_realizada")) || new Date().toISOString();
         }
 
         const { error } = await supabase
@@ -177,9 +197,11 @@ Deno.serve(async (req) => {
         if (error) updateError = error.message;
       } else {
         // No special tag: only update data_lead
+        const camposSimples: Record<string, unknown> = { data_lead: lead.data_lead, payload: lead.payload };
+        if (Object.keys(custom).length) camposSimples.custom = custom;
         const { error } = await supabase
           .from("leads")
-          .update({ data_lead: lead.data_lead, payload: lead.payload })
+          .update(camposSimples)
           .eq("id", existingId);
         if (error) updateError = error.message;
       }

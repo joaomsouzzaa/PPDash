@@ -298,6 +298,76 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_campos: {
+        Row: {
+          chave: string
+          created_at: string
+          id: string
+          label: string
+          ordem: number
+          org_id: string
+          tipo: string
+        }
+        Insert: {
+          chave: string
+          created_at?: string
+          id?: string
+          label: string
+          ordem?: number
+          org_id: string
+          tipo?: string
+        }
+        Update: {
+          chave?: string
+          created_at?: string
+          id?: string
+          label?: string
+          ordem?: number
+          org_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_campos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_mapeamento: {
+        Row: {
+          app_field: string
+          created_at: string
+          crm_key: string
+          id: string
+          org_id: string
+        }
+        Insert: {
+          app_field: string
+          created_at?: string
+          crm_key: string
+          id?: string
+          org_id: string
+        }
+        Update: {
+          app_field?: string
+          created_at?: string
+          crm_key?: string
+          id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_mapeamento_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           ad_name: string | null
@@ -305,6 +375,7 @@ export type Database = {
           campaign_name: string | null
           cidade: string | null
           created_at: string
+          custom: Json
           data_lead: string
           data_venda_realizada: string | null
           deal_user: string | null
@@ -338,6 +409,7 @@ export type Database = {
           campaign_name?: string | null
           cidade?: string | null
           created_at?: string
+          custom?: Json
           data_lead?: string
           data_venda_realizada?: string | null
           deal_user?: string | null
@@ -371,6 +443,7 @@ export type Database = {
           campaign_name?: string | null
           cidade?: string | null
           created_at?: string
+          custom?: Json
           data_lead?: string
           data_venda_realizada?: string | null
           deal_user?: string | null

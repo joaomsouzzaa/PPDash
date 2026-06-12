@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { MapeamentoLeads } from "@/components/MapeamentoLeads";
 import { toast as sonner } from "sonner";
 import {
   Collapsible,
@@ -122,8 +123,14 @@ const CrmWebhookSection = () => {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Envie um POST com os campos: <code className="text-xs">nome</code>, <code className="text-xs">email</code>, <code className="text-xs">telefone</code>, <code className="text-xs">status</code> (lead, mql, sql, reuniao_agendada, reuniao_realizada, venda), <code className="text-xs">utm_medium</code>, <code className="text-xs">campaign_name</code>, <code className="text-xs">cidade</code>. Autenticação via header <code className="text-xs">x-webhook-token</code>.
+          Cole a URL acima no webhook (POST) do seu CRM. Depois, no <strong>mapeamento</strong> abaixo, diga
+          qual variável do CRM preenche cada campo.
         </p>
+
+        <div className="border-t pt-3">
+          <h4 className="text-sm font-medium mb-2">Mapeamento de campos do CRM</h4>
+          <MapeamentoLeads />
+        </div>
       </CardContent>
     </Card>
   );
