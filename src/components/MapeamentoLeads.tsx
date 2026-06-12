@@ -99,30 +99,32 @@ export function MapeamentoLeads() {
         (ex.: <code className="px-1 rounded bg-muted">contact_name</code>). Campos personalizados podem ser renomeados/excluídos.
       </p>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="space-y-1.5">
         {campos.map((c) => (
           <div key={c.key} className="flex items-center gap-2">
             {editKey === c.key ? (
               <Input autoFocus value={editLabel} onChange={(e) => setEditLabel(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") renomearCampo(c.chave!); if (e.key === "Escape") setEditKey(null); }}
-                className="h-8 w-[40%]" />
+                className="h-8 w-44 shrink-0" />
             ) : (
-              <span className="text-sm text-muted-foreground truncate w-[40%] flex items-center gap-1" title={c.label}>
+              <span className="text-sm text-muted-foreground truncate w-44 shrink-0 flex items-center gap-1" title={c.label}>
                 {c.label}
-                {c.isCustom && <span className="text-[10px] text-primary">•</span>}
+                {c.isCustom && <span className="text-[10px] text-primary" title="campo personalizado">•</span>}
               </span>
             )}
             <Input value={mapa[c.key] ?? ""} onChange={(e) => setMapa((m) => ({ ...m, [c.key]: e.target.value }))}
               placeholder="campo do CRM" className="h-8 flex-1 font-mono text-xs" />
-            {c.isCustom && (
+            {c.isCustom ? (
               editKey === c.key ? (
-                <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => renomearCampo(c.chave!)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => renomearCampo(c.chave!)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
               ) : (
                 <>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear"><Pencil className="h-3.5 w-3.5" /></Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive" onClick={() => excluirCampo(c)} title="Excluir"><Trash2 className="h-3.5 w-3.5" /></Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear campo"><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive" onClick={() => excluirCampo(c)} title="Excluir campo"><Trash2 className="h-3.5 w-3.5" /></Button>
                 </>
               )
+            ) : (
+              <span className="w-[72px] shrink-0" />
             )}
           </div>
         ))}
