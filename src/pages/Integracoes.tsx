@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users, Sheet } from "lucide-react";
+import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users, Sheet, SlidersHorizontal } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,6 +89,7 @@ const WebhookSection = () => {
 
 const CrmWebhookSection = () => {
   const [copied, setCopied] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const token = useWebhookToken();
   const url = token ? `${SB_URL}/functions/v1/webhook-leads?token=${token}` : "Gerando sua URL exclusiva…";
 
@@ -128,9 +130,17 @@ const CrmWebhookSection = () => {
         </p>
 
         <div className="border-t pt-3">
-          <h4 className="text-sm font-medium mb-2">Mapeamento de campos do CRM</h4>
-          <MapeamentoLeads />
+          <Button variant="outline" size="sm" onClick={() => setMapOpen(true)}>
+            <SlidersHorizontal className="mr-2 h-4 w-4" /> Gerenciar campos e mapeamento
+          </Button>
         </div>
+
+        <Dialog open={mapOpen} onOpenChange={setMapOpen}>
+          <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Gerenciar campos e mapeamento do CRM</DialogTitle></DialogHeader>
+            <MapeamentoLeads />
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
