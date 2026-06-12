@@ -22,9 +22,19 @@ export default function Modulos() {
         {MODULOS_CATALOGO.map((mod) => {
           const itens = mod.itens.filter((it) => liberado(it.key));
           if (itens.length === 0) return null;
+          const todosVisiveis = itens.every((it) => !ocultos.has(it.key));
           return (
             <div key={mod.key} className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">{mod.nome}</h3>
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{mod.nome}</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Módulo</span>
+                  <Switch
+                    checked={todosVisiveis}
+                    onCheckedChange={(v) => itens.forEach((it) => setItemOculto(it.key, !v))}
+                  />
+                </div>
+              </div>
               <Card>
                 <CardContent className="divide-y p-0">
                   {itens.map((it) => (
