@@ -7,7 +7,7 @@ import { Loader2, Save, Plus, Pencil, Trash2, Check, Eye, EyeOff } from "lucide-
 import { toast } from "sonner";
 import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
 
-interface Campo { key: string; label: string; isCustom: boolean; chave?: string; oculto: boolean; }
+interface Campo { key: string; label: string; isCustom: boolean; chave?: string; oculto: boolean; fixo: boolean; }
 
 function slugify(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -41,9 +41,9 @@ export function MapeamentoLeads() {
     });
     const padrao: Campo[] = LEAD_CAMPOS_PADRAO.map((f) => {
       const o = overrides.get(f.key);
-      return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto };
+      return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto, fixo: !!f.fixo };
     });
-    const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto }));
+    const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto, fixo: false }));
     setCampos([...padrao, ...customDefs]);
     const m: Record<string, string> = {};
     ((mapRows as any[]) ?? []).forEach((r) => { m[r.app_field] = r.crm_key; });
@@ -159,7 +159,9 @@ export function MapeamentoLeads() {
             )}
             <Input value={mapa[c.key] ?? ""} onChange={(e) => setMapa((m) => ({ ...m, [c.key]: e.target.value }))}
               placeholder="campo do CRM" className="h-8 flex-1 font-mono text-xs" />
-            {editKey === c.key ? (
+            {c.fixo ? (
+              <span className="w-[72px] shrink-0" />
+            ) : editKey === c.key ? (
               <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => salvarRename(c)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
             ) : (
               <>
