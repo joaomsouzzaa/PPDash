@@ -23,6 +23,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesFunnel } from "@/components/SalesFunnel";
+import { LeadsPlacement } from "@/components/LeadsPlacement";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
@@ -319,8 +320,11 @@ const InsideSales = () => {
               />
             </div>
 
-            {/* Funnel */}
-            <SalesFunnel steps={funnelSteps} />
+            {/* Funil + Origem dos leads (2 colunas) */}
+            <div className="grid gap-4 lg:grid-cols-2 items-start">
+              <SalesFunnel steps={funnelSteps} />
+              <LeadsPlacement filters={filters} />
+            </div>
             </div>
           </div>
         </main>

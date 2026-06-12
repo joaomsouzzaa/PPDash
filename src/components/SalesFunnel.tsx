@@ -9,16 +9,17 @@ interface SalesFunnelProps {
   steps: FunnelStep[];
 }
 
+// Tom sobre tom: vermelho do painel, do mais vivo (topo) ao mais escuro (fundo).
 const NEON_COLORS = [
-  { bg: "from-[#FFE135] to-[#FFD000]", glow: "rgba(255,225,53,0.4)", text: "#1a1a2e" },
-  { bg: "from-[#FF2D75] to-[#FF1493]", glow: "rgba(255,45,117,0.4)", text: "#fff" },
-  { bg: "from-[#00BFFF] to-[#1E90FF]", glow: "rgba(0,191,255,0.4)", text: "#fff" },
-  { bg: "from-[#39FF14] to-[#32CD32]", glow: "rgba(57,255,20,0.4)", text: "#1a1a2e" },
-  { bg: "from-[#FF6F00] to-[#FF8C00]", glow: "rgba(255,111,0,0.4)", text: "#fff" },
-  { bg: "from-[#BF40BF] to-[#9B30FF]", glow: "rgba(155,48,255,0.4)", text: "#fff" },
-  { bg: "from-[#FF2D75] to-[#FF69B4]", glow: "rgba(255,45,117,0.3)", text: "#fff" },
-  { bg: "from-[#00CED1] to-[#20B2AA]", glow: "rgba(0,206,209,0.4)", text: "#1a1a2e" },
-  { bg: "from-[#FFD700] to-[#FFA500]", glow: "rgba(255,215,0,0.4)", text: "#1a1a2e" },
+  { bg: "from-[#ff4d5e] to-[#e11d2a]", glow: "rgba(225,29,42,0.20)", text: "#fff" },
+  { bg: "from-[#e83440] to-[#c01622]", glow: "rgba(192,22,34,0.18)", text: "#fff" },
+  { bg: "from-[#cc1d29] to-[#a3121d]", glow: "rgba(163,18,29,0.18)", text: "#fff" },
+  { bg: "from-[#b01620] to-[#861019]", glow: "rgba(134,16,25,0.16)", text: "#fff" },
+  { bg: "from-[#8f1119] to-[#6b0d14]", glow: "rgba(107,13,20,0.16)", text: "#fff" },
+  { bg: "from-[#6e0d14] to-[#520a0f]", glow: "rgba(82,10,15,0.16)", text: "#fff" },
+  { bg: "from-[#520a10] to-[#3a070b]", glow: "rgba(58,7,11,0.16)", text: "#fff" },
+  { bg: "from-[#3a070b] to-[#260508]", glow: "rgba(38,5,8,0.16)", text: "#fff" },
+  { bg: "from-[#260508] to-[#160304]", glow: "rgba(22,3,4,0.16)", text: "#fff" },
 ];
 
 function calcConversionPercent(current: number | null, previous: number | null): string {
@@ -63,7 +64,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
                     ? `polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%)`
                     : `polygon(0% 0%, 100% 0%, ${100 - ((1 / Math.max(totalSteps - 1, 1)) * 35)}% 100%, ${(1 / Math.max(totalSteps - 1, 1)) * 35}% 100%)`,
                   borderRadius: isFirst ? "16px 16px 0 0" : "0",
-                  boxShadow: `0 4px 20px ${color.glow}, inset 0 2px 4px rgba(255,255,255,0.3), inset 0 -2px 4px rgba(0,0,0,0.2)`,
+                  boxShadow: `0 4px 16px ${color.glow}, inset 0 1px 2px rgba(255,255,255,0.12), inset 0 -2px 4px rgba(0,0,0,0.3)`,
                   marginBottom: "-2px",
                 }}
               >
@@ -71,7 +72,7 @@ export function SalesFunnel({ steps }: SalesFunnelProps) {
                 <div
                   className="absolute top-0 left-0 right-0 h-[6px] rounded-t-md"
                   style={{
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 100%)",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%)",
                     borderRadius: isFirst ? "16px 16px 0 0" : "0",
                   }}
                 />

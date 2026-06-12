@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Filters } from "@/lib/mockData";
 
-function getDateRange(filters: Filters): { start: string; end: string } {
+export function getDateRange(filters: Filters): { start: string; end: string } {
   if (filters.startDate && filters.endDate) {
     return {
       start: filters.startDate.toISOString(),
