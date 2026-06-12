@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { X, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,47 +14,34 @@ interface SaleNotification {
 export function SaleNotificationBanner() {
   const [notification, setNotification] = useState<SaleNotification | null>(null);
   const [visible, setVisible] = useState(false);
-  const audioUrlRef = useRef<string | null>(null);
-  const [loadingSound, setLoadingSound] = useState(false);
 
-  // Pre-generate drum sound on mount
-  useEffect(() => {
-    const generateDrumSound = async () => {
-      setLoadingSound(true);
-      try {
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-drum-sound`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.audioContent) {
-            audioUrlRef.current = `data:audio/mpeg;base64,${data.audioContent}`;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to pre-generate drum sound:", err);
-      } finally {
-        setLoadingSound(false);
-      }
-    };
-
-    generateDrumSound();
-  }, []);
-
+  // Som de "caixa registradora" sintetizado no navegador (Web Audio API).
+  // Sem dependência externa: não precisa de ElevenLabs nem chamada de rede.
   const playDrumSound = useCallback(() => {
-    if (audioUrlRef.current) {
-      const audio = new Audio(audioUrlRef.current);
-      audio.volume = 1.0;
-      audio.play().catch(console.error);
+    try {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new Ctx();
+      // duas notas curtas e brilhantes (cha-ching!)
+      const notas = [
+        { freq: 1318.5, start: 0.0, dur: 0.18 }, // Mi6
+        { freq: 1760.0, start: 0.08, dur: 0.35 }, // Lá6
+      ];
+      notas.forEach(({ freq, start, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        const t0 = ctx.currentTime + start;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.6, t0 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.02);
+      });
+      setTimeout(() => ctx.close(), 700);
+    } catch (err) {
+      console.error("Falha ao tocar o som de venda:", err);
     }
   }, []);
 

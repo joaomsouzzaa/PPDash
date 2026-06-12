@@ -11,22 +11,30 @@ function norm(s: string) {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 }
 
-async function getKey(supabase: any, provider: string): Promise<string> {
-  const { data } = await supabase.from("ai_config").select("api_key").eq("provider", provider).maybeSingle();
-  if (!data?.api_key) throw new Error(`Configure a API key do provider "${provider}" em Agentes → Configurar modelos`);
-  return data.api_key;
+async function getKey(supabase: any, provider: string, orgId: string | null): Promise<string> {
+  let key: string | undefined;
+  if (orgId) {
+    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", provider).eq("org_id", orgId).maybeSingle();
+    key = data?.api_key ?? undefined;
+  }
+  if (!key) {
+    const envName = provider === "openai" ? "OPENAI_API_KEY" : provider === "anthropic" ? "ANTHROPIC_API_KEY" : provider === "google" ? "GOOGLE_API_KEY" : "";
+    key = envName ? (Deno.env.get(envName) ?? undefined) : undefined;
+  }
+  if (!key) throw new Error(`Configure a API key do provider "${provider}" em Agentes → Configurar modelos`);
+  return key;
 }
 
 // Monta o bloco da Base de Conhecimento (repositórios ativos) que TODOS os
 // agentes recebem anexado ao system prompt.
-async function buildBaseConhecimento(supabase: any): Promise<string> {
+async function buildBaseConhecimento(supabase: any, orgId: string | null): Promise<string> {
   try {
-    const { data } = await supabase
+    let q = supabase
       .from("base_conhecimento")
       .select("titulo,conteudo")
-      .eq("ativo", true)
-      .order("ordem")
-      .order("created_at");
+      .eq("ativo", true);
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data } = await q.order("ordem").order("created_at");
     if (!data || data.length === 0) return "";
     const blocos = data
       .filter((r: any) => (r.conteudo || "").trim())
@@ -113,10 +121,10 @@ type Step = { autor: string; conteudo: string };
 
 // Executa um agente com capacidade de DELEGAR aos seus filhos ativos (hierarquia).
 // onStep é chamado em tempo real a cada passo (delegação, ação, resposta).
-async function runAgente(supabase: any, agente: any, messages: Msg[], onStep?: (s: Step) => void): Promise<{ text: string; trace: string[] }> {
+async function runAgente(supabase: any, agente: any, messages: Msg[], onStep: ((s: Step) => void) | undefined, orgId: string | null): Promise<{ text: string; trace: string[] }> {
   const { data: children } = await supabase.from("agentes").select("*").eq("parent_id", agente.id).eq("ativo", true);
-  const apiKey = await getKey(supabase, agente.provider);
-  const kb = await buildBaseConhecimento(supabase); // anexada a TODOS os agentes
+  const apiKey = await getKey(supabase, agente.provider, orgId);
+  const kb = await buildBaseConhecimento(supabase, orgId); // anexada a TODOS os agentes
   const trace: string[] = [];
   const emit = (s: Step) => { try { onStep?.(s); } catch { /* ignore */ } };
 
@@ -197,7 +205,7 @@ normal (sem JSON), consolidando o trabalho da equipe.`;
 
     let childResp = "";
     try {
-      const childKey = await getKey(supabase, child.provider);
+      const childKey = await getKey(supabase, child.provider, orgId);
       childResp = await callModel(child, childKey, [{ role: "user", content: deleg.tarefa }], kb);
     } catch (e) {
       childResp = `(falha ao executar ${child.nome}: ${e instanceof Error ? e.message : "erro"})`;
@@ -228,6 +236,18 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Resolve a organização de quem chamou (chaves/base de conhecimento por org)
+    let orgId: string | null = null;
+    const authToken = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+    if (authToken) {
+      const { data: u } = await supabase.auth.getUser(authToken);
+      if (u?.user) {
+        const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
+        orgId = p?.org_id ?? null;
+      }
+    }
+
     const { agente_id, messages } = await req.json();
     if (!agente_id || !Array.isArray(messages)) return json({ error: "Parâmetros inválidos" }, 400);
 
@@ -241,7 +261,7 @@ Deno.serve(async (req) => {
       async start(controller) {
         const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
         try {
-          const result = await runAgente(supabase, agente, messages as Msg[], (step) => send({ type: "step", step }));
+          const result = await runAgente(supabase, agente, messages as Msg[], (step) => send({ type: "step", step }), orgId);
           send({ type: "done", reply: result.text, trace: result.trace });
         } catch (e) {
           send({ type: "error", error: e instanceof Error ? e.message : "Erro interno" });

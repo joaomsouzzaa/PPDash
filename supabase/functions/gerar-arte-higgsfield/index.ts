@@ -106,6 +106,17 @@ Deno.serve(async (req) => {
   const supabase = svc();
   let anexoId: string | null = null;
 
+  // Resolve a organização de quem chamou (chaves por org)
+  let orgId: string | null = null;
+  const authToken = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+  if (authToken) {
+    const { data: u } = await supabase.auth.getUser(authToken);
+    if (u?.user) {
+      const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
+      orgId = p?.org_id ?? null;
+    }
+  }
+
   try {
     const body = await req.json();
     const tarefaId: string = body.tarefa_id;
@@ -164,12 +175,16 @@ Deno.serve(async (req) => {
     let url: string | null = null;
 
     if (provider === "openai") {
-      const { data: oa } = await supabase.from("ai_config").select("api_key").eq("provider", "openai").maybeSingle();
+      const { data: oa } = orgId
+        ? await supabase.from("ai_config").select("api_key").eq("provider", "openai").eq("org_id", orgId).maybeSingle()
+        : { data: null };
       const oaKey = oa?.api_key || Deno.env.get("OPENAI_API_KEY");
       if (!oaKey) throw new Error("Configure a chave da OpenAI em Agentes → Configurar modelos");
       url = await gerarOpenAI(supabase, oaKey, prompt, aspect, refUrls);
     } else {
-      const { data: cfg } = await supabase.from("ai_config").select("api_key").eq("provider", "higgsfield").maybeSingle();
+      const { data: cfg } = orgId
+        ? await supabase.from("ai_config").select("api_key").eq("provider", "higgsfield").eq("org_id", orgId).maybeSingle()
+        : { data: null };
       const creds = cfg?.api_key || Deno.env.get("HIGGSFIELD_CREDENTIALS");
       if (!creds) throw new Error("Configure a chave do Higgsfield em Agentes → Configurar modelos");
       const authHeaders = {
