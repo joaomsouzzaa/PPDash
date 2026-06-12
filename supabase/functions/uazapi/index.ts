@@ -151,6 +151,21 @@ function varsDaVenda(v: any): Record<string, string | number> {
   };
 }
 
+function varsDaLead(l: any): Record<string, string | number> {
+  return {
+    nome: l.nome || "",
+    email: l.email || "",
+    telefone: l.telefone || l.whatsapp || "",
+    cidade: l.cidade || "",
+    status: l.status || "",
+    campanha: l.campaign_name || "",
+    origem: l.utm_source || "",
+    anuncio: l.ad_name || "",
+    instagram: l.instagram || "",
+    data: l.data_lead ? new Date(l.data_lead).toLocaleDateString("pt-BR") : "",
+  };
+}
+
 // ---- Meta Ads (server-side, usa token salvo no banco) ----
 function slugVariants(slug: string): string[] {
   return (slug || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -352,6 +367,9 @@ async function buildVarsList(supabase: any, n: any): Promise<Record<string, stri
   if (n.gatilho === "nova_venda") {
     return [varsDaVenda({ nome_comprador: "Fulano (teste)", produto: "Workshop Scale | Belém - PA", cidade: "Belém", valor: 247, tipo_ingresso: "individual", quantidade: 1, metodo_pagamento: "pix", data_venda: new Date().toISOString() })];
   }
+  if (n.gatilho === "novo_lead") {
+    return [varsDaLead({ nome: "Fulano (teste)", email: "teste@email.com", telefone: "(11) 99999-0000", cidade: "Belém", status: "lead", campaign_name: "Campanha Teste", utm_source: "facebook", data_lead: new Date().toISOString() })];
+  }
   if (n.gatilho === "resumo_geral") {
     return [await resumoGeral(supabase)];
   }
@@ -498,6 +516,35 @@ Deno.serve(async (req) => {
             }
           }
           await enviarSheets(n, vendaVars);
+        }
+        return json({ success: true, enviados });
+      }
+      case "novo_lead": {
+        // Chamado pelo trigger do banco quando um lead é inserido
+        const l = payload.lead;
+        if (!l) return json({ error: "lead ausente" }, 400);
+        const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).eq("gatilho", "novo_lead").eq("org_id", l.org_id);
+        const tokenLead = await getOrgToken(supabase, l.org_id);
+        const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s-]/g, "");
+        let enviados = 0;
+        for (const n of notifs || []) {
+          if (n.cidade_slug) {
+            const parts = n.cidade_slug.split(",").map((p: string) => norm(p)).filter(Boolean);
+            const match = parts.some((s) => norm(l.cidade || "").includes(s));
+            if (!match) continue;
+          }
+          const leadVars = varsDaLead(l);
+          const msg = render(n.mensagem, leadVars);
+          for (const dest of destinatariosDe(n)) {
+            try {
+              await enviarTexto(tokenLead, dest, msg);
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: l.cidade || null });
+              enviados++;
+            } catch (e) {
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: l.cidade || null });
+            }
+          }
+          await enviarSheets(n, leadVars);
         }
         return json({ success: true, enviados });
       }

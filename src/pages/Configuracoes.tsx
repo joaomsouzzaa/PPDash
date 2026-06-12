@@ -38,6 +38,7 @@ export default function Configuracoes() {
 
   const enviarLogo = async (file: File) => {
     if (!profile?.org_id) return;
+    if (file.size > 1024 * 1024) return toast.error("A imagem deve ter no máximo 1 MB.");
     setEnviandoLogo(true);
     try {
       const ext = (file.name.split(".").pop() || "png").toLowerCase();
@@ -103,16 +104,19 @@ export default function Configuracoes() {
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="h-16 w-16 rounded-lg border bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                  {logoUrl ? <img src={logoUrl} alt="logo" className="h-full w-full object-cover" /> : <span className="text-xs text-muted-foreground">sem logo</span>}
+                  {logoUrl ? <img src={logoUrl} alt="logo" className="h-full w-full object-contain" /> : <span className="text-xs text-muted-foreground">sem logo</span>}
                 </div>
                 <div>
-                  <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                  <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden"
                     onChange={(e) => { if (e.target.files?.[0]) enviarLogo(e.target.files[0]); e.target.value = ""; }} />
                   <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={enviandoLogo}>
                     {enviandoLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                     Enviar logo
                   </Button>
-                  <p className="text-[11px] text-muted-foreground mt-1">PNG/JPG quadrado fica melhor.</p>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                    Recomendado: <strong>256 × 256 px</strong> (quadrado), PNG com <strong>fundo transparente</strong>.<br />
+                    Máx. 1&nbsp;MB · também aceita JPG, SVG ou WEBP.
+                  </p>
                 </div>
               </div>
               <div className="space-y-2">

@@ -89,9 +89,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center overflow-hidden ${marca.logo ? "bg-sidebar-accent" : "bg-primary"}`}>
             {marca.logo
-              ? <img src={marca.logo} alt="logo" className="h-full w-full object-cover" />
+              ? <img src={marca.logo} alt="logo" className="h-full w-full object-contain" />
               : <BarChart3 className="h-5 w-5 text-primary-foreground" />}
           </div>
           <div>

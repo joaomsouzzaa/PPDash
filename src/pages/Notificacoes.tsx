@@ -35,6 +35,11 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
     desc: "Dispara quando uma venda é registrada",
     vars: ["nome", "email", "telefone", "documento", "produto", "cidade", "valor", "tipo", "status", "quantidade", "forma_pagamento", "data"],
   },
+  novo_lead: {
+    label: "Novo lead",
+    desc: "Dispara quando um lead é registrado (via webhook do CRM)",
+    vars: ["nome", "email", "telefone", "cidade", "status", "campanha", "origem", "anuncio", "instagram", "data"],
+  },
   resumo_cidade: {
     label: "Resumo de cidade (agendado)",
     desc: "Resumo periódico de uma cidade",
@@ -358,7 +363,7 @@ export default function Notificacoes() {
   }, [dialogOpen]);
 
   const gatilhoAtual = GATILHOS[form.gatilho];
-  const precisaCidade = form.gatilho === "nova_venda" || form.gatilho === "resumo_cidade" || form.gatilho === "manual";
+  const precisaCidade = form.gatilho === "nova_venda" || form.gatilho === "novo_lead" || form.gatilho === "resumo_cidade" || form.gatilho === "manual";
   const precisaHorario = form.gatilho === "resumo_cidade" || form.gatilho === "resumo_geral";
 
   return (
