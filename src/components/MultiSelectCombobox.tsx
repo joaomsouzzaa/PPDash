@@ -36,6 +36,14 @@ export function MultiSelectCombobox({
     }
   };
 
+  // Selecionados sempre no topo (incluindo valores custom fora das opções),
+  // seguidos pelas demais opções.
+  const selectedSet = new Set(selected);
+  const ordered = [
+    ...selected,
+    ...options.filter((o) => !selectedSet.has(o)),
+  ];
+
   const trimmed = query.trim();
   const showCustom =
     allowCustom &&
@@ -90,26 +98,17 @@ export function MultiSelectCombobox({
               </CommandGroup>
             )}
             <CommandGroup>
-              {options.map((option) => (
+              {ordered.map((option) => (
                 <CommandItem key={option} value={option} onSelect={() => toggle(option)}>
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selected.includes(option) ? "opacity-100" : "opacity-0",
+                      selectedSet.has(option) ? "opacity-100" : "opacity-0",
                     )}
                   />
                   <span className="truncate">{option}</span>
                 </CommandItem>
               ))}
-              {/* Valores já selecionados que não estão nas opções (custom / legado) */}
-              {selected
-                .filter((s) => !options.includes(s))
-                .map((option) => (
-                  <CommandItem key={option} value={option} onSelect={() => toggle(option)}>
-                    <Check className="mr-2 h-4 w-4 opacity-100" />
-                    <span className="truncate">{option}</span>
-                  </CommandItem>
-                ))}
             </CommandGroup>
           </CommandList>
         </Command>

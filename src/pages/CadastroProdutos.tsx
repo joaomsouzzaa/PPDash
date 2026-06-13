@@ -27,15 +27,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-function normalizeSlug(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-}
-
 // Converte string vírgula-separada <-> array (para os seletores múltiplos).
 function splitCsv(value: string): string[] {
   return value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -91,9 +82,10 @@ const CadastroProdutos = () => {
     // UTM Campaign: nomes reais das campanhas do Meta — NÃO normalizar (precisa
     // casar literalmente, via includes, com o campaign_name).
     slug: splitCsv(form.slug).join(","),
-    // UTM Source: normaliza cada valor isoladamente, preservando a separação por vírgula.
-    slug_source:
-      splitCsv(form.slug_source).map(normalizeSlug).filter(Boolean).join(",") || null,
+    // UTM Source: valores vêm dos utm_source reais dos leads — NÃO normalizar
+    // (normalizeSlug removeria "_" e quebraria o match em useLeadsData, que já
+    // faz a comparação case-insensitive via includes).
+    slug_source: splitCsv(form.slug_source).join(",") || null,
     conta_id: form.conta_id || null,
   });
 
