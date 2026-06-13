@@ -7,7 +7,7 @@ export const TABLE_COL_KEYS: string[] = [
   "data_lead", "nome", "email", "telefone", "whatsapp", "instagram",
   "is_sql", "is_reuniao_agendada", "is_reuniao_realizada", "is_venda_realizada",
   "faturamento_venda", "data_venda_realizada", "area_atuacao", "papel",
-  "faturamento", "situacao_atual", "utm_campaign", "utm_medium", "utm_content",
+  "faturamento", "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
   "utm_term", "campaign_name", "ad_name", "deal_user", "tags",
 ];
 
@@ -16,7 +16,7 @@ export const SORTABLE = new Set<string>([
   "data_lead", "nome", "email", "telefone", "whatsapp", "instagram",
   "is_sql", "is_reuniao_agendada", "is_reuniao_realizada", "is_venda_realizada",
   "faturamento_venda", "data_venda_realizada", "area_atuacao", "papel",
-  "faturamento", "situacao_atual", "utm_campaign", "utm_medium", "utm_content",
+  "faturamento", "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
   "utm_term", "campaign_name", "ad_name", "deal_user", "tags",
 ]);
 
@@ -42,6 +42,7 @@ export const STANDARD_RENDER: Record<string, (l: any) => ReactNode> = {
   papel: (l) => txt(l.papel),
   faturamento: (l) => txt(l.faturamento),
   situacao_atual: (l) => txt(l.situacao_atual),
+  utm_source: (l) => txt(l.utm_source),
   utm_campaign: (l) => txt(l.utm_campaign),
   utm_medium: (l) => txt(l.utm_medium),
   utm_content: (l) => txt(l.utm_content),

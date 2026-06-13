@@ -55,7 +55,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { TagSelector } from "@/components/TagSelector";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "is_reuniao_agendada" | "is_reuniao_realizada" | "is_venda_realizada" | "faturamento_venda" | "data_venda_realizada" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "is_reuniao_agendada" | "is_reuniao_realizada" | "is_venda_realizada" | "faturamento_venda" | "data_venda_realizada" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -65,7 +65,7 @@ type LeadRow = {
   email: string | null;
   telefone: string | null;
   status: string;
-  
+  utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
   utm_content: string | null;
@@ -202,7 +202,7 @@ const LeadsInsideSales = () => {
     queryFn: async () => {
       let query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, custom")
+        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, custom")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
