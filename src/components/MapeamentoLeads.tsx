@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Plus, Pencil, Trash2, Check, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, Plus, Pencil, Trash2, Check, Eye, EyeOff, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
+import { ordenarPor } from "@/lib/leadColumns";
 
 interface Campo { key: string; label: string; isCustom: boolean; chave?: string; oculto: boolean; fixo: boolean; }
 
@@ -25,14 +26,37 @@ export function MapeamentoLeads() {
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+
+  const salvarOrdem = async (arr: Campo[]) => {
+    if (!orgId) return;
+    try {
+      await (supabase as any).from("organizations").update({ lead_ordem: arr.map((c) => c.key) }).eq("id", orgId);
+    } catch (e) { toast.error("Falha ao salvar a ordem."); }
+  };
+
+  const soltarSobre = (targetKey: string) => {
+    if (!dragKey || dragKey === targetKey) { setDragKey(null); return; }
+    const arr = [...campos];
+    const from = arr.findIndex((c) => c.key === dragKey);
+    const to = arr.findIndex((c) => c.key === targetKey);
+    if (from === -1 || to === -1) { setDragKey(null); return; }
+    const [m] = arr.splice(from, 1);
+    arr.splice(to, 0, m);
+    setCampos(arr);
+    setDragKey(null);
+    salvarOrdem(arr);
+  };
 
   const carregar = useCallback(async () => {
     if (!orgId) return;
     setLoading(true);
-    const [{ data: rows }, { data: mapRows }] = await Promise.all([
+    const [{ data: rows }, { data: mapRows }, { data: orgRow }] = await Promise.all([
       (supabase as any).from("lead_campos").select("chave, label, padrao, oculto, excluido").eq("org_id", orgId).order("ordem"),
       (supabase as any).from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId),
+      (supabase as any).from("organizations").select("lead_ordem").eq("id", orgId).maybeSingle(),
     ]);
+    const ordem: string[] = (orgRow?.lead_ordem as string[]) ?? [];
     const overrides = new Map<string, { label: string; oculto: boolean; excluido: boolean }>();
     const customs: any[] = [];
     ((rows as any[]) ?? []).forEach((r) => {
@@ -46,7 +70,9 @@ export function MapeamentoLeads() {
         return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto, fixo: !!f.fixo };
       });
     const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto, fixo: false }));
-    setCampos([...padrao, ...customDefs]);
+    const todos = [...padrao, ...customDefs];
+    const ordenados = ordenarPor(todos.map((c) => c.key), ordem).map((k) => todos.find((c) => c.key === k)!);
+    setCampos(ordenados);
     const m: Record<string, string> = {};
     ((mapRows as any[]) ?? []).forEach((r) => { m[r.app_field] = r.crm_key; });
     setMapa(m);
@@ -165,9 +191,8 @@ export function MapeamentoLeads() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs text-muted-foreground flex-1">
-          Para cada campo, informe o <strong>nome exato da variável</strong> que o webhook do seu CRM envia
-          (ex.: <code className="px-1 rounded bg-muted">contact_name</code>). Use o lápis para renomear e a lixeira para
-          ocultar (padrão) ou excluir (personalizado).
+          Arraste pelo <GripVertical className="inline h-3 w-3" /> para reordenar (a ordem vale também nas colunas da tela de Leads).
+          Informe a variável do CRM em cada campo; lápis renomeia, lixeira oculta/exclui.
         </p>
         <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setMostrarOcultos((v) => !v)}>
           {mostrarOcultos ? <EyeOff className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" />}
@@ -177,7 +202,22 @@ export function MapeamentoLeads() {
 
       <div className="space-y-1.5">
         {visiveis.map((c) => (
-          <div key={c.key} className={`flex items-center gap-2 ${c.oculto ? "opacity-50" : ""}`}>
+          <div
+            key={c.key}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => soltarSobre(c.key)}
+            className={`flex items-center gap-2 rounded ${c.oculto ? "opacity-50" : ""} ${dragKey === c.key ? "opacity-40" : ""}`}
+          >
+            <button
+              type="button"
+              draggable
+              onDragStart={() => setDragKey(c.key)}
+              onDragEnd={() => setDragKey(null)}
+              className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+              title="Arraste para reordenar"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
             {editKey === c.key ? (
               <Input autoFocus value={editLabel} onChange={(e) => setEditLabel(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") salvarRename(c); if (e.key === "Escape") setEditKey(null); }}

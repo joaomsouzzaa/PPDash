@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, Fragment } from "react";
+import { TABLE_COL_KEYS, SORTABLE, STANDARD_RENDER, LABEL_PADRAO, ordenarPor } from "@/lib/leadColumns";
 import { useColumnResize } from "@/hooks/useColumnResize";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -237,6 +238,27 @@ const LeadsInsideSales = () => {
   const vis = (key: string) => !overrides.get(key)?.oculto;
   const [gerenciarCampos, setGerenciarCampos] = useState(false);
 
+  // Ordem das colunas definida no gerenciador (organizations.lead_ordem).
+  const { data: ordemRow, refetch: refetchOrdem } = useQuery({
+    queryKey: ["lead_ordem"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("organizations").select("lead_ordem").limit(1).maybeSingle();
+      return data;
+    },
+  });
+  const ordem: string[] = (ordemRow?.lead_ordem as string[]) ?? [];
+
+  // Colunas visíveis da tabela, na ordem definida (padrão visíveis + custom).
+  const colunas = useMemo(() => {
+    const std = TABLE_COL_KEYS.filter((k) => vis(k)).map((k) => ({
+      key: k, label: lbl(k, LABEL_PADRAO[k] || k), sortable: SORTABLE.has(k), isCustom: false, chave: undefined as string | undefined,
+    }));
+    const cus = campos.map((c) => ({ key: `custom:${c.chave}`, label: c.label, sortable: false, isCustom: true, chave: c.chave }));
+    const all = [...std, ...cus];
+    return ordenarPor(all.map((c) => c.key), ordem).map((k) => all.find((c) => c.key === k)!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campos, overrides, JSON.stringify(ordem)]);
+
   const toggleSort = useCallback((key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -460,7 +482,7 @@ const LeadsInsideSales = () => {
             </Button>
           </header>
 
-          <Dialog open={gerenciarCampos} onOpenChange={(v) => { setGerenciarCampos(v); if (!v) refetchCampos(); }}>
+          <Dialog open={gerenciarCampos} onOpenChange={(v) => { setGerenciarCampos(v); if (!v) { refetchCampos(); refetchOrdem(); } }}>
             <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Gerenciar campos e mapeamento do CRM</DialogTitle></DialogHeader>
               <MapeamentoLeads />
@@ -534,32 +556,12 @@ const LeadsInsideSales = () => {
                     <TableHead className="w-10">
                       <Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} />
                     </TableHead>
-                    {sortableHead("Data", "data_lead")}
-                    {sortableHead("Nome", "nome")}
-                    {sortableHead("Email", "email")}
-                    {sortableHead("Telefone", "telefone")}
-                    {vis("whatsapp") && sortableHead(lbl("whatsapp", "WhatsApp Digitado"), "whatsapp")}
-                    {vis("instagram") && sortableHead(lbl("instagram", "Instagram"), "instagram")}
-                    {vis("is_sql") && sortableHead(lbl("is_sql", "SQL"), "is_sql")}
-                    {vis("is_reuniao_agendada") && sortableHead(lbl("is_reuniao_agendada", "Reunião Agendada"), "is_reuniao_agendada")}
-                    {vis("is_reuniao_realizada") && sortableHead(lbl("is_reuniao_realizada", "Reunião Realizada"), "is_reuniao_realizada")}
-                    {vis("is_venda_realizada") && sortableHead(lbl("is_venda_realizada", "Venda Realizada"), "is_venda_realizada")}
-                    {vis("faturamento_venda") && sortableHead(lbl("faturamento_venda", "Faturamento Venda"), "faturamento_venda")}
-                    {vis("data_venda_realizada") && sortableHead(lbl("data_venda_realizada", "Data Venda"), "data_venda_realizada")}
-                    {vis("area_atuacao") && sortableHead(lbl("area_atuacao", "Área de Atuação"), "area_atuacao")}
-                    {vis("papel") && sortableHead(lbl("papel", "Papel na Empresa"), "papel")}
-                    {vis("faturamento") && sortableHead(lbl("faturamento", "Faturamento Atual"), "faturamento")}
-                    {vis("situacao_atual") && sortableHead(lbl("situacao_atual", "Situação Atual"), "situacao_atual")}
-                    {sortableHead("Utm Campaign", "utm_campaign")}
-                    {sortableHead("UTM Medium", "utm_medium")}
-                    {sortableHead("UTM Content", "utm_content")}
-                    {sortableHead("UTM Term", "utm_term")}
-                    {vis("campaign_name") && sortableHead(lbl("campaign_name", "Nome Campanha"), "campaign_name")}
-                    {vis("ad_name") && sortableHead(lbl("ad_name", "Nome Anúncio"), "ad_name")}
-                    {vis("deal_user") && sortableHead(lbl("deal_user", "Responsável"), "deal_user")}
-                    {vis("tags") && sortableHead(lbl("tags", "Tags"), "tags")}
-                    {campos.map((c) => (
-                      <TableHead key={c.id} style={{ minWidth: 100 }} className="whitespace-nowrap">{c.label}</TableHead>
+                    {colunas.map((c) => (
+                      <Fragment key={c.key}>
+                        {c.sortable
+                          ? sortableHead(c.label, c.key as SortKey)
+                          : <TableHead style={{ minWidth: 100 }} className="whitespace-nowrap">{c.label}</TableHead>}
+                      </Fragment>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -589,94 +591,13 @@ const LeadsInsideSales = () => {
                             onCheckedChange={() => toggleSelectId(l.id)}
                           />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          {new Date(l.data_lead).toLocaleDateString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </TableCell>
-                        <TableCell className="font-medium">{l.nome || "—"}</TableCell>
-                        <TableCell><span className="text-sm">{l.email || "—"}</span></TableCell>
-                        <TableCell>{l.telefone || "—"}</TableCell>
-                        {vis("whatsapp") && <TableCell>{l.whatsapp || "—"}</TableCell>}
-                        {vis("instagram") && <TableCell>{l.instagram || "—"}</TableCell>}
-                        {vis("is_sql") && (
-                        <TableCell>
-                          {l.is_sql ? (
-                            <Badge variant="default">Sim</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        )}
-                        {vis("is_reuniao_agendada") && (
-                        <TableCell>
-                          {l.is_reuniao_agendada ? (
-                            <Badge variant="default">Sim</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        )}
-                        {vis("is_reuniao_realizada") && (
-                        <TableCell>
-                          {l.is_reuniao_realizada ? (
-                            <Badge variant="default">Sim</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        )}
-                        {vis("is_venda_realizada") && (
-                        <TableCell>
-                          {l.is_venda_realizada ? (
-                            <Badge variant="default">Sim</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        )}
-                        {vis("faturamento_venda") && (
-                        <TableCell>
-                          {l.faturamento_venda != null ? `R$ ${Number(l.faturamento_venda).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}
-                        </TableCell>
-                        )}
-                        {vis("data_venda_realizada") && (
-                        <TableCell className="whitespace-nowrap">
-                          {l.data_venda_realizada ? new Date(l.data_venda_realizada).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
-                        </TableCell>
-                        )}
-                        {vis("area_atuacao") && <TableCell className="max-w-[150px] truncate">{l.area_atuacao || "—"}</TableCell>}
-                        {vis("papel") && <TableCell>{l.papel || "—"}</TableCell>}
-                        {vis("faturamento") && <TableCell>{l.faturamento || "—"}</TableCell>}
-                        {vis("situacao_atual") && <TableCell className="max-w-[150px] truncate">{l.situacao_atual || "—"}</TableCell>}
-                        <TableCell className="max-w-[150px] truncate">{l.utm_campaign || "—"}</TableCell>
-                        <TableCell>{l.utm_medium || "—"}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{l.utm_content || "—"}</TableCell>
-                        <TableCell>{l.utm_term || "—"}</TableCell>
-                        {vis("campaign_name") && <TableCell className="max-w-[150px] truncate">{l.campaign_name || "—"}</TableCell>}
-                        {vis("ad_name") && <TableCell className="max-w-[150px] truncate">{l.ad_name || "—"}</TableCell>}
-                        {vis("deal_user") && <TableCell className="max-w-[150px] truncate">{l.deal_user || "—"}</TableCell>}
-                        {vis("tags") && (
-                        <TableCell>
-                          {l.tags ? (
-                            <div className="flex flex-wrap gap-1">
-                              {l.tags.split(",").map((tag, i) => (
-                                <Badge key={i} variant="secondary" className="text-xs whitespace-nowrap">
-                                  {tag.trim()}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : "—"}
-                        </TableCell>
-                        )}
-                        {campos.map((c) => {
-                          const v = (l.custom as Record<string, unknown> | null)?.[c.chave];
-                          return <TableCell key={c.id} className="max-w-[150px] truncate">{v != null && v !== "" ? String(v) : "—"}</TableCell>;
-                        })}
+                        {colunas.map((c) => (
+                          <TableCell key={c.key} className="max-w-[180px] truncate">
+                            {c.isCustom
+                              ? (() => { const v = (l.custom as Record<string, unknown> | null)?.[c.chave!]; return v != null && v !== "" ? String(v) : "—"; })()
+                              : STANDARD_RENDER[c.key](l)}
+                          </TableCell>
+                        ))}
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
