@@ -338,6 +338,20 @@ function spendCacheKey(ids: string[], dateRange: string, start?: Date, end?: Dat
   return `${ids.sort().join(",")}_${dateRange}_${start?.toISOString() || ""}_${end?.toISOString() || ""}_${slug || ""}`;
 }
 
+// Lista os nomes das campanhas das contas informadas (todas as campanhas,
+// independente de gasto). Usado para popular o seletor de UTM Campaign no
+// cadastro de canais de aquisição.
+export async function fetchCampaignNames(accountIds: string[]): Promise<string[]> {
+  const names = new Set<string>();
+  for (const id of accountIds) {
+    try {
+      const rows = await graphApiFetchAll(`/${id}/campaigns`, { fields: "name", limit: "500" });
+      for (const r of rows) if (r?.name) names.add(r.name as string);
+    } catch { /* sem conexão / rate limit — ignora */ }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 export async function fetchAdSpend(
   accountIds: string[],
   dateRange: string,

@@ -19,7 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useProdutos, type Produto } from "@/hooks/useProdutos";
-import { fetchAdAccounts, hydrateMetaTokenFromServer, type AdAccount } from "@/lib/meta-ads";
+import { useDistinctUtmSources } from "@/hooks/useDistinctUtmSources";
+import { MultiSelectCombobox } from "@/components/MultiSelectCombobox";
+import { fetchAdAccounts, fetchCampaignNames, hydrateMetaTokenFromServer, type AdAccount } from "@/lib/meta-ads";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2 } from "lucide-react";
@@ -34,8 +36,14 @@ function normalizeSlug(text: string): string {
     .replace(/[^a-z0-9-]/g, "");
 }
 
+// Converte string vírgula-separada <-> array (para os seletores múltiplos).
+function splitCsv(value: string): string[] {
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 const CadastroProdutos = () => {
   const { data: canais = [], isLoading } = useProdutos();
+  const { data: sourceOptions = [] } = useDistinctUtmSources();
   const queryClient = useQueryClient();
 
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
@@ -51,6 +59,23 @@ const CadastroProdutos = () => {
   const [deleting, setDeleting] = useState<Produto | null>(null);
   const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "" });
 
+  // Campanhas do Meta para a conta selecionada (ou todas as contas, se vazio).
+  const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
+  const formOpen = addOpen || !!editing;
+  useEffect(() => {
+    if (!formOpen) return;
+    let cancelled = false;
+    (async () => {
+      const ids = form.conta_id ? [form.conta_id] : adAccounts.map((a) => a.id);
+      if (ids.length === 0) { setCampaignOptions([]); return; }
+      try {
+        const names = await fetchCampaignNames(ids);
+        if (!cancelled) setCampaignOptions(names);
+      } catch { if (!cancelled) setCampaignOptions([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [formOpen, form.conta_id, adAccounts]);
+
   const openAdd = () => {
     setForm({ nome: "", slug: "", slug_source: "", conta_id: "" });
     setAddOpen(true);
@@ -63,8 +88,12 @@ const CadastroProdutos = () => {
 
   const payload = () => ({
     nome: form.nome,
-    slug: normalizeSlug(form.slug),
-    slug_source: form.slug_source ? normalizeSlug(form.slug_source) : null,
+    // UTM Campaign: nomes reais das campanhas do Meta — NÃO normalizar (precisa
+    // casar literalmente, via includes, com o campaign_name).
+    slug: splitCsv(form.slug).join(","),
+    // UTM Source: normaliza cada valor isoladamente, preservando a separação por vírgula.
+    slug_source:
+      splitCsv(form.slug_source).map(normalizeSlug).filter(Boolean).join(",") || null,
     conta_id: form.conta_id || null,
   });
 
@@ -148,19 +177,25 @@ const CadastroProdutos = () => {
         </Select>
       </div>
       <div className="space-y-1">
-        <Label>Slug do UTM Campaign (nome da campanha — filtra o investimento)</Label>
-        <Input
-          value={form.slug}
-          onChange={(e) => setForm({ ...form, slug: e.target.value })}
-          placeholder="Ex: franquia (vazio = todo o investimento da conta)"
+        <Label>UTM Campaign (nome da campanha — filtra o investimento)</Label>
+        <MultiSelectCombobox
+          options={campaignOptions}
+          selected={splitCsv(form.slug)}
+          onChange={(values) => setForm({ ...form, slug: values.join(",") })}
+          placeholder="Todas as campanhas da conta"
+          allowCustom
+          emptyText="Nenhuma campanha encontrada (Meta desconectado?)."
         />
       </div>
       <div className="space-y-1">
-        <Label>Slug do UTM Source (filtra os leads)</Label>
-        <Input
-          value={form.slug_source}
-          onChange={(e) => setForm({ ...form, slug_source: e.target.value })}
-          placeholder="Ex: meta_ads (vazio = todos os leads)"
+        <Label>UTM Source (filtra os leads)</Label>
+        <MultiSelectCombobox
+          options={sourceOptions}
+          selected={splitCsv(form.slug_source)}
+          onChange={(values) => setForm({ ...form, slug_source: values.join(",") })}
+          placeholder="Todos os leads"
+          allowCustom
+          emptyText="Nenhum utm_source encontrado nos leads."
         />
       </div>
     </div>
