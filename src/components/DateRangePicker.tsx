@@ -113,9 +113,9 @@ export function DateRangePicker({ preset, startDate, endDate, onApply }: DateRan
     setOpen(false);
   };
 
-  const displayLabel = startDate && endDate
-    ? `${format(startDate, "dd MMM yyyy", { locale: pt })} - ${format(endDate, "dd MMM yyyy", { locale: pt })}`
-    : getPresetLabel(preset);
+  // Mostra sempre as datas reais (do período personalizado ou resolvidas do preset).
+  const resolved = startDate && endDate ? { from: startDate, to: endDate } : getPresetRange(preset);
+  const displayLabel = `${format(resolved.from, "dd MMM yyyy", { locale: pt })} - ${format(resolved.to, "dd MMM yyyy", { locale: pt })}`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

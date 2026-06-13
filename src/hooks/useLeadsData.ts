@@ -37,6 +37,10 @@ export function getDateRange(filters: Filters): { start: string; end: string } {
       start = new Date(now);
       start.setDate(start.getDate() - 30);
       break;
+    case "90d":
+      start = new Date(now);
+      start.setDate(start.getDate() - 90);
+      break;
     case "this_month":
       start = new Date(now.getFullYear(), now.getMonth(), 1);
       break;

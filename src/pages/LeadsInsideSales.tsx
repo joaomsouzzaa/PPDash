@@ -91,11 +91,6 @@ type LeadRow = {
 
 type CampoLead = { id: string; chave: string; label: string; ordem: number };
 
-const STATUS_LABEL: Record<string, string> = {
-  lead: "Lead", mql: "MQL", sql: "SQL",
-  reuniao_agendada: "Reunião Agendada", reuniao_realizada: "Reunião Realizada",
-  venda: "Venda", perdido: "Perdido",
-};
 
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
   if (startDate && endDate) {
@@ -489,21 +484,6 @@ const LeadsInsideSales = () => {
                   if (e) localStorage.setItem("leads_end_date", e.toISOString()); else localStorage.removeItem("leads_end_date");
                 }}
               />
-              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-                <SelectTrigger className="w-[200px] bg-card">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="lead">Lead</SelectItem>
-                  <SelectItem value="mql">MQL</SelectItem>
-                  <SelectItem value="sql">SQL</SelectItem>
-                  <SelectItem value="reuniao_agendada">Reunião Agendada</SelectItem>
-                  <SelectItem value="reuniao_realizada">Reunião Realizada</SelectItem>
-                  <SelectItem value="venda">Venda</SelectItem>
-                  <SelectItem value="perdido">Perdido</SelectItem>
-                </SelectContent>
-              </Select>
               <Input
                 placeholder="Nome, email ou telefone..."
                 value={nomeFilter}
@@ -558,7 +538,6 @@ const LeadsInsideSales = () => {
                     {sortableHead("Nome", "nome")}
                     {sortableHead("Email", "email")}
                     {sortableHead("Telefone", "telefone")}
-                    {vis("status") && sortableHead(lbl("status", "Status"), "status")}
                     {vis("whatsapp") && sortableHead(lbl("whatsapp", "WhatsApp Digitado"), "whatsapp")}
                     {vis("instagram") && sortableHead(lbl("instagram", "Instagram"), "instagram")}
                     {vis("is_sql") && sortableHead(lbl("is_sql", "SQL"), "is_sql")}
@@ -622,7 +601,6 @@ const LeadsInsideSales = () => {
                         <TableCell className="font-medium">{l.nome || "—"}</TableCell>
                         <TableCell><span className="text-sm">{l.email || "—"}</span></TableCell>
                         <TableCell>{l.telefone || "—"}</TableCell>
-                        {vis("status") && <TableCell><Badge variant="secondary" className="whitespace-nowrap">{STATUS_LABEL[l.status] ?? l.status ?? "—"}</Badge></TableCell>}
                         {vis("whatsapp") && <TableCell>{l.whatsapp || "—"}</TableCell>}
                         {vis("instagram") && <TableCell>{l.instagram || "—"}</TableCell>}
                         {vis("is_sql") && (

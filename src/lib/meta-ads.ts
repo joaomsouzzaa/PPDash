@@ -231,16 +231,34 @@ function buildTimeRange(dateRange: string): { since: string; until: string } {
   const until = fmt(now);
 
   switch (dateRange) {
+    case "today":
+      return { since: until, until };
+    case "yesterday": {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      return { since: fmt(y), until: fmt(y) };
+    }
     case "7d": {
       const s = new Date(now);
-      s.setDate(s.getDate() - 7);
+      s.setDate(s.getDate() - 6);
+      return { since: fmt(s), until };
+    }
+    case "14d": {
+      const s = new Date(now);
+      s.setDate(s.getDate() - 13);
       return { since: fmt(s), until };
     }
     case "30d": {
       const s = new Date(now);
-      s.setDate(s.getDate() - 30);
+      s.setDate(s.getDate() - 29);
       return { since: fmt(s), until };
     }
+    case "90d": {
+      const s = new Date(now);
+      s.setDate(s.getDate() - 89);
+      return { since: fmt(s), until };
+    }
+    case "lifetime":
+      return { since: "2020-01-01", until };
     case "this_month": {
       const s = new Date(now.getFullYear(), now.getMonth(), 1);
       return { since: fmt(s), until };

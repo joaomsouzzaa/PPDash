@@ -21,7 +21,6 @@ export const LEAD_CAMPOS_PADRAO: LeadFieldDef[] = [
   { key: "whatsapp", label: "WhatsApp" },
   { key: "instagram", label: "Instagram" },
   { key: "cidade", label: "Cidade" },
-  { key: "status", label: "Status" },
   { key: "tags", label: "Tags" },
   { key: "area_atuacao", label: "Área de atuação" },
   { key: "papel", label: "Papel na empresa" },

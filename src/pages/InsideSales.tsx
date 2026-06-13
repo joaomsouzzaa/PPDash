@@ -38,7 +38,7 @@ const InsideSales = () => {
     const savedEndDate = localStorage.getItem("is_end_date");
     const savedProdutos = localStorage.getItem("is_produtos");
     return {
-      dateRange: savedDateRange || "30d",
+      dateRange: savedDateRange || "90d",
       startDate: savedStartDate ? new Date(savedStartDate) : undefined,
       endDate: savedEndDate ? new Date(savedEndDate) : undefined,
       adAccount: savedAccount || "all",
