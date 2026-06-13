@@ -6,6 +6,7 @@ export interface Produto {
   nome: string;
   slug: string;               // slug do UTM Campaign / nome da campanha (para o investimento)
   slug_source: string | null; // slug do UTM Source (para contar os leads)
+  conta_id: string | null;    // conta de anúncios do Meta (act_...) deste canal
   ativo: boolean;
 }
 
@@ -15,7 +16,7 @@ export function useProdutos() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("produtos")
-        .select("id, nome, slug, slug_source, ativo")
+        .select("id, nome, slug, slug_source, conta_id, ativo")
         .order("nome", { ascending: true });
 
       if (error) throw error;

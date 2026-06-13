@@ -22,9 +22,10 @@ interface DashboardFiltersProps {
   onFiltersChange: (filters: Filters) => void;
   hideCityFilter?: boolean;
   showProductFilter?: boolean;
+  showChannelButtons?: boolean;
 }
 
-export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = false, showProductFilter = false }: DashboardFiltersProps) {
+export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = false, showProductFilter = false, showChannelButtons = false }: DashboardFiltersProps) {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
@@ -113,6 +114,40 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
   };
 
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
+
+  if (showChannelButtons) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <DateRangePicker
+          preset={filters.dateRange}
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          onApply={(preset, start, end) =>
+            update({ dateRange: preset, startDate: start, endDate: end })
+          }
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={!filters.canalId ? "default" : "outline"}
+            size="sm"
+            onClick={() => update({ canalId: "" })}
+          >
+            Geral
+          </Button>
+          {activeProdutos.map((c) => (
+            <Button
+              key={c.id}
+              variant={filters.canalId === c.id ? "default" : "outline"}
+              size="sm"
+              onClick={() => update({ canalId: c.id })}
+            >
+              {c.nome}
+            </Button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-3">

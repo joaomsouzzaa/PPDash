@@ -39,7 +39,7 @@ export default function Campanhas() {
   const [filters, setFilters] = useState<Filters>({
     dateRange: "90d", startDate: init.s, endDate: init.e,
     adAccount: localStorage.getItem("selected_ad_account") || "all",
-    city: localStorage.getItem("selected_city") || "all", produtos: [],
+    city: localStorage.getItem("selected_city") || "all", produtos: [], canalId: "",
   });
   // Persiste a cidade (todas as páginas mantêm a última selecionada, inclusive no F5).
   const onFiltersChange = (f: Filters) => { setFilters(f); localStorage.setItem("selected_city", f.city); };

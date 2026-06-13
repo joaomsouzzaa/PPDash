@@ -47,6 +47,7 @@ const Index = () => {
       adAccount: savedAccount || "all",
       city: localStorage.getItem("selected_city") || "all",
       produtos: [],
+      canalId: "",
     };
   });
 

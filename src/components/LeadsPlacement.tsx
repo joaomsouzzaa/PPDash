@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart as PieIcon } from "lucide-react";
 import type { Filters } from "@/lib/mockData";
 import { getDateRange } from "@/hooks/useLeadsData";
+import { useProdutos } from "@/hooks/useProdutos";
 
 // Tom sobre tom (vermelho do painel) + cinza para "Outros".
 const COR_POR_NOME: Record<string, string> = {
@@ -35,17 +36,25 @@ const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any)
 
 export function LeadsPlacement({ filters }: { filters: Filters }) {
   const { start, end } = getDateRange(filters);
+  const { data: produtos = [] } = useProdutos();
+  const slugSource = filters.canalId
+    ? produtos.find((p) => p.id === filters.canalId)?.slug_source || null
+    : null;
 
   const { data = [] } = useQuery({
-    queryKey: ["leads-placement", start, end],
+    queryKey: ["leads-placement", start, end, slugSource],
     queryFn: async () => {
       const { data } = await supabase
         .from("leads")
-        .select("utm_content, ad_name, utm_term")
+        .select("utm_content, ad_name, utm_term, utm_source")
         .gte("data_lead", start)
         .lte("data_lead", end);
+      const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      const alvos = slugSource ? slugSource.split(",").map((s) => norm(s.trim())).filter(Boolean) : [];
       const counts: Record<string, number> = {};
-      (data || []).forEach((l: any) => {
+      (data || [])
+        .filter((l: any) => alvos.length === 0 || (l.utm_source && alvos.some((s) => norm(l.utm_source).includes(s))))
+        .forEach((l: any) => {
         const k = classificar(`${l.utm_content || ""} ${l.ad_name || ""} ${l.utm_term || ""}`);
         counts[k] = (counts[k] || 0) + 1;
       });

@@ -28,6 +28,7 @@ import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
 import { useLeadsData } from "@/hooks/useLeadsData";
+import { useProdutos } from "@/hooks/useProdutos";
 
 const InsideSales = () => {
   const [filters, setFilters] = useState<Filters>(() => {
@@ -37,6 +38,7 @@ const InsideSales = () => {
     const savedStartDate = localStorage.getItem("is_start_date");
     const savedEndDate = localStorage.getItem("is_end_date");
     const savedProdutos = localStorage.getItem("is_produtos");
+    const savedCanal = localStorage.getItem("is_canal");
     const dr = savedDateRange || "90d";
     // Só restaura datas salvas quando o período é "personalizado"; nos presets
     // (90d, 30d, etc.) usa o cálculo do preset — evita um range antigo travado.
@@ -48,6 +50,7 @@ const InsideSales = () => {
       adAccount: savedAccount || "all",
       city: savedCity || "all",
       produtos: savedProdutos ? JSON.parse(savedProdutos) : [],
+      canalId: savedCanal || "",
     };
   });
 
@@ -60,6 +63,7 @@ const InsideSales = () => {
     if (newFilters.startDate) localStorage.setItem("is_start_date", newFilters.startDate.toISOString()); else localStorage.removeItem("is_start_date");
     if (newFilters.endDate) localStorage.setItem("is_end_date", newFilters.endDate.toISOString()); else localStorage.removeItem("is_end_date");
     localStorage.setItem("is_produtos", JSON.stringify(newFilters.produtos));
+    localStorage.setItem("is_canal", newFilters.canalId);
     setFilters(newFilters);
   };
 
@@ -67,9 +71,14 @@ const InsideSales = () => {
   const [loadingSpend, setLoadingSpend] = useState(false);
 
   const { data: cidades = [] } = useCidades();
+  const { data: produtos = [] } = useProdutos();
   const { data: leadsKpis } = useLeadsData(filters);
   const isMetaConnected = localStorage.getItem("meta_connected") === "true";
   const selectedCidade = cidades.find((c) => c.slug === filters.city);
+
+  const canal = filters.canalId ? produtos.find((p) => p.id === filters.canalId) : null;
+  const canalContaId = canal?.conta_id || null;
+  const canalSlug = canal?.slug || undefined; // slug do UTM Campaign (filtra investimento)
 
   const loadSpend = useCallback(async () => {
     if (!isMetaConnected) {
@@ -78,9 +87,10 @@ const InsideSales = () => {
     }
     setLoadingSpend(true);
     try {
+      // Canal com conta específica → só ela; senão (Geral, ou canal "todas as contas") → todas.
       let accountIds: string[];
-      if (filters.adAccount !== "all") {
-        accountIds = [filters.adAccount];
+      if (canalContaId) {
+        accountIds = [canalContaId];
       } else {
         const accounts = await fetchAdAccounts();
         accountIds = accounts.map((a) => a.id);
@@ -90,22 +100,14 @@ const InsideSales = () => {
         return;
       }
 
-      // When products are selected, fetch spend per product slug and sum
-      const slugs = filters.produtos.length > 0 ? filters.produtos : [undefined];
-      let totalSpend = 0;
-      await Promise.all(
-        slugs.map(async (slug) => {
-          const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate, slug);
-          totalSpend += results.reduce((sum, r) => sum + r.spend, 0);
-        })
-      );
-      setMetaInvestimento(totalSpend);
+      const results = await fetchAdSpend(accountIds, filters.dateRange, filters.startDate, filters.endDate, canalSlug);
+      setMetaInvestimento(results.reduce((sum, r) => sum + r.spend, 0));
     } catch {
       setMetaInvestimento(null);
     } finally {
       setLoadingSpend(false);
     }
-  }, [isMetaConnected, filters.adAccount, filters.dateRange, filters.startDate, filters.endDate, filters.produtos]);
+  }, [isMetaConnected, canalContaId, canalSlug, filters.dateRange, filters.startDate, filters.endDate]);
 
   useEffect(() => {
     loadSpend();
@@ -226,7 +228,7 @@ const InsideSales = () => {
           </header>
 
           <div className={tvMode ? "tv-content" : "p-6 space-y-6"}>
-            {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showProductFilter />}
+            {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showChannelButtons />}
 
             <div ref={kpisRef} className="space-y-6">
             {/* Row 1: Investimento, Leads, CPL */}

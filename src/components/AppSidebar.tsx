@@ -193,7 +193,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Cadastro de Produtos">
+            <SidebarMenuButton asChild tooltip="Canais de Aquisição">
               <NavLink
                 to="/cadastro-produtos"
                 end
@@ -201,7 +201,7 @@ export function AppSidebar() {
                 activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
               >
                 <Package className="h-4 w-4" />
-                <span>Cadastro de Produtos</span>
+                <span>Canais de Aquisição</span>
               </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>

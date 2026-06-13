@@ -5,6 +5,7 @@ export interface Filters {
   adAccount: string;
   city: string;
   produtos: string[];
+  canalId: string; // canal de aquisição selecionado ("" = Geral)
 }
 
 interface SaleRecord {

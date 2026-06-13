@@ -116,10 +116,9 @@ export interface LeadsKpis {
 
 export function useLeadsData(filters: Filters) {
   const { data: produtos = [] } = useProdutos();
-  // slug_source dos produtos selecionados (para filtrar leads por utm_source).
-  const sourcesSel = filters.produtos
-    .map((slug) => produtos.find((p) => p.slug === slug)?.slug_source)
-    .filter((s): s is string => !!s);
+  // Canal de aquisição selecionado → slug_source (filtra leads por utm_source).
+  const canal = filters.canalId ? produtos.find((p) => p.id === filters.canalId) : null;
+  const slugSource = canal?.slug_source || null;
 
   return useQuery({
     queryKey: [
@@ -127,8 +126,8 @@ export function useLeadsData(filters: Filters) {
       filters.dateRange,
       filters.startDate?.toISOString(),
       filters.endDate?.toISOString(),
-      filters.produtos,
-      sourcesSel.join(","),
+      filters.canalId,
+      slugSource,
     ],
     queryFn: async (): Promise<LeadsKpis> => {
       const { start, end } = getDateRange(filters);
@@ -145,10 +144,10 @@ export function useLeadsData(filters: Filters) {
 
       let leads = data || [];
 
-      // Filtra leads por UTM Source (slug_source do produto selecionado).
-      if (filters.produtos.length > 0 && sourcesSel.length > 0) {
+      // Filtra leads por UTM Source (slug_source do canal selecionado).
+      if (slugSource) {
         const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const alvos = sourcesSel.map(normalize);
+        const alvos = slugSource.split(",").map((s) => normalize(s.trim())).filter(Boolean);
         leads = leads.filter((l: any) =>
           l.utm_source && alvos.some((s) => normalize(l.utm_source).includes(s))
         );
