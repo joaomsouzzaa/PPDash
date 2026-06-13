@@ -24,7 +24,6 @@ export const LEAD_CAMPOS_PADRAO: LeadFieldDef[] = [
   { key: "tags", label: "Tags" },
   { key: "area_atuacao", label: "Área de atuação" },
   { key: "papel", label: "Papel na empresa" },
-  { key: "faturamento", label: "Faturamento atual" },
   { key: "situacao_atual", label: "Situação atual" },
   { key: "is_sql", label: "SQL", tipo: "booleano" },
   { key: "is_reuniao_agendada", label: "Reunião agendada", tipo: "booleano" },

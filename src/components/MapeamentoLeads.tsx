@@ -3,12 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Plus, Pencil, Trash2, Check, Eye, EyeOff, GripVertical } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Save, Plus, Pencil, Trash2, Check, Eye, EyeOff, GripVertical, Target } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
 import { ordenarPor } from "@/lib/leadColumns";
 
-interface Campo { key: string; label: string; isCustom: boolean; chave?: string; oculto: boolean; fixo: boolean; }
+interface Campo { key: string; label: string; isCustom: boolean; chave?: string; oculto: boolean; fixo: boolean; mqlValores: string[]; }
 
 function slugify(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -27,6 +29,11 @@ export function MapeamentoLeads() {
   const [editLabel, setEditLabel] = useState("");
   const [mostrarOcultos, setMostrarOcultos] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  // Configuração do gatilho de MQL (escolher quais valores contam).
+  const [mqlField, setMqlField] = useState<Campo | null>(null);
+  const [mqlOptions, setMqlOptions] = useState<string[]>([]);
+  const [mqlSelected, setMqlSelected] = useState<Set<string>>(new Set());
+  const [mqlLoading, setMqlLoading] = useState(false);
 
   const salvarOrdem = async (arr: Campo[]) => {
     if (!orgId) return;
@@ -52,24 +59,25 @@ export function MapeamentoLeads() {
     if (!orgId) return;
     setLoading(true);
     const [{ data: rows }, { data: mapRows }, { data: orgRow }] = await Promise.all([
-      (supabase as any).from("lead_campos").select("chave, label, padrao, oculto, excluido").eq("org_id", orgId).order("ordem"),
+      (supabase as any).from("lead_campos").select("chave, label, padrao, oculto, excluido, mql_valores").eq("org_id", orgId).order("ordem"),
       (supabase as any).from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId),
       (supabase as any).from("organizations").select("lead_ordem").eq("id", orgId).maybeSingle(),
     ]);
     const ordem: string[] = (orgRow?.lead_ordem as string[]) ?? [];
-    const overrides = new Map<string, { label: string; oculto: boolean; excluido: boolean }>();
+    const mqlArr = (v: unknown): string[] => (Array.isArray(v) ? (v as unknown[]).map(String) : []);
+    const overrides = new Map<string, { label: string; oculto: boolean; excluido: boolean; mqlValores: string[] }>();
     const customs: any[] = [];
     ((rows as any[]) ?? []).forEach((r) => {
-      if (r.padrao) overrides.set(r.chave, { label: r.label, oculto: r.oculto, excluido: !!r.excluido });
+      if (r.padrao) overrides.set(r.chave, { label: r.label, oculto: r.oculto, excluido: !!r.excluido, mqlValores: mqlArr(r.mql_valores) });
       else customs.push(r);
     });
     const padrao: Campo[] = LEAD_CAMPOS_PADRAO
       .filter((f) => !overrides.get(f.key)?.excluido)
       .map((f) => {
         const o = overrides.get(f.key);
-        return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto, fixo: !!f.fixo };
+        return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto, fixo: !!f.fixo, mqlValores: o?.mqlValores ?? [] };
       });
-    const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto, fixo: false }));
+    const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto, fixo: false, mqlValores: mqlArr(c.mql_valores) }));
     const todos = [...padrao, ...customDefs];
     const ordenados = ordenarPor(todos.map((c) => c.key), ordem).map((k) => todos.find((c) => c.key === k)!);
     setCampos(ordenados);
@@ -183,6 +191,47 @@ export function MapeamentoLeads() {
     } catch (e) { toast.error((e as Error).message); }
   };
 
+  // Abre o seletor de valores de MQL e carrega os valores distintos do campo.
+  const abrirMql = async (c: Campo) => {
+    setMqlField(c);
+    setMqlSelected(new Set(c.mqlValores));
+    setMqlOptions([]);
+    setMqlLoading(true);
+    try {
+      const col = c.isCustom ? "custom" : c.key;
+      const { data } = await (supabase as any).from("leads").select(col).limit(5000);
+      const set = new Set<string>();
+      ((data as any[]) ?? []).forEach((r) => {
+        const v = c.isCustom ? r.custom?.[c.chave!] : r[c.key];
+        if (v != null && String(v).trim()) set.add(String(v).trim());
+      });
+      setMqlOptions([...set].sort((a, b) => a.localeCompare(b)));
+    } catch (e) {
+      toast.error("Falha ao carregar os valores do campo.");
+    }
+    setMqlLoading(false);
+  };
+
+  const salvarMql = async () => {
+    if (!mqlField) return;
+    const valores = [...mqlSelected];
+    try {
+      if (mqlField.isCustom) {
+        const { error } = await (supabase as any).from("lead_campos")
+          .update({ mql_valores: valores.length ? valores : null })
+          .eq("org_id", orgId).eq("chave", mqlField.chave);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await (supabase as any).from("lead_campos")
+          .upsert({ chave: mqlField.key, padrao: true, label: mqlField.label, oculto: mqlField.oculto, mql_valores: valores.length ? valores : null }, { onConflict: "org_id,chave" });
+        if (error) throw new Error(error.message);
+      }
+      toast.success(valores.length ? "Gatilho de MQL salvo." : "Campo removido do MQL.");
+      setMqlField(null);
+      await carregar();
+    } catch (e) { toast.error((e as Error).message); }
+  };
+
   if (loading) return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
   const visiveis = campos.filter((c) => mostrarOcultos || !c.oculto);
@@ -229,6 +278,14 @@ export function MapeamentoLeads() {
             )}
             <Input value={mapa[c.key] ?? ""} onChange={(e) => setMapa((m) => ({ ...m, [c.key]: e.target.value }))}
               placeholder="campo do CRM" className="h-8 flex-1 font-mono text-xs" />
+            {editKey !== c.key && (
+              <Button size="icon" variant="ghost"
+                className={`h-8 w-8 shrink-0 ${c.mqlValores.length ? "text-primary" : "text-muted-foreground/50"}`}
+                onClick={() => abrirMql(c)}
+                title={c.mqlValores.length ? `Gatilho de MQL (${c.mqlValores.length} valor(es))` : "Definir gatilho de MQL"}>
+                <Target className="h-3.5 w-3.5" />
+              </Button>
+            )}
             {editKey === c.key ? (
               <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => salvarRename(c)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
             ) : c.fixo ? (
@@ -264,6 +321,45 @@ export function MapeamentoLeads() {
         {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
         Salvar mapeamento
       </Button>
+
+      {/* Seletor de valores que contam como MQL para o campo escolhido */}
+      <Dialog open={!!mqlField} onOpenChange={(v) => !v && setMqlField(null)}>
+        <DialogContent className="max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Gatilho de MQL — {mqlField?.label}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Marque os valores deste campo que devem contabilizar o lead como <strong>MQL</strong>.
+            Um lead é MQL se o valor dele estiver entre os marcados (vale para qualquer campo gatilho).
+          </p>
+          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[120px]">
+            {mqlLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            ) : mqlOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Nenhum valor encontrado para este campo nos leads.</p>
+            ) : (
+              mqlOptions.map((opt) => (
+                <label key={opt} className="flex items-start gap-2 text-sm cursor-pointer rounded px-1 py-1 hover:bg-muted/50">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={mqlSelected.has(opt)}
+                    onCheckedChange={() => setMqlSelected((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(opt)) next.delete(opt); else next.add(opt);
+                      return next;
+                    })}
+                  />
+                  <span className="leading-snug">{opt}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMqlField(null)}>Cancelar</Button>
+            <Button onClick={salvarMql}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

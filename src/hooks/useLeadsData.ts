@@ -60,59 +60,8 @@ export function getDateRange(filters: Filters): { start: string; end: string } {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-function parseFaturamento(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const s = value.toLowerCase().replace(/[r$\s]/g, "").replace(/_/g, " ");
-
-  // Handle range formats like "entre 50 mil e 100 mil" or "entre 100 mil e 300 mil"
-  // Use the highest value in the range for comparison
-  const rangeMatch = s.match(/entre\s*([\d.,]+)\s*(mil|k)?\s*e\s*([\d.,]+)\s*(mil|k)?/i);
-  if (rangeMatch) {
-    const high = parseNumWithMil(rangeMatch[3], rangeMatch[4]);
-    return high;
-  }
-
-  // Handle "até X mil" — use the value itself (e.g. "até 15 mil" = 15000)
-  const ateMatch = s.match(/at[eé]\s*([\d.,]+)\s*(mil|k)?/i);
-  if (ateMatch) {
-    return parseNumWithMil(ateMatch[1], ateMatch[2]);
-  }
-
-  // Handle "acima de X mil" or "mais de X mil"
-  const acimaMatch = s.match(/(?:acima|mais)\s*(?:de)?\s*([\d.,]+)\s*(mil|k)?/i);
-  if (acimaMatch) {
-    return parseNumWithMil(acimaMatch[1], acimaMatch[2]);
-  }
-
-  // Handle simple "50 mil", "50mil", "100k", "50.000"
-  const simpleMatch = s.match(/([\d.,]+)\s*(mil|k)?/);
-  if (simpleMatch) {
-    return parseNumWithMil(simpleMatch[1], simpleMatch[2]);
-  }
-
-  return null;
-}
-
-// Capacidade de investimento (campo custom) acima de R$ 9.900 → conta como MQL.
-// Faixas como "De R$ 9.900,00 a R$ 12.000,00 - Tenho condições…" são MQL;
-// "Menos de R$ 9.900,00 - Não tenho condições…" não é.
-function capacidadeIsMql(v: unknown): boolean {
-  if (!v) return false;
-  const s = String(v).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (!/\d/.test(s)) return false;
-  if (s.includes("menos de") || s.includes("nao tenho")) return false;
-  return true;
-}
-
-function parseNumWithMil(numStr: string, suffix?: string): number {
-  const cleaned = numStr.replace(/\./g, "").replace(",", ".");
-  let num = parseFloat(cleaned);
-  if (isNaN(num)) return 0;
-  if (suffix && (suffix.toLowerCase() === "mil" || suffix.toLowerCase() === "k")) {
-    num *= 1000;
-  }
-  return num;
-}
+// Campos marcados como gatilho de MQL (lead_campos.mql_valores preenchido).
+type MqlTrigger = { chave: string; padrao: boolean; valores: Set<string> };
 
 export interface LeadsKpis {
   totalLeads: number;
@@ -143,9 +92,21 @@ export function useLeadsData(filters: Filters) {
     queryFn: async (): Promise<LeadsKpis> => {
       const { start, end } = getDateRange(filters);
 
-      let query = supabase
+      // Campos que disparam MQL (mql_valores preenchido no Gerenciar Campos).
+      const { data: camposRaw } = await (supabase as any)
+        .from("lead_campos")
+        .select("chave, padrao, mql_valores");
+      const mqlTriggers: MqlTrigger[] = ((camposRaw as any[]) || [])
+        .filter((c) => Array.isArray(c.mql_valores) && c.mql_valores.length)
+        .map((c) => ({
+          chave: c.chave as string,
+          padrao: !!c.padrao,
+          valores: new Set((c.mql_valores as unknown[]).map((v) => String(v).trim())),
+        }));
+
+      const query = supabase
         .from("leads")
-        .select("utm_source, utm_medium, campaign_name, faturamento, custom, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
+        .select("utm_source, utm_medium, campaign_name, custom, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
         .gte("data_lead", start)
         .lte("data_lead", end);
 
@@ -176,13 +137,14 @@ export function useLeadsData(filters: Filters) {
       for (const l of leads) {
         totalLeads++;
 
-        // MQL: faturamento informado > 50k OU capacidade de investimento > R$ 9.900.
-        const faturamentoNum = parseFaturamento(l.faturamento);
-        const isMqlByFaturamento = faturamentoNum !== null && faturamentoNum > 50000;
-        const isMqlByCapacidade = capacidadeIsMql((l.custom as Record<string, unknown> | null)?.capacidade_investimento);
-        if (isMqlByFaturamento || isMqlByCapacidade) {
-          mql++;
-        }
+        // MQL: o valor de QUALQUER campo gatilho está na lista de valores que contam.
+        const isMql = mqlTriggers.some((t) => {
+          const raw = t.padrao
+            ? (l as Record<string, unknown>)[t.chave]
+            : (l.custom as Record<string, unknown> | null)?.[t.chave];
+          return raw != null && t.valores.has(String(raw).trim());
+        });
+        if (isMql) mql++;
         // SQL, reuniões e vendas vêm exclusivamente das colunas dedicadas (= "Sim").
         if (l.is_sql === "Sim") sql++;
         if (l.is_reuniao_agendada === "Sim") reunioesAgendadas++;

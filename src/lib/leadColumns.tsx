@@ -7,7 +7,7 @@ export const TABLE_COL_KEYS: string[] = [
   "data_lead", "nome", "email", "telefone", "whatsapp", "instagram", "cidade",
   "is_sql", "is_reuniao_agendada", "is_reuniao_realizada", "is_venda_realizada",
   "faturamento_venda", "data_venda_realizada", "area_atuacao", "papel",
-  "faturamento", "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
+  "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
   "utm_term", "campaign_name", "ad_name", "deal_user", "tags",
 ];
 
@@ -16,7 +16,7 @@ export const SORTABLE = new Set<string>([
   "data_lead", "nome", "email", "telefone", "whatsapp", "instagram", "cidade",
   "is_sql", "is_reuniao_agendada", "is_reuniao_realizada", "is_venda_realizada",
   "faturamento_venda", "data_venda_realizada", "area_atuacao", "papel",
-  "faturamento", "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
+  "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
   "utm_term", "campaign_name", "ad_name", "deal_user", "tags",
 ]);
 
@@ -41,7 +41,6 @@ export const STANDARD_RENDER: Record<string, (l: any) => ReactNode> = {
   data_venda_realizada: (l) => (l.data_venda_realizada ? new Date(l.data_venda_realizada).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"),
   area_atuacao: (l) => txt(l.area_atuacao),
   papel: (l) => txt(l.papel),
-  faturamento: (l) => txt(l.faturamento),
   situacao_atual: (l) => txt(l.situacao_atual),
   utm_source: (l) => txt(l.utm_source),
   utm_campaign: (l) => txt(l.utm_campaign),
