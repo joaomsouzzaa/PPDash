@@ -93,6 +93,17 @@ function parseFaturamento(value: string | null | undefined): number | null {
   return null;
 }
 
+// Capacidade de investimento (campo custom) acima de R$ 9.900 → conta como MQL.
+// Faixas como "De R$ 9.900,00 a R$ 12.000,00 - Tenho condições…" são MQL;
+// "Menos de R$ 9.900,00 - Não tenho condições…" não é.
+function capacidadeIsMql(v: unknown): boolean {
+  if (!v) return false;
+  const s = String(v).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (!/\d/.test(s)) return false;
+  if (s.includes("menos de") || s.includes("nao tenho")) return false;
+  return true;
+}
+
 function parseNumWithMil(numStr: string, suffix?: string): number {
   const cleaned = numStr.replace(/\./g, "").replace(",", ".");
   let num = parseFloat(cleaned);
@@ -134,7 +145,7 @@ export function useLeadsData(filters: Filters) {
 
       let query = supabase
         .from("leads")
-        .select("status, utm_source, utm_medium, campaign_name, faturamento, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
+        .select("status, utm_source, utm_medium, campaign_name, faturamento, custom, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
         .gte("data_lead", start)
         .lte("data_lead", end);
 
@@ -169,10 +180,12 @@ export function useLeadsData(filters: Filters) {
         // Parse faturamento: extract numeric value from string (e.g. "R$ 50.000", "100000", "50k")
         const faturamentoNum = parseFaturamento(l.faturamento);
         const isMqlByFaturamento = faturamentoNum !== null && faturamentoNum > 50000;
+        // Capacidade de investimento acima de R$ 9.900 também qualifica como MQL.
+        const isMqlByCapacidade = capacidadeIsMql((l.custom as Record<string, unknown> | null)?.capacidade_investimento);
 
         // Count cumulatively — a lead that reached "venda" also counts as MQL, SQL, etc.
-        // Also count as MQL if faturamento > 50k
-        if (isMqlByFaturamento || s === "mql" || s === "sql" || s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {
+        // Também conta como MQL se faturamento > 50k ou capacidade > R$ 9.900.
+        if (isMqlByFaturamento || isMqlByCapacidade || s === "mql" || s === "sql" || s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {
           mql++;
         }
         if (l.is_sql === "Sim" || s === "sql" || s === "reuniao_agendada" || s === "reuniao_realizada" || s === "venda") {
