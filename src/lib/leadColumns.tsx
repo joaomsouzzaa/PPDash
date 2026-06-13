@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
+import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
 
 // Colunas padrão exibidas na tabela de Leads (na ordem default).
 export const TABLE_COL_KEYS: string[] = [
@@ -57,17 +58,11 @@ export const STANDARD_RENDER: Record<string, (l: any) => ReactNode> = {
   ) : "—"),
 };
 
-export const LABEL_PADRAO: Record<string, string> = {
-  data_lead: "Data", nome: "Nome", email: "Email", telefone: "Telefone",
-  whatsapp: "WhatsApp Digitado", instagram: "Instagram", is_sql: "SQL",
-  is_reuniao_agendada: "Reunião Agendada", is_reuniao_realizada: "Reunião Realizada",
-  is_venda_realizada: "Venda Realizada", faturamento_venda: "Faturamento Venda",
-  data_venda_realizada: "Data Venda", area_atuacao: "Área de Atuação",
-  papel: "Papel na Empresa", faturamento: "Faturamento Atual", situacao_atual: "Situação Atual",
-  utm_campaign: "Utm Campaign", utm_medium: "UTM Medium", utm_content: "UTM Content",
-  utm_term: "UTM Term", campaign_name: "Nome Campanha", ad_name: "Nome Anúncio",
-  deal_user: "Responsável", tags: "Tags",
-};
+// Rótulos padrão das colunas = os mesmos do catálogo de campos (fonte única,
+// para o nome ser idêntico no gerenciador e na coluna da tabela).
+export const LABEL_PADRAO: Record<string, string> = Object.fromEntries(
+  LEAD_CAMPOS_PADRAO.map((f) => [f.key, f.label]),
+);
 
 /** Ordena uma lista de chaves segundo a ordem salva (lead_ordem); chaves fora ficam no fim, na ordem original. */
 export function ordenarPor(keys: string[], ordem: string[]): string[] {
