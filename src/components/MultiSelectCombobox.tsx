@@ -28,28 +28,35 @@ export function MultiSelectCombobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
+  const isSelected = (value: string) =>
+    selected.some((s) => s.toLowerCase() === value.toLowerCase());
+
   const toggle = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter((v) => v !== value));
+    if (isSelected(value)) {
+      onChange(selected.filter((v) => v.toLowerCase() !== value.toLowerCase()));
     } else {
       onChange([...selected, value]);
     }
   };
 
-  // Selecionados sempre no topo (incluindo valores custom fora das opções),
-  // seguidos pelas demais opções.
-  const selectedSet = new Set(selected);
-  const ordered = [
-    ...selected,
-    ...options.filter((o) => !selectedSet.has(o)),
-  ];
+  // Lista única (case-insensitive) com selecionados sempre no topo. Para cada
+  // valor, prefere a grafia "canônica" vinda das opções (ex.: "Instagram_Feed")
+  // em vez de uma versão antiga/custom em minúsculas.
+  const optionByKey = new Map(options.map((o) => [o.toLowerCase(), o]));
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const v of [...selected, ...options]) {
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ordered.push(optionByKey.get(key) ?? v);
+  }
 
   const trimmed = query.trim();
   const showCustom =
     allowCustom &&
     trimmed.length > 0 &&
-    !options.some((o) => o.toLowerCase() === trimmed.toLowerCase()) &&
-    !selected.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+    !seen.has(trimmed.toLowerCase());
 
   const label =
     selected.length === 0
@@ -103,7 +110,7 @@ export function MultiSelectCombobox({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedSet.has(option) ? "opacity-100" : "opacity-0",
+                      isSelected(option) ? "opacity-100" : "opacity-0",
                     )}
                   />
                   <span className="truncate">{option}</span>

@@ -67,6 +67,35 @@ const CadastroProdutos = () => {
     return () => { cancelled = true; };
   }, [formOpen, form.conta_id, adAccounts]);
 
+  // Reconcilia valores salvos com as opções reais: converte para a grafia
+  // canônica (case-insensitive) e remove duplicados. Cura valores legados
+  // (ex.: "instagramfeed" -> "Instagram_Feed") que quebravam o filtro de leads.
+  // Chave "frouxa": ignora caixa, acentos e separadores (_ . - espaço) para
+  // casar valores legados (ex.: "instagramfeed") com a opção real ("Instagram_Feed").
+  const looseKey = (s: string) =>
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const reconcile = (csv: string, options: string[]): string => {
+    const byKey = new Map(options.map((o) => [looseKey(o), o]));
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const v of splitCsv(csv)) {
+      const key = looseKey(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(byKey.get(key) ?? v);
+    }
+    return out.join(",");
+  };
+  useEffect(() => {
+    if (!formOpen) return;
+    setForm((f) => {
+      const slug = campaignOptions.length ? reconcile(f.slug, campaignOptions) : f.slug;
+      const slug_source = sourceOptions.length ? reconcile(f.slug_source, sourceOptions) : f.slug_source;
+      if (slug === f.slug && slug_source === f.slug_source) return f;
+      return { ...f, slug, slug_source };
+    });
+  }, [formOpen, campaignOptions, sourceOptions]);
+
   const openAdd = () => {
     setForm({ nome: "", slug: "", slug_source: "", conta_id: "" });
     setAddOpen(true);
