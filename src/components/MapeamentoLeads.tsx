@@ -30,19 +30,21 @@ export function MapeamentoLeads() {
     if (!orgId) return;
     setLoading(true);
     const [{ data: rows }, { data: mapRows }] = await Promise.all([
-      (supabase as any).from("lead_campos").select("chave, label, padrao, oculto").eq("org_id", orgId).order("ordem"),
+      (supabase as any).from("lead_campos").select("chave, label, padrao, oculto, excluido").eq("org_id", orgId).order("ordem"),
       (supabase as any).from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId),
     ]);
-    const overrides = new Map<string, { label: string; oculto: boolean }>();
+    const overrides = new Map<string, { label: string; oculto: boolean; excluido: boolean }>();
     const customs: any[] = [];
     ((rows as any[]) ?? []).forEach((r) => {
-      if (r.padrao) overrides.set(r.chave, { label: r.label, oculto: r.oculto });
+      if (r.padrao) overrides.set(r.chave, { label: r.label, oculto: r.oculto, excluido: !!r.excluido });
       else customs.push(r);
     });
-    const padrao: Campo[] = LEAD_CAMPOS_PADRAO.map((f) => {
-      const o = overrides.get(f.key);
-      return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto, fixo: !!f.fixo };
-    });
+    const padrao: Campo[] = LEAD_CAMPOS_PADRAO
+      .filter((f) => !overrides.get(f.key)?.excluido)
+      .map((f) => {
+        const o = overrides.get(f.key);
+        return { key: f.key, label: o?.label ?? f.label, isCustom: false, oculto: !!o?.oculto, fixo: !!f.fixo };
+      });
     const customDefs: Campo[] = customs.map((c) => ({ key: `custom:${c.chave}`, label: c.label, isCustom: true, chave: c.chave, oculto: !!c.oculto, fixo: false }));
     setCampos([...padrao, ...customDefs]);
     const m: Record<string, string> = {};
@@ -74,8 +76,18 @@ export function MapeamentoLeads() {
     if (!label) return;
     const chave = slugify(label);
     if (!chave) return toast.error("Nome inválido.");
-    if (campos.some((c) => c.chave === chave || c.key === chave)) return toast.error("Já existe um campo com esse nome.");
+    const existente = campos.find((c) => c.chave === chave || c.key === chave);
+    if (existente) {
+      if (existente.oculto) {
+        await restaurarCampo(existente);
+        setNovo("");
+        return toast.success(`O campo "${existente.label}" já existia oculto e foi restaurado.`);
+      }
+      return toast.error("Já existe um campo com esse nome.");
+    }
     try {
+      // Remove eventual override de um campo padrão excluído com a mesma chave (libera o unique).
+      await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", chave).eq("padrao", true);
       const { error } = await (supabase as any).from("lead_campos").insert({ label, chave, ordem: campos.length, padrao: false });
       if (error) throw new Error(error.message);
       setNovo(""); await carregar();
@@ -118,10 +130,28 @@ export function MapeamentoLeads() {
     }
   };
 
+  // Exclui de vez (campos ocultos): custom some do banco; padrão recebe a flag excluido
+  // e deixa de ser tratado como campo do sistema (a chave fica livre para recriar como personalizado).
+  const excluirCampo = async (c: Campo) => {
+    if (!confirm(`Excluir o campo "${c.label}"? Ele some da lista. (Os valores já recebidos ficam guardados.)`)) return;
+    try {
+      if (c.isCustom) {
+        await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
+        await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+      } else {
+        const { error } = await (supabase as any).from("lead_campos")
+          .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true, excluido: true }, { onConflict: "org_id,chave" });
+        if (error) throw new Error(error.message);
+        await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+      }
+      await carregar();
+    } catch (e) { toast.error((e as Error).message); }
+  };
+
   const restaurarCampo = async (c: Campo) => {
     try {
       const { error } = await (supabase as any).from("lead_campos")
-        .upsert({ chave: c.key, padrao: true, label: c.label, oculto: false }, { onConflict: "org_id,chave" });
+        .upsert({ chave: c.key, padrao: true, label: c.label, oculto: false, excluido: false }, { onConflict: "org_id,chave" });
       if (error) throw new Error(error.message);
       await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -167,7 +197,10 @@ export function MapeamentoLeads() {
               <>
                 <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear"><Pencil className="h-3.5 w-3.5" /></Button>
                 {c.oculto ? (
-                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => restaurarCampo(c)} title="Restaurar"><Eye className="h-3.5 w-3.5" /></Button>
+                  <>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => restaurarCampo(c)} title="Restaurar"><Eye className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive" onClick={() => excluirCampo(c)} title="Excluir"><Trash2 className="h-3.5 w-3.5" /></Button>
+                  </>
                 ) : (
                   <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-destructive" onClick={() => removerCampo(c)} title={c.isCustom ? "Excluir" : "Ocultar"}><Trash2 className="h-3.5 w-3.5" /></Button>
                 )}
