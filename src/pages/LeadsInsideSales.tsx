@@ -155,6 +155,20 @@ const statusLabels: Record<string, string> = {
   perdido: "Perdido",
 };
 
+// Tipo de controle de cada campo padrão no modal de edição (default = texto).
+type FieldKind = "text" | "status" | "simnao" | "number" | "date" | "datetime" | "tags";
+const FIELD_KIND: Record<string, FieldKind> = {
+  status: "status",
+  is_sql: "simnao",
+  is_reuniao_agendada: "simnao",
+  is_reuniao_realizada: "simnao",
+  is_venda_realizada: "simnao",
+  faturamento_venda: "number",
+  data_venda_realizada: "date",
+  data_lead: "datetime",
+  tags: "tags",
+};
+
 const statusColor = (s: string): "default" | "secondary" | "destructive" | "outline" => {
   switch (s) {
     case "venda": return "default";
@@ -327,77 +341,35 @@ const LeadsInsideSales = () => {
 
   const openEdit = (l: LeadRow) => {
     setEditingLead(l);
-    setEditForm({
-      nome: l.nome,
-      email: l.email,
-      telefone: l.telefone,
-      status: l.status,
-      cidade: l.cidade,
-      
-      deal_user: l.deal_user,
-      tags: l.tags,
-      whatsapp: l.whatsapp,
-      instagram: l.instagram,
-      area_atuacao: l.area_atuacao,
-      papel: l.papel,
-      faturamento: l.faturamento,
-      situacao_atual: l.situacao_atual,
-      
-      utm_medium: l.utm_medium,
-      utm_campaign: l.utm_campaign,
-      utm_content: l.utm_content,
-      utm_term: l.utm_term,
-      ad_name: l.ad_name,
-      campaign_name: l.campaign_name,
-      is_sql: l.is_sql,
-      is_reuniao_agendada: l.is_reuniao_agendada,
-      is_reuniao_realizada: l.is_reuniao_realizada,
-      is_venda_realizada: l.is_venda_realizada,
-      faturamento_venda: l.faturamento_venda,
-      data_venda_realizada: l.data_venda_realizada,
-    });
+    // Carrega todos os campos; o modal exibe só os visíveis (Gerenciar campos).
+    setEditForm({ ...l, custom: { ...(l.custom || {}) } });
   };
+
+  const setCustom = (chave: string, value: string) =>
+    setEditForm((f) => ({ ...f, custom: { ...(f.custom || {}), [chave]: value } }));
 
   const handleSaveEdit = async () => {
     if (!editingLead) return;
 
-    // Auto-sync is_sql and is_reuniao_agendada based on tags
-    const tags = editForm.tags || "";
-    const tagList = tags.toLowerCase().split(",").map((t) => t.trim());
-    const computedIsSql = tagList.some((t) => t === "sql") ? "Sim" : null;
-    const computedIsRa = tagList.some((t) => t === "reunião agendada" || t === "reuniao agendada") ? "Sim" : null;
-    const computedIsRr = tagList.some((t) => t === "reunião realizada" || t === "reuniao realizada") ? "Sim" : null;
-    const computedIsVr = tagList.some((t) => t === "venda realizada") ? "Sim" : null;
+    // Atualiza apenas os campos visíveis na tela (colunas), preservando os ocultos.
+    const update: Record<string, unknown> = {};
+    for (const col of colunas) {
+      if (col.isCustom) continue;
+      const k = col.key;
+      if (k === "faturamento_venda") {
+        update.faturamento_venda = editForm.faturamento_venda ?? null;
+      } else if (k === "status") {
+        update.status = editForm.status || "lead";
+      } else {
+        update[k] = (editForm as Record<string, unknown>)[k] ?? null;
+      }
+    }
+    // Campos personalizados (JSONB) — preserva o que já havia e aplica edições.
+    update.custom = { ...(editingLead.custom || {}), ...(editForm.custom || {}) };
 
     const { error } = await supabase
       .from("leads")
-      .update({
-        nome: editForm.nome,
-        email: editForm.email,
-        telefone: editForm.telefone,
-        status: editForm.status || "lead",
-        cidade: editForm.cidade,
-        deal_user: editForm.deal_user,
-        tags: editForm.tags,
-        whatsapp: editForm.whatsapp,
-        instagram: editForm.instagram,
-        area_atuacao: editForm.area_atuacao,
-        papel: editForm.papel,
-        faturamento: editForm.faturamento,
-        situacao_atual: editForm.situacao_atual,
-        utm_medium: editForm.utm_medium,
-        utm_campaign: editForm.utm_campaign,
-        utm_content: editForm.utm_content,
-        utm_term: editForm.utm_term,
-        ad_name: editForm.ad_name,
-        campaign_name: editForm.campaign_name,
-        is_sql: computedIsSql,
-        is_reuniao_agendada: computedIsRa,
-        is_reuniao_realizada: computedIsRr,
-        is_venda_realizada: computedIsVr,
-        faturamento_venda: editForm.faturamento_venda,
-        data_venda_realizada: editForm.data_venda_realizada,
-      })
+      .update(update)
       .eq("id", editingLead.id);
 
     if (error) {
@@ -431,6 +403,84 @@ const LeadsInsideSales = () => {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  };
+
+  // Renderiza o controle de edição de uma coluna visível.
+  const renderEditField = (col: { key: string; label: string; isCustom: boolean; chave?: string }) => {
+    if (col.isCustom) {
+      const v = (editForm.custom as Record<string, unknown> | undefined)?.[col.chave!];
+      return (
+        <div key={col.key} className="space-y-1">
+          <Label>{col.label}</Label>
+          <Input value={v != null ? String(v) : ""} onChange={(e) => setCustom(col.chave!, e.target.value)} />
+        </div>
+      );
+    }
+    const k = col.key as keyof LeadRow;
+    const kind = FIELD_KIND[col.key] || "text";
+    const val = (editForm as Record<string, unknown>)[col.key];
+
+    if (kind === "tags") {
+      return (
+        <div key={col.key} className="space-y-1 col-span-2">
+          <Label>{col.label}</Label>
+          <TagSelector value={editForm.tags || ""} onChange={(v) => setEditForm({ ...editForm, tags: v })} />
+        </div>
+      );
+    }
+    if (kind === "status") {
+      return (
+        <div key={col.key} className="space-y-1">
+          <Label>{col.label}</Label>
+          <Select value={editForm.status || "lead"} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(statusLabels).map(([k2, l2]) => (
+                <SelectItem key={k2} value={k2}>{l2}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
+    if (kind === "simnao") {
+      return (
+        <div key={col.key} className="space-y-1">
+          <Label>{col.label}</Label>
+          <Select value={(val as string) || ""} onValueChange={(v) => setEditForm({ ...editForm, [col.key]: v || null })}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Sim">Sim</SelectItem>
+              <SelectItem value="Nao">Não</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
+    if (kind === "number") {
+      return (
+        <div key={col.key} className="space-y-1">
+          <Label>{col.label}</Label>
+          <Input type="number" value={val != null ? String(val) : ""} onChange={(e) => setEditForm({ ...editForm, [col.key]: e.target.value ? Number(e.target.value) : null })} />
+        </div>
+      );
+    }
+    if (kind === "date" || kind === "datetime") {
+      const iso = val ? new Date(val as string).toISOString().split("T")[0] : "";
+      return (
+        <div key={col.key} className="space-y-1">
+          <Label>{col.label}</Label>
+          <Input type="date" value={iso} onChange={(e) => setEditForm({ ...editForm, [col.key]: e.target.value ? new Date(e.target.value).toISOString() : null })} />
+        </div>
+      );
+    }
+    // text
+    return (
+      <div key={col.key} className="space-y-1">
+        <Label>{col.label}</Label>
+        <Input value={(val as string) || ""} onChange={(e) => setEditForm({ ...editForm, [col.key]: e.target.value })} />
+      </div>
+    );
   };
 
   const allPageSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
@@ -680,150 +730,7 @@ const LeadsInsideSales = () => {
             <DialogTitle>Editar Lead</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label>Nome</Label>
-              <Input value={editForm.nome || ""} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input value={editForm.email || ""} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Telefone</Label>
-              <Input value={editForm.telefone || ""} onChange={(e) => setEditForm({ ...editForm, telefone: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>WhatsApp Digitado</Label>
-              <Input value={editForm.whatsapp || ""} onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Instagram</Label>
-              <Input value={editForm.instagram || ""} onChange={(e) => setEditForm({ ...editForm, instagram: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Status</Label>
-              <Select value={editForm.status || "lead"} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lead">Lead</SelectItem>
-                  <SelectItem value="mql">MQL</SelectItem>
-                  <SelectItem value="sql">SQL</SelectItem>
-                  <SelectItem value="reuniao_agendada">Reunião Agendada</SelectItem>
-                  <SelectItem value="reuniao_realizada">Reunião Realizada</SelectItem>
-                  <SelectItem value="venda">Venda</SelectItem>
-                  <SelectItem value="perdido">Perdido</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>SQL</Label>
-              <Select value={editForm.is_sql || ""} onValueChange={(v) => setEditForm({ ...editForm, is_sql: v || null })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Sim">Sim</SelectItem>
-                  <SelectItem value="Nao">Não</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Reunião Agendada</Label>
-              <Select value={editForm.is_reuniao_agendada || ""} onValueChange={(v) => setEditForm({ ...editForm, is_reuniao_agendada: v || null })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Sim">Sim</SelectItem>
-                  <SelectItem value="Nao">Não</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Reunião Realizada</Label>
-              <Select value={editForm.is_reuniao_realizada || ""} onValueChange={(v) => setEditForm({ ...editForm, is_reuniao_realizada: v || null })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Sim">Sim</SelectItem>
-                  <SelectItem value="Nao">Não</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Venda Realizada</Label>
-              <Select value={editForm.is_venda_realizada || ""} onValueChange={(v) => setEditForm({ ...editForm, is_venda_realizada: v || null })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Sim">Sim</SelectItem>
-                  <SelectItem value="Nao">Não</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Área de Atuação</Label>
-              <Input value={editForm.area_atuacao || ""} onChange={(e) => setEditForm({ ...editForm, area_atuacao: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Papel na Empresa</Label>
-              <Input value={editForm.papel || ""} onChange={(e) => setEditForm({ ...editForm, papel: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Faturamento Atual</Label>
-              <Input value={editForm.faturamento || ""} onChange={(e) => setEditForm({ ...editForm, faturamento: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Situação Atual</Label>
-              <Input value={editForm.situacao_atual || ""} onChange={(e) => setEditForm({ ...editForm, situacao_atual: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Utm Campaign</Label>
-              <Input value={editForm.utm_campaign || ""} onChange={(e) => setEditForm({ ...editForm, utm_campaign: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Medium</Label>
-              <Input value={editForm.utm_medium || ""} onChange={(e) => setEditForm({ ...editForm, utm_medium: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Content</Label>
-              <Input value={editForm.utm_content || ""} onChange={(e) => setEditForm({ ...editForm, utm_content: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>UTM Term</Label>
-              <Input value={editForm.utm_term || ""} onChange={(e) => setEditForm({ ...editForm, utm_term: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Nome Campanha</Label>
-              <Input value={editForm.campaign_name || ""} onChange={(e) => setEditForm({ ...editForm, campaign_name: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Nome do Anúncio</Label>
-              <Input value={editForm.ad_name || ""} onChange={(e) => setEditForm({ ...editForm, ad_name: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Responsável</Label>
-              <Input value={editForm.deal_user || ""} onChange={(e) => setEditForm({ ...editForm, deal_user: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Faturamento da Venda</Label>
-              <Input type="number" value={editForm.faturamento_venda ?? ""} onChange={(e) => setEditForm({ ...editForm, faturamento_venda: e.target.value ? Number(e.target.value) : null })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Data Venda Realizada</Label>
-              <Input type="date" value={editForm.data_venda_realizada ? new Date(editForm.data_venda_realizada).toISOString().split("T")[0] : ""} onChange={(e) => setEditForm({ ...editForm, data_venda_realizada: e.target.value ? new Date(e.target.value).toISOString() : null })} />
-            </div>
-            <div className="space-y-1 col-span-2">
-              <Label>Tags</Label>
-              <TagSelector
-                value={editForm.tags || ""}
-                onChange={(v) => setEditForm({ ...editForm, tags: v })}
-              />
-            </div>
+            {colunas.map((c) => renderEditField(c))}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingLead(null)}>Cancelar</Button>

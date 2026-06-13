@@ -4,7 +4,7 @@ import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
 
 // Colunas padrão exibidas na tabela de Leads (na ordem default).
 export const TABLE_COL_KEYS: string[] = [
-  "data_lead", "nome", "email", "telefone", "whatsapp", "instagram",
+  "data_lead", "nome", "email", "telefone", "whatsapp", "instagram", "cidade",
   "is_sql", "is_reuniao_agendada", "is_reuniao_realizada", "is_venda_realizada",
   "faturamento_venda", "data_venda_realizada", "area_atuacao", "papel",
   "faturamento", "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
@@ -13,7 +13,7 @@ export const TABLE_COL_KEYS: string[] = [
 
 // Chaves cuja coluna é ordenável (existem no SortKey da tabela).
 export const SORTABLE = new Set<string>([
-  "data_lead", "nome", "email", "telefone", "whatsapp", "instagram",
+  "data_lead", "nome", "email", "telefone", "whatsapp", "instagram", "cidade",
   "is_sql", "is_reuniao_agendada", "is_reuniao_realizada", "is_venda_realizada",
   "faturamento_venda", "data_venda_realizada", "area_atuacao", "papel",
   "faturamento", "situacao_atual", "utm_source", "utm_campaign", "utm_medium", "utm_content",
@@ -30,6 +30,7 @@ export const STANDARD_RENDER: Record<string, (l: any) => ReactNode> = {
   nome: (l) => <span className="font-medium">{l.nome || "—"}</span>,
   email: (l) => <span className="text-sm">{l.email || "—"}</span>,
   telefone: (l) => txt(l.telefone),
+  cidade: (l) => txt(l.cidade),
   whatsapp: (l) => txt(l.whatsapp),
   instagram: (l) => txt(l.instagram),
   is_sql: (l) => sim(l.is_sql),
