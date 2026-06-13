@@ -37,26 +37,27 @@ const CadastroProdutos = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
   const [deletingProduto, setDeletingProduto] = useState<Produto | null>(null);
-  const [form, setForm] = useState({ nome: "", slug: "" });
+  const [form, setForm] = useState({ nome: "", slug: "", slug_source: "" });
 
   const openAdd = () => {
-    setForm({ nome: "", slug: "" });
+    setForm({ nome: "", slug: "", slug_source: "" });
     setAddOpen(true);
   };
 
   const openEdit = (p: Produto) => {
     setEditingProduto(p);
-    setForm({ nome: p.nome, slug: p.slug });
+    setForm({ nome: p.nome, slug: p.slug, slug_source: p.slug_source ?? "" });
   };
 
   const handleAdd = async () => {
     if (!form.nome || !form.slug) {
-      toast.error("Preencha todos os campos");
+      toast.error("Preencha nome e slug da campanha");
       return;
     }
-    const { error } = await supabase.from("produtos").insert({
+    const { error } = await (supabase as any).from("produtos").insert({
       nome: form.nome,
       slug: normalizeSlug(form.slug),
+      slug_source: form.slug_source ? normalizeSlug(form.slug_source) : null,
     });
     if (error) {
       toast.error("Erro ao cadastrar produto");
@@ -69,9 +70,9 @@ const CadastroProdutos = () => {
 
   const handleEdit = async () => {
     if (!editingProduto || !form.nome || !form.slug) return;
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("produtos")
-      .update({ nome: form.nome, slug: normalizeSlug(form.slug) })
+      .update({ nome: form.nome, slug: normalizeSlug(form.slug), slug_source: form.slug_source ? normalizeSlug(form.slug_source) : null })
       .eq("id", editingProduto.id);
     if (error) {
       toast.error("Erro ao atualizar produto");
@@ -205,11 +206,19 @@ const CadastroProdutos = () => {
               />
             </div>
             <div className="space-y-1">
-              <Label>Slug (termo para filtrar UTM Medium)</Label>
+              <Label>Slug do UTM Campaign (nome da campanha — filtra o investimento)</Label>
               <Input
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                placeholder="Ex: curso-marketing"
+                placeholder="Ex: franquia"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Slug do UTM Source (filtra os leads)</Label>
+              <Input
+                value={form.slug_source}
+                onChange={(e) => setForm({ ...form, slug_source: e.target.value })}
+                placeholder="Ex: google_ads"
               />
             </div>
           </div>
@@ -235,10 +244,18 @@ const CadastroProdutos = () => {
               />
             </div>
             <div className="space-y-1">
-              <Label>Slug (termo para filtrar UTM Medium)</Label>
+              <Label>Slug do UTM Campaign (nome da campanha — filtra o investimento)</Label>
               <Input
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Slug do UTM Source (filtra os leads)</Label>
+              <Input
+                value={form.slug_source}
+                onChange={(e) => setForm({ ...form, slug_source: e.target.value })}
+                placeholder="Ex: google_ads"
               />
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Filters } from "@/lib/mockData";
+import { useProdutos } from "@/hooks/useProdutos";
 
 export function getDateRange(filters: Filters): { start: string; end: string } {
   if (filters.startDate && filters.endDate) {
@@ -114,6 +115,12 @@ export interface LeadsKpis {
 }
 
 export function useLeadsData(filters: Filters) {
+  const { data: produtos = [] } = useProdutos();
+  // slug_source dos produtos selecionados (para filtrar leads por utm_source).
+  const sourcesSel = filters.produtos
+    .map((slug) => produtos.find((p) => p.slug === slug)?.slug_source)
+    .filter((s): s is string => !!s);
+
   return useQuery({
     queryKey: [
       "leads-kpi",
@@ -121,13 +128,14 @@ export function useLeadsData(filters: Filters) {
       filters.startDate?.toISOString(),
       filters.endDate?.toISOString(),
       filters.produtos,
+      sourcesSel.join(","),
     ],
     queryFn: async (): Promise<LeadsKpis> => {
       const { start, end } = getDateRange(filters);
 
       let query = supabase
         .from("leads")
-        .select("status, utm_medium, campaign_name, faturamento, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
+        .select("status, utm_source, utm_medium, campaign_name, faturamento, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda")
         .gte("data_lead", start)
         .lte("data_lead", end);
 
@@ -137,14 +145,12 @@ export function useLeadsData(filters: Filters) {
 
       let leads = data || [];
 
-      // Filter by product slugs via campaign_name (accent-insensitive)
-      if (filters.produtos.length > 0) {
+      // Filtra leads por UTM Source (slug_source do produto selecionado).
+      if (filters.produtos.length > 0 && sourcesSel.length > 0) {
         const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const normalizedSlugs = filters.produtos.map(normalize);
-        leads = leads.filter((l) =>
-          l.campaign_name && normalizedSlugs.some((slug) =>
-            normalize(l.campaign_name!).includes(slug)
-          )
+        const alvos = sourcesSel.map(normalize);
+        leads = leads.filter((l: any) =>
+          l.utm_source && alvos.some((s) => normalize(l.utm_source).includes(s))
         );
       }
 
