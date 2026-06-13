@@ -37,10 +37,14 @@ const InsideSales = () => {
     const savedStartDate = localStorage.getItem("is_start_date");
     const savedEndDate = localStorage.getItem("is_end_date");
     const savedProdutos = localStorage.getItem("is_produtos");
+    const dr = savedDateRange || "90d";
+    // Só restaura datas salvas quando o período é "personalizado"; nos presets
+    // (90d, 30d, etc.) usa o cálculo do preset — evita um range antigo travado.
+    const isCustom = dr === "custom";
     return {
-      dateRange: savedDateRange || "90d",
-      startDate: savedStartDate ? new Date(savedStartDate) : undefined,
-      endDate: savedEndDate ? new Date(savedEndDate) : undefined,
+      dateRange: dr,
+      startDate: isCustom && savedStartDate ? new Date(savedStartDate) : undefined,
+      endDate: isCustom && savedEndDate ? new Date(savedEndDate) : undefined,
       adAccount: savedAccount || "all",
       city: savedCity || "all",
       produtos: savedProdutos ? JSON.parse(savedProdutos) : [],
