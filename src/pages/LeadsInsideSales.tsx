@@ -55,7 +55,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { TagSelector } from "@/components/TagSelector";
 
-type SortKey = "data_lead" | "nome" | "email" | "telefone" | "status" | "is_sql" | "is_reuniao_agendada" | "is_reuniao_realizada" | "is_venda_realizada" | "faturamento_venda" | "data_venda_realizada" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
+type SortKey = "data_lead" | "nome" | "email" | "telefone" | "is_sql" | "is_reuniao_agendada" | "is_reuniao_realizada" | "is_venda_realizada" | "faturamento_venda" | "data_venda_realizada" | "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term" | "cidade" | "deal_user" | "tags" | "whatsapp" | "instagram" | "area_atuacao" | "papel" | "faturamento" | "situacao_atual" | "ad_name" | "campaign_name";
 type SortDir = "asc" | "desc";
 
 type LeadRow = {
@@ -64,7 +64,6 @@ type LeadRow = {
   nome: string | null;
   email: string | null;
   telefone: string | null;
-  status: string;
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
@@ -145,20 +144,9 @@ function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
   return { start: start.toISOString(), end: now.toISOString() };
 }
 
-const statusLabels: Record<string, string> = {
-  lead: "Lead",
-  mql: "MQL",
-  sql: "SQL",
-  reuniao_agendada: "Reunião Agendada",
-  reuniao_realizada: "Reunião Realizada",
-  venda: "Venda",
-  perdido: "Perdido",
-};
-
 // Tipo de controle de cada campo padrão no modal de edição (default = texto).
-type FieldKind = "text" | "status" | "simnao" | "number" | "date" | "datetime" | "tags";
+type FieldKind = "text" | "simnao" | "number" | "date" | "datetime" | "tags";
 const FIELD_KIND: Record<string, FieldKind> = {
-  status: "status",
   is_sql: "simnao",
   is_reuniao_agendada: "simnao",
   is_reuniao_realizada: "simnao",
@@ -167,16 +155,6 @@ const FIELD_KIND: Record<string, FieldKind> = {
   data_venda_realizada: "date",
   data_lead: "datetime",
   tags: "tags",
-};
-
-const statusColor = (s: string): "default" | "secondary" | "destructive" | "outline" => {
-  switch (s) {
-    case "venda": return "default";
-    case "mql":
-    case "sql": return "secondary";
-    case "perdido": return "destructive";
-    default: return "outline";
-  }
 };
 
 const LeadsInsideSales = () => {
@@ -189,7 +167,6 @@ const LeadsInsideSales = () => {
     const saved = localStorage.getItem("leads_end_date");
     return saved ? new Date(saved) : undefined;
   });
-  const [statusFilter, setStatusFilter] = useState("all");
   const [nomeFilter, setNomeFilter] = useState("");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -212,18 +189,14 @@ const LeadsInsideSales = () => {
   );
 
   const { data: leads = [], isLoading } = useQuery({
-    queryKey: ["leads-tabela", start, end, statusFilter],
+    queryKey: ["leads-tabela", start, end],
     queryFn: async () => {
-      let query = supabase
+      const query = supabase
         .from("leads")
-        .select("id, data_lead, nome, email, telefone, status, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, custom")
+        .select("id, data_lead, nome, email, telefone, is_sql, is_reuniao_agendada, is_reuniao_realizada, is_venda_realizada, faturamento_venda, data_venda_realizada, utm_source, utm_medium, utm_campaign, utm_content, utm_term, cidade, deal_user, tags, whatsapp, instagram, area_atuacao, papel, faturamento, situacao_atual, ad_name, campaign_name, custom")
         .gte("data_lead", start)
         .lte("data_lead", end)
         .order("data_lead", { ascending: false });
-
-      if (statusFilter !== "all") {
-        query = query.eq("status", statusFilter);
-      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -358,8 +331,6 @@ const LeadsInsideSales = () => {
       const k = col.key;
       if (k === "faturamento_venda") {
         update.faturamento_venda = editForm.faturamento_venda ?? null;
-      } else if (k === "status") {
-        update.status = editForm.status || "lead";
       } else {
         update[k] = (editForm as Record<string, unknown>)[k] ?? null;
       }
@@ -416,7 +387,6 @@ const LeadsInsideSales = () => {
         </div>
       );
     }
-    const k = col.key as keyof LeadRow;
     const kind = FIELD_KIND[col.key] || "text";
     const val = (editForm as Record<string, unknown>)[col.key];
 
@@ -425,21 +395,6 @@ const LeadsInsideSales = () => {
         <div key={col.key} className="space-y-1 col-span-2">
           <Label>{col.label}</Label>
           <TagSelector value={editForm.tags || ""} onChange={(v) => setEditForm({ ...editForm, tags: v })} />
-        </div>
-      );
-    }
-    if (kind === "status") {
-      return (
-        <div key={col.key} className="space-y-1">
-          <Label>{col.label}</Label>
-          <Select value={editForm.status || "lead"} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(statusLabels).map(([k2, l2]) => (
-                <SelectItem key={k2} value={k2}>{l2}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       );
     }
@@ -562,12 +517,11 @@ const LeadsInsideSales = () => {
                 onChange={(e) => { setNomeFilter(e.target.value); setPage(1); }}
                 className="w-[220px] bg-card"
               />
-              {(statusFilter !== "all" || nomeFilter) && (
+              {nomeFilter && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setStatusFilter("all");
                     setNomeFilter("");
                     setPage(1);
                   }}
