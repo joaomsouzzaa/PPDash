@@ -229,10 +229,13 @@ export function MapeamentoLeads() {
             )}
             <Input value={mapa[c.key] ?? ""} onChange={(e) => setMapa((m) => ({ ...m, [c.key]: e.target.value }))}
               placeholder="campo do CRM" className="h-8 flex-1 font-mono text-xs" />
-            {c.fixo ? (
-              <span className="w-[72px] shrink-0" />
-            ) : editKey === c.key ? (
+            {editKey === c.key ? (
               <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => salvarRename(c)} title="Salvar nome"><Check className="h-4 w-4" /></Button>
+            ) : c.fixo ? (
+              <>
+                <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear"><Pencil className="h-3.5 w-3.5" /></Button>
+                <span className="w-8 shrink-0" />
+              </>
             ) : (
               <>
                 <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => { setEditKey(c.key); setEditLabel(c.label); }} title="Renomear"><Pencil className="h-3.5 w-3.5" /></Button>
