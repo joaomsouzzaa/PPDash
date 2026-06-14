@@ -250,7 +250,7 @@ const CadastroProdutos = () => {
           )}
         </div>
       )}
-      {form.plataforma === "google" && (
+      {form.plataforma === "none" && (
         <div className="space-y-1">
           <Label>Investimento total (R$) — manual</Label>
           <Input
@@ -258,9 +258,9 @@ const CadastroProdutos = () => {
             inputMode="decimal"
             value={form.investimento_manual}
             onChange={(e) => setForm({ ...form, investimento_manual: e.target.value })}
-            placeholder="Ex: 1576,86 (usado enquanto a API do Google não estiver liberada)"
+            placeholder="Ex: 1576,86 (deixe vazio para zerar)"
           />
-          <p className="text-xs text-muted-foreground">Opcional. Mostrado no dashboard exatamente como digitado (não muda com o período). Quando a conta Google for selecionada e a API liberar, o valor automático assume.</p>
+          <p className="text-xs text-muted-foreground">Opcional. Mostrado no dashboard exatamente como digitado (não muda com o período). Vazio = investimento zerado.</p>
         </div>
       )}
       <div className="space-y-1">

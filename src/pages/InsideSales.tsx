@@ -95,19 +95,17 @@ const InsideSales = () => {
     if (canalCarregando) return;
     setLoadingSpend(true);
     try {
-      // Canal sem plataforma de investimento → zera.
-      if (canalPlataforma === "none") { setMetaInvestimento(0); return; }
-      // Canal do Google Ads → API google-ads; se não houver conta/API, usa o investimento manual (R$/dia × dias).
+      // Sem plataforma → usa o investimento manual digitado (ou zero).
+      if (canalPlataforma === "none") { setMetaInvestimento(canalInvManual != null ? canalInvManual : 0); return; }
+      // Canal do Google Ads → puxa da API google-ads.
       if (canalPlataforma === "google") {
-        if (canalGoogleId) {
-          try {
-            const spend = await fetchGoogleAdSpend(canalGoogleId, filters.dateRange, filters.startDate, filters.endDate, canalSlug);
-            setMetaInvestimento(spend);
-            return;
-          } catch { /* cai para o manual abaixo */ }
+        if (!canalGoogleId) { setMetaInvestimento(null); return; }
+        try {
+          const spend = await fetchGoogleAdSpend(canalGoogleId, filters.dateRange, filters.startDate, filters.endDate, canalSlug);
+          setMetaInvestimento(spend);
+        } catch {
+          setMetaInvestimento(null);
         }
-        // Investimento manual = valor total fixo (mostrado como digitado).
-        setMetaInvestimento(canalInvManual != null ? canalInvManual : null);
         return;
       }
       // Meta Ads (padrão).
