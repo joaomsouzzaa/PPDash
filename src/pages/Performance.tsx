@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
+import { CacCriativos } from "@/components/CacCriativos";
 import { useCidades } from "@/hooks/useCidades";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
@@ -183,6 +184,8 @@ export default function Performance() {
 
           <div className="p-6 space-y-6 min-w-0 max-w-full overflow-x-hidden">
             <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} />
+
+            <CacCriativos filters={filters} />
 
             {!enabled ? (
               <Card><CardContent className="py-10 text-center text-muted-foreground">

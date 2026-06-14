@@ -683,6 +683,39 @@ export async function fetchAdSetBreakdown(
 }
 
 /** Insights por ANÚNCIO/CRIATIVO (top por gasto). */
+// Nomes dos anúncios ATIVOS das contas (para vincular criativos ao investimento).
+export async function fetchActiveAdNames(accountIds: string[]): Promise<string[]> {
+  const names = new Set<string>();
+  for (const id of accountIds) {
+    try {
+      const rows = await graphApiFetchAll(`/${id}/ads`, { fields: "name,effective_status", limit: "500" });
+      for (const r of rows) if (r?.name && r.effective_status === "ACTIVE") names.add(r.name as string);
+    } catch { /* sem conexão / rate limit */ }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+// Gasto por nome de anúncio (ad_name -> spend) no período. Usado no CAC por criativo.
+export async function fetchAdSpendByName(
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d"
+): Promise<Record<string, number>> {
+  const time_range = rangeParam(startDate, endDate, dateRange);
+  const out: Record<string, number> = {};
+  await Promise.all(accountIds.map(async (id) => {
+    try {
+      const res = await graphApiFetch<{ data: Array<{ ad_name?: string; spend?: string }> }>(`/${id}/insights`, {
+        level: "ad", time_range, limit: "500", fields: "ad_name,spend",
+      });
+      for (const r of res.data || []) {
+        const n = (r.ad_name || "").trim();
+        if (!n) continue;
+        out[n] = (out[n] || 0) + (parseFloat(r.spend || "0") || 0);
+      }
+    } catch { /* ignora conta sem dados */ }
+  }));
+  return out;
+}
+
 export async function fetchAdBreakdown(
   accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
 ): Promise<AdRow[]> {
