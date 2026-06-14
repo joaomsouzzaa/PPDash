@@ -133,7 +133,6 @@ const InsideSales = () => {
   const reunioesRealizadasPercent = reunioesAgendadas > 0 ? (reunioesRealizadas / reunioesAgendadas) * 100 : 0;
   const vendas = leadsKpis?.vendas ?? 0;
   const vendasPercent = reunioesRealizadas > 0 ? (vendas / reunioesRealizadas) * 100 : 0;
-  const vendasRealizadas = leadsKpis?.vendasRealizadas ?? 0;
   const faturamentoVenda = leadsKpis?.faturamentoVenda ?? 0;
   const roas = investimento > 0 ? faturamentoVenda / investimento : 0;
 
@@ -311,13 +310,8 @@ const InsideSales = () => {
               />
             </div>
 
-            {/* Row 5: Venda Realizada, Faturamento, ROAS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Venda Realizada"
-                value={String(vendasRealizadas)}
-                icon={ShoppingCart}
-              />
+            {/* Row 5: Faturamento, ROAS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <KpiCard
                 title="Faturamento"
                 value={fmt(faturamentoVenda)}
