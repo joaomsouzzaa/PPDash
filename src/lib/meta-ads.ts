@@ -580,15 +580,17 @@ export interface CampaignRow {
   // Funil de conversão
   linkClicks: number; cpm: number; pageViews: number; checkouts: number; purchases: number;
   connectRate: number; costPerPageView: number; convLP: number; cac: number;
+  leads: number; cpl: number;
 }
 export interface AdSetRow {
   campaign: string; name: string; spend: number; reach: number; impressions: number; clicks: number; ctr: number; cpc: number; frequency: number;
   linkClicks: number; cpm: number; pageViews: number; checkouts: number; purchases: number;
   connectRate: number; costPerPageView: number; convLP: number; cac: number;
+  leads: number; cpl: number;
 }
 export interface AdRow {
   name: string; campaign: string; spend: number; impressions: number; clicks: number; ctr: number;
-  purchases: number; cac: number;
+  purchases: number; cac: number; leads: number; cpl: number;
   adId?: string; thumbnail?: string;
 }
 
@@ -607,9 +609,12 @@ function rangeParam(startDate?: Date, endDate?: Date, dateRange = "30d"): string
     : buildTimeRange(dateRange)));
 }
 
+// Filtro de status do Meta insights (só entidades ativas). entity = campaign|adset|ad.
+const activeFilter = (entity: string) => JSON.stringify([{ field: `${entity}.effective_status`, operator: "IN", value: ["ACTIVE"] }]);
+
 /** Insights por CAMPANHA (cards de Performance por Campanha). */
 export async function fetchCampaignBreakdown(
-  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false, activeOnly = false
 ): Promise<CampaignRow[]> {
   const time_range = rangeParam(startDate, endDate, dateRange);
   const variants = campaignSlug ? slugVariants(campaignSlug) : [];
@@ -618,6 +623,7 @@ export async function fetchCampaignBreakdown(
     const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
       level: "campaign", time_range, limit: "500",
       fields: "campaign_id,campaign_name,spend,reach,impressions,clicks,ctr,cpc,frequency,inline_link_clicks,actions",
+      ...(activeOnly ? { filtering: activeFilter("campaign") } : {}),
     });
     for (const r of res.data || []) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
@@ -627,6 +633,7 @@ export async function fetchCampaignBreakdown(
       const pageViews = sumAction(r.actions, ["landing_page_view"]);
       const checkouts = pickAction(r.actions, ["omni_initiated_checkout", "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout"]);
       const purchases = pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+      const leads = pickAction(r.actions, LEAD_ACTIONS);
       rows.push({
         id: r.campaign_id, name: r.campaign_name || "—",
         spend, reach: parseInt(r.reach) || 0, impressions,
@@ -641,6 +648,7 @@ export async function fetchCampaignBreakdown(
         costPerPageView: pageViews > 0 ? spend / pageViews : 0,
         convLP: pageViews > 0 ? (checkouts / pageViews) * 100 : 0,
         cac: purchases > 0 ? spend / purchases : 0,
+        leads, cpl: leads > 0 ? spend / leads : 0,
       });
     }
   }));
@@ -649,7 +657,7 @@ export async function fetchCampaignBreakdown(
 
 /** Insights por CONJUNTO DE ANÚNCIOS (tabela). */
 export async function fetchAdSetBreakdown(
-  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false, activeOnly = false
 ): Promise<AdSetRow[]> {
   const time_range = rangeParam(startDate, endDate, dateRange);
   const variants = campaignSlug ? slugVariants(campaignSlug) : [];
@@ -658,6 +666,7 @@ export async function fetchAdSetBreakdown(
     const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
       level: "adset", time_range, limit: "500",
       fields: "campaign_name,adset_name,spend,reach,impressions,clicks,ctr,cpc,frequency,inline_link_clicks,actions",
+      ...(activeOnly ? { filtering: activeFilter("adset") } : {}),
     });
     for (const r of res.data || []) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
@@ -667,6 +676,7 @@ export async function fetchAdSetBreakdown(
       const pageViews = sumAction(r.actions, ["landing_page_view"]);
       const checkouts = pickAction(r.actions, ["omni_initiated_checkout", "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout"]);
       const purchases = pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+      const leads = pickAction(r.actions, LEAD_ACTIONS);
       rows.push({
         campaign: r.campaign_name || "—", name: r.adset_name || "—",
         spend, reach: parseInt(r.reach) || 0, impressions, clicks: parseInt(r.clicks) || 0,
@@ -677,6 +687,7 @@ export async function fetchAdSetBreakdown(
         costPerPageView: pageViews > 0 ? spend / pageViews : 0,
         convLP: pageViews > 0 ? (checkouts / pageViews) * 100 : 0,
         cac: purchases > 0 ? spend / purchases : 0,
+        leads, cpl: leads > 0 ? spend / leads : 0,
       });
     }
   }));
@@ -743,7 +754,7 @@ export async function fetchDailyAdSpendByName(
 }
 
 export async function fetchAdBreakdown(
-  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
+  accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false, activeOnly = false
 ): Promise<AdRow[]> {
   const time_range = rangeParam(startDate, endDate, dateRange);
   const variants = campaignSlug ? slugVariants(campaignSlug) : [];
@@ -752,16 +763,19 @@ export async function fetchAdBreakdown(
     const res = await graphApiFetch<{ data: Array<any> }>(`/${id}/insights`, {
       level: "ad", time_range, limit: "500",
       fields: "ad_id,ad_name,campaign_name,spend,impressions,clicks,ctr,actions",
+      ...(activeOnly ? { filtering: activeFilter("ad") } : {}),
     });
     for (const r of res.data || []) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
       const spend = parseFloat(r.spend) || 0;
       const purchases = pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+      const leads = pickAction(r.actions, LEAD_ACTIONS);
       rows.push({
         adId: r.ad_id, name: r.ad_name || "—", campaign: r.campaign_name || "—",
         spend, impressions: parseInt(r.impressions) || 0,
         clicks: parseInt(r.clicks) || 0, ctr: parseFloat(r.ctr) || 0,
         purchases, cac: purchases > 0 ? spend / purchases : 0,
+        leads, cpl: leads > 0 ? spend / leads : 0,
       });
     }
   }));

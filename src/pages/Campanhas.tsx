@@ -13,7 +13,7 @@ import {
   fetchAdAccounts, fetchCampaignBreakdown, fetchAdSetBreakdown, fetchAdBreakdown,
   hydrateMetaTokenFromServer, isTokenExpired, type CampaignRow,
 } from "@/lib/meta-ads";
-import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon, Lightbulb, Sparkles, ShoppingCart, Target, Loader2 } from "lucide-react";
+import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon, Lightbulb, Sparkles, ShoppingCart, Target, Loader2, Users } from "lucide-react";
 
 const fmtBRL = (n: number) => `R$ ${(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtNum = (n: number) => (n || 0).toLocaleString("pt-BR");
@@ -45,7 +45,7 @@ export default function Campanhas() {
   // Persiste a cidade (todas as páginas mantêm a última selecionada, inclusive no F5).
   const onFiltersChange = (f: Filters) => { setFilters(f); localStorage.setItem("selected_city", f.city); };
   // Critério do Top Criativos: menor CAC ou mais vendas.
-  const [creativoRank, setCreativoRank] = useState<"cac" | "vendas">("cac");
+  const [creativoRank, setCreativoRank] = useState<"cac" | "vendas" | "leads">("cac");
 
   const { data: cidades = [] } = useCidades();
   const selectedCidade = cidades.find((c) => c.slug === filters.city);
@@ -63,15 +63,15 @@ export default function Campanhas() {
   // keepPreviousData: mantém layout/tabelas enquanto novos dados carregam (só os dados mudam).
   const { data: campanhas = [], isFetching: lc } = useQuery({
     queryKey: ["camp", ...qk], enabled, placeholderData: (p) => p,
-    queryFn: async () => fetchCampaignBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
+    queryFn: async () => fetchCampaignBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false, true),
   });
   const { data: adsets = [], isFetching: loadingAdsets } = useQuery({
     queryKey: ["adsets", ...qk], enabled, placeholderData: (p) => p,
-    queryFn: async () => fetchAdSetBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
+    queryFn: async () => fetchAdSetBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false, true),
   });
   const { data: ads = [], isFetching: loadingAds } = useQuery({
     queryKey: ["ads", ...qk], enabled, placeholderData: (p) => p,
-    queryFn: async () => fetchAdBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
+    queryFn: async () => fetchAdBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false, true),
   });
 
   // Alertas & Insights gerados pela IA (Gestor de Tráfego), por cidade (cron 9h).
@@ -118,13 +118,20 @@ export default function Campanhas() {
     ? insightsIA.map((i) => { const s = nivelStyle(i.nivel); return { icon: s.icon, cls: s.cls, titulo: i.titulo, texto: i.texto }; })
     : alertas;
 
-  // Top 3 criativos conforme o critério escolhido (menor CAC ou mais vendas).
+  // Top 3 criativos conforme o critério: menor CAC, mais vendas ou menor CPL/mais leads.
   const topCriativos = (() => {
-    const comV = ads.filter((a) => a.purchases > 0);
-    const ordenado = creativoRank === "vendas"
-      ? [...comV].sort((a, b) => (b.purchases - a.purchases) || (a.cac - b.cac))
-      : [...comV].sort((a, b) => a.cac - b.cac);
-    return (ordenado.length ? ordenado : ads).slice(0, 3);
+    let ordenado: typeof ads;
+    if (creativoRank === "vendas") {
+      const comV = ads.filter((a) => a.purchases > 0);
+      ordenado = comV.length ? [...comV].sort((a, b) => (b.purchases - a.purchases) || (a.cac - b.cac)) : ads;
+    } else if (creativoRank === "leads") {
+      const comL = ads.filter((a) => a.leads > 0);
+      ordenado = comL.length ? [...comL].sort((a, b) => (b.leads - a.leads) || (a.cpl - b.cpl)) : ads;
+    } else {
+      const comV = ads.filter((a) => a.purchases > 0);
+      ordenado = comV.length ? [...comV].sort((a, b) => a.cac - b.cac) : ads;
+    }
+    return ordenado.slice(0, 3);
   })();
 
   return (
@@ -175,6 +182,8 @@ export default function Campanhas() {
                                 ["Impressões", fmtNum(c.impressions)],
                                 ["CPM", fmtBRL(c.cpm)],
                                 ["CTR", fmtPct(c.ctr)],
+                                ["Leads", fmtNum(c.leads)],
+                                ["CPL", c.cpl > 0 ? fmtBRL(c.cpl) : "—"],
                                 ["Cliques no link", fmtNum(c.linkClicks)],
                                 ["CPC", fmtBRL(c.cpc)],
                                 ["Connect Rate", fmtPct(c.connectRate)],
@@ -226,6 +235,8 @@ export default function Campanhas() {
                               ["Impressões", fmtNum(a.impressions)],
                               ["CPM", fmtBRL(a.cpm)],
                               ["CTR", fmtPct(a.ctr)],
+                              ["Leads", fmtNum(a.leads)],
+                              ["CPL", a.cpl > 0 ? fmtBRL(a.cpl) : "—"],
                               ["Cliques no link", fmtNum(a.linkClicks)],
                               ["CPC", fmtBRL(a.cpc)],
                               ["Connect Rate", fmtPct(a.connectRate)],
@@ -260,6 +271,10 @@ export default function Campanhas() {
                       className={`px-2 py-1 flex items-center gap-1 text-xs ${creativoRank === "vendas" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
                       <ShoppingCart className="h-3.5 w-3.5" /> Mais vendas
                     </button>
+                    <button type="button" onClick={() => setCreativoRank("leads")} title="Menor CPL / Mais leads"
+                      className={`px-2 py-1 flex items-center gap-1 text-xs ${creativoRank === "leads" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
+                      <Users className="h-3.5 w-3.5" /> Mais leads
+                    </button>
                   </div>
                 </div>
                 {topCriativos.length === 0 && loadingAds ? (
@@ -280,9 +295,11 @@ export default function Campanhas() {
                             <p className="text-sm font-medium leading-tight line-clamp-2">{a.name}</p>
                             <p className="text-[11px] text-muted-foreground truncate">{a.campaign}</p>
                           </div>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                          <div className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-xs">
                             <div><span className="text-muted-foreground">Investimento</span><br /><span className="font-semibold">{fmtBRL(a.spend)}</span></div>
                             <div><span className="text-muted-foreground">CTR</span><br /><span className="font-semibold text-blue-400">{fmtPct(a.ctr)}</span></div>
+                            <div><span className="text-muted-foreground">Leads</span><br /><span className="font-semibold">{fmtNum(a.leads)}</span></div>
+                            <div><span className="text-muted-foreground">CPL</span><br /><span className="font-semibold">{a.cpl > 0 ? fmtBRL(a.cpl) : "—"}</span></div>
                             <div><span className="text-muted-foreground">Vendas</span><br /><span className="font-semibold">{fmtNum(a.purchases)}</span></div>
                             <div><span className="text-muted-foreground">CAC</span><br /><span className="font-semibold">{a.cac > 0 ? fmtBRL(a.cac) : "—"}</span></div>
                           </div>
