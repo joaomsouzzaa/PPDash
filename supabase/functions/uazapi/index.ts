@@ -345,12 +345,19 @@ async function resumoGeral(supabase: any): Promise<Record<string, string | numbe
   };
 }
 
-// Gasto total da conta no dia anterior (BRT).
+// Gasto total no período (todas as contas Meta da config — igual ao "Geral").
 async function metaSpendDia(meta: any, since: string, until: string): Promise<number> {
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
-  const r = await fetch(`${GRAPH}/${meta.account_id}/insights?fields=spend&time_range=${tr}&access_token=${meta.access_token}`);
-  const j = await r.json();
-  let s = 0; for (const row of j.data || []) s += parseFloat(row.spend) || 0; return s;
+  const contas: string[] = Array.isArray(meta.contas) && meta.contas.length ? meta.contas : [meta.account_id];
+  let s = 0;
+  for (const acc of contas) {
+    try {
+      const r = await fetch(`${GRAPH}/${acc}/insights?fields=spend&time_range=${tr}&access_token=${meta.access_token}`);
+      const j = await r.json();
+      for (const row of j.data || []) s += parseFloat(row.spend) || 0;
+    } catch { /* ignora conta sem dados */ }
+  }
+  return s;
 }
 
 // Diário de Performance: métricas do DIA ANTERIOR (investimento, leads, CPL, MQL, CPL/MQL, taxa MQL).

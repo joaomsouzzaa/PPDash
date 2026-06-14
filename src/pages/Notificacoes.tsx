@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
-import { Bot, Plus, Pencil, Trash2, Send, Wifi, WifiOff, RefreshCw, QrCode, Eye, EyeOff, Check, ChevronsUpDown, History, CheckCircle2, XCircle } from "lucide-react";
+import { Bot, Plus, Pencil, Trash2, Send, Wifi, WifiOff, RefreshCw, QrCode, Eye, EyeOff, Check, ChevronsUpDown, History, CheckCircle2, XCircle, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { syncMetaTokenToServer } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
@@ -143,6 +143,24 @@ export default function Notificacoes() {
       return (data || []) as Notificacao[];
     },
   });
+
+  // Config: quais tipos de notificação (gatilhos) ficam disponíveis. null = todos.
+  const { data: orgCfg } = useQuery({
+    queryKey: ["notif-org-cfg"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("organizations").select("id, notif_gatilhos").order("created_at").limit(1).maybeSingle();
+      return data as { id: string; notif_gatilhos: string[] | null } | null;
+    },
+  });
+  const gatilhosAtivos: string[] = Array.isArray(orgCfg?.notif_gatilhos) ? orgCfg!.notif_gatilhos : Object.keys(GATILHOS);
+  const [configOpen, setConfigOpen] = useState(false);
+  const toggleGatilho = async (k: string) => {
+    if (!orgCfg?.id) return;
+    const atual = Array.isArray(orgCfg.notif_gatilhos) ? [...orgCfg.notif_gatilhos] : Object.keys(GATILHOS);
+    const novo = atual.includes(k) ? atual.filter((x) => x !== k) : [...atual, k];
+    await (supabase as any).from("organizations").update({ notif_gatilhos: novo }).eq("id", orgCfg.id);
+    queryClient.invalidateQueries({ queryKey: ["notif-org-cfg"] });
+  };
 
   // Histórico de envios de uma notificação
   const [logNotif, setLogNotif] = useState<Notificacao | null>(null);
@@ -389,9 +407,14 @@ export default function Notificacoes() {
                 Envie notificações no WhatsApp (UAZAPI) para grupos ou números
               </p>
             </div>
-            <Button onClick={abrirNovo}>
-              <Plus className="mr-2 h-4 w-4" /> Nova notificação
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setConfigOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" /> Configuração
+              </Button>
+              <Button onClick={abrirNovo}>
+                <Plus className="mr-2 h-4 w-4" /> Nova notificação
+              </Button>
+            </div>
           </header>
 
           <div className="p-6 space-y-6">
@@ -482,7 +505,7 @@ export default function Notificacoes() {
               <Select value={form.gatilho} onValueChange={(v) => setForm({ ...form, gatilho: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(GATILHOS).map(([k, g]) => (
+                  {Object.entries(GATILHOS).filter(([k]) => gatilhosAtivos.includes(k) || k === form.gatilho).map(([k, g]) => (
                     <SelectItem key={k} value={k}>{g.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -781,6 +804,28 @@ export default function Notificacoes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Configuração: ativar/desativar os tipos de notificação disponíveis */}
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Tipos de notificação</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Ative/desative os tipos que aparecem ao criar uma notificação.</p>
+          <div className="space-y-2 pt-1">
+            {Object.entries(GATILHOS).map(([k, g]) => (
+              <div key={k} className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{g.label}</p>
+                  <p className="text-xs text-muted-foreground truncate">{g.desc}</p>
+                </div>
+                <Switch checked={gatilhosAtivos.includes(k)} onCheckedChange={() => toggleGatilho(k)} />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setConfigOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   );
 }
