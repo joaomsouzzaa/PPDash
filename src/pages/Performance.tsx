@@ -227,6 +227,8 @@ export default function Performance() {
                   <KpiCard title="DMs Iniciadas" value={L(fmtNum(kpis?.dms || 0))} icon={MessageSquare} />
                   <KpiCard title="Salvamentos" value={L(fmtNum(kpis?.saves || 0))} icon={Bookmark} />
                   <KpiCard title="Reações" value={L(fmtNum(kpis?.reactions || 0))} icon={Heart} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="Comentários" value={L(fmtNum(kpis?.comments || 0))} icon={MessageCircle} />
                   <KpiCard title="Video Views" value={L(fmtNum(kpis?.videoViews || 0))} icon={PlayCircle} />
                 </div>
