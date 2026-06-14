@@ -7,7 +7,7 @@ import { DashboardFilters } from "@/components/DashboardFilters";
 import { CacCriativos } from "@/components/CacCriativos";
 import { CacSemanalGeral } from "@/components/CacSemanalGeral";
 import { CacSemanalPorCriativo } from "@/components/CacSemanalPorCriativo";
-import { useCidades } from "@/hooks/useCidades";
+import { useProdutos } from "@/hooks/useProdutos";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -120,9 +120,11 @@ export default function Performance() {
   // Persiste a cidade (todas as páginas mantêm a última selecionada, inclusive no F5).
   const onFiltersChange = (f: Filters) => { setFilters(f); localStorage.setItem("selected_city", f.city); };
 
-  const { data: cidades = [] } = useCidades();
-  const selectedCidade = cidades.find((c) => c.slug === filters.city);
-  const slug = filters.city !== "all" ? selectedCidade?.slug : undefined;
+  const { data: produtos = [] } = useProdutos();
+  // Canal de aquisição selecionado define a conta (conta_id) e a campanha (slug).
+  const canal = filters.canalId ? produtos.find((p) => p.id === filters.canalId) : null;
+  const slug = canal?.slug || undefined;
+  const canalContaId = canal?.conta_id || null;
 
   useEffect(() => {
     (async () => { if (await hydrateMetaTokenFromServer()) setMetaConnected(true); })();
@@ -131,28 +133,28 @@ export default function Performance() {
   const enabled = metaConnected && !isTokenExpired();
 
   const getAccountIds = async () => {
-    if (filters.adAccount !== "all") return [filters.adAccount];
+    if (canalContaId) return [canalContaId];
     const accounts = await fetchAdAccounts();
     return accounts.map((a) => a.id);
   };
 
-  const qkey = [filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.adAccount, slug];
+  const qkey = [filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.canalId, slug];
 
   const { data: kpis, isLoading: loadingKpis } = useQuery({
     queryKey: ["perf-kpis", ...qkey],
     enabled,
-    queryFn: async () => fetchAccountInsights(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
+    queryFn: async () => fetchAccountInsights(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
   const { data: daily = [], isLoading: loadingDaily } = useQuery({
     queryKey: ["perf-daily", ...qkey],
     enabled,
-    queryFn: async () => fetchDailyMetrics(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
+    queryFn: async () => fetchDailyMetrics(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
 
   const bq = (breakdown: string, keyField?: string) => ({
     queryKey: ["perf-bd", breakdown, keyField || "", ...qkey],
     enabled,
-    queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, true, keyField),
+    queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, false, keyField),
   });
   const qGenero = useQuery(bq("gender"));
   const qIdade = useQuery(bq("age"));
@@ -186,7 +188,7 @@ export default function Performance() {
           </header>
 
           <div className="p-6 space-y-6 min-w-0 max-w-full overflow-x-hidden">
-            <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} />
+            <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} hideCityFilter showChannelButtons />
 
             {!enabled ? (
               <Card><CardContent className="py-10 text-center text-muted-foreground">
