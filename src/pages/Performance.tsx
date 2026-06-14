@@ -8,7 +8,7 @@ import { CacCriativos } from "@/components/CacCriativos";
 import { CacSemanalGeral } from "@/components/CacSemanalGeral";
 import { CacSemanalPorCriativo } from "@/components/CacSemanalPorCriativo";
 import { useProdutos } from "@/hooks/useProdutos";
-import { fetchGoogleAdSpend } from "@/lib/google-ads";
+import { fetchGoogleAdSpend, fetchGoogleTotalSpend } from "@/lib/google-ads";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -172,7 +172,14 @@ export default function Performance() {
       return canal?.investimento_manual ?? 0;
     },
   });
-  const investimento = canalPlataforma === "meta" ? (kpis?.spend ?? 0) : investNonMeta;
+  // No "Geral" (sem canal), soma também o Google das contas dos canais Google.
+  const gidsGeral = [...new Set(produtos.filter((p) => p.plataforma === "google" && p.google_conta_id).map((p) => p.google_conta_id as string))];
+  const { data: geralGoogle = 0 } = useQuery({
+    queryKey: ["perf-geral-google", filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), gidsGeral.join(",")],
+    enabled: !filters.canalId && gidsGeral.length > 0,
+    queryFn: async () => fetchGoogleTotalSpend(gidsGeral, filters.dateRange, filters.startDate, filters.endDate),
+  });
+  const investimento = canalPlataforma === "meta" ? (kpis?.spend ?? 0) + (!filters.canalId ? geralGoogle : 0) : investNonMeta;
   const qGenero = useQuery(bq("gender"));
   const qIdade = useQuery(bq("age"));
   const qDispositivo = useQuery(bq("impression_device"));
@@ -267,7 +274,7 @@ export default function Performance() {
                         { label: "Impressões", value: kpis?.impressions || 0 },
                         { label: "Cliques", value: kpis?.clicks || 0 },
                         { label: "Page Views", value: kpis?.pageViews || 0 },
-                        { label: "Inic. Checkout", value: kpis?.checkouts || 0 },
+                        { label: "Leads", value: kpis?.leads || 0 },
                         { label: "Vendas", value: kpis?.purchases || 0 },
                       ];
                       const top = stages[0].value || 1;

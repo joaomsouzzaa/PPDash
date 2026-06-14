@@ -30,7 +30,7 @@ import { LeadsRanking } from "@/components/LeadsRanking";
 import { BrazilHeatMap } from "@/components/BrazilHeatMap";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
-import { fetchGoogleAdSpend } from "@/lib/google-ads";
+import { fetchGoogleAdSpend, fetchGoogleTotalSpend } from "@/lib/google-ads";
 import { useCidades } from "@/hooks/useCidades";
 import { useLeadsData } from "@/hooks/useLeadsData";
 import { useProdutos } from "@/hooks/useProdutos";
@@ -98,6 +98,21 @@ const InsideSales = () => {
     if (canalCarregando) return;
     setLoadingSpend(true);
     try {
+      // Geral (sem canal) → soma Meta (todas as contas) + Google (contas dos canais Google).
+      if (!filters.canalId) {
+        let total = 0;
+        if (isMetaConnected) {
+          try {
+            const accounts = await fetchAdAccounts();
+            const res = await fetchAdSpend(accounts.map((a) => a.id), filters.dateRange, filters.startDate, filters.endDate);
+            total += res.reduce((s, r) => s + r.spend, 0);
+          } catch { /* meta off */ }
+        }
+        const gids = [...new Set(produtos.filter((p) => p.plataforma === "google" && p.google_conta_id).map((p) => p.google_conta_id as string))];
+        if (gids.length) total += await fetchGoogleTotalSpend(gids, filters.dateRange, filters.startDate, filters.endDate);
+        setMetaInvestimento(total);
+        return;
+      }
       // Sem plataforma → usa o investimento manual digitado (ou zero).
       if (canalPlataforma === "none") { setMetaInvestimento(canalInvManual != null ? canalInvManual : 0); return; }
       // Canal do Google Ads → puxa da API google-ads.
@@ -131,7 +146,7 @@ const InsideSales = () => {
     } finally {
       setLoadingSpend(false);
     }
-  }, [isMetaConnected, canalCarregando, canalContaId, canalSlug, canalPlataforma, canalGoogleId, canalInvManual, filters.dateRange, filters.startDate, filters.endDate]);
+  }, [isMetaConnected, canalCarregando, canalContaId, canalSlug, canalPlataforma, canalGoogleId, canalInvManual, produtos, filters.canalId, filters.dateRange, filters.startDate, filters.endDate]);
 
   useEffect(() => {
     loadSpend();

@@ -28,6 +28,18 @@ export async function listAccessibleGoogleAccounts(): Promise<{ id: string; name
   return accounts || [];
 }
 
+// Soma o gasto de várias contas Google (sem filtro de campanha) — usado no "Geral".
+export async function fetchGoogleTotalSpend(
+  customerIds: string[], dateRange: string, startDate?: Date, endDate?: Date,
+): Promise<number> {
+  const ids = [...new Set(customerIds.filter(Boolean))];
+  let total = 0;
+  for (const id of ids) {
+    try { total += await fetchGoogleAdSpend(id, dateRange, startDate, endDate, ""); } catch { /* sem acesso ainda */ }
+  }
+  return total;
+}
+
 // Gasto de uma conta Google Ads no período, filtrado pelo nome da campanha (slug), como no Meta.
 export async function fetchGoogleAdSpend(
   customerId: string,
