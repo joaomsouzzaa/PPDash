@@ -63,19 +63,29 @@ Deno.serve(async (req) => {
     const candidatos = new Map<string, any>(); // chave = deal_id
     for (const d of deals) if (d.id && !candidatos.has(d.id)) candidatos.set(d.id, d);
 
-    // 2) Quais desses negócios já temos (por clint_deal_id).
-    const dealIds = [...candidatos.keys()];
-    const { data: existentes } = dealIds.length
-      ? await supabase.from("leads").select("clint_deal_id").in("clint_deal_id", dealIds)
-      : { data: [] as any[] };
-    const existSet = new Set((existentes || []).map((l: any) => l.clint_deal_id).filter(Boolean));
+    // 2) Snapshot do nosso banco: já-temos por deal_id e leads por email (p/ vincular o que o webhook salvou).
+    let q2 = supabase.from("leads").select("id, email, data_lead, clint_deal_id");
+    if (orgId) q2 = q2.eq("org_id", orgId);
+    const { data: nossos } = await q2;
+    const existSet = new Set((nossos || []).map((l: any) => l.clint_deal_id).filter(Boolean));
+    const porEmail = new Map<string, any[]>();
+    for (const l of nossos || []) { const e = norm(l.email || ""); if (!e) continue; (porEmail.get(e) || porEmail.set(e, []).get(e)).push(l); }
 
-    // 3) Faltantes (negócios que não temos) + inserção.
+    // 3) Para cada negócio: vincular (backfill deal_id num lead do webhook) ou inserir.
     const inseridos: { nome: string; email: string; stage: string; motivo: string }[] = [];
     const naoInseridos: { nome: string; email: string; motivo: string }[] = [];
     const rowsToInsert: any[] = [];
+    const vinculos: { id: string; deal: string }[] = [];
+    const claimed = new Set<string>();
+    let vinculados = 0;
     for (const d of candidatos.values()) {
-      if (existSet.has(d.id)) continue; // negócio já está no nosso banco
+      if (existSet.has(d.id)) continue; // já temos esse negócio
+      // Já temos o lead (via webhook) mas sem deal_id? Vincula em vez de duplicar.
+      const pool = (porEmail.get(norm(d.contact?.email || "")) || [])
+        .filter((l) => !l.clint_deal_id && !claimed.has(l.id))
+        .sort((a, b) => Math.abs(+new Date(a.data_lead) - +new Date(d.created_at)) - Math.abs(+new Date(b.data_lead) - +new Date(d.created_at)));
+      if (pool.length) { claimed.add(pool[0].id); vinculos.push({ id: pool[0].id, deal: d.id }); vinculados++; continue; }
+
       // Busca o contato completo (campos/utm).
       let f: any = {};
       let tags = "";
@@ -121,18 +131,23 @@ Deno.serve(async (req) => {
       inseridos.push({ nome: d.contact?.name || "(sem nome)", email: d.contact?.email || "", stage: d.stage || "", motivo });
     }
 
+    // Vincula (backfill deal_id) os leads que o webhook já tinha salvo.
+    for (const v of vinculos) {
+      await supabase.from("leads").update({ clint_deal_id: v.deal }).eq("id", v.id);
+    }
+
     if (rowsToInsert.length) {
       const { error } = await supabase.from("leads").insert(rowsToInsert);
       if (error) {
-        // marca todos como não inseridos por erro
         for (const i of inseridos) naoInseridos.push({ nome: i.nome, email: i.email, motivo: "erro ao inserir: " + error.message });
         inseridos.length = 0;
       }
     }
 
-    // 4) Totais (janela 12h) — sobre os negócios do Clint e quantos desses já temos.
+    // 4) Totais — negócios do Clint na janela e quantos já temos.
     const clintCount = candidatos.size;
-    const jaTinha = [...candidatos.values()].filter((d) => existSet.has(d.id)).length;
+    const jaTinhaDeal = [...candidatos.values()].filter((d) => existSet.has(d.id)).length;
+    const jaTinha = jaTinhaDeal + vinculados; // já existiam (por deal_id ou vinculados do webhook)
     const nossoCount = jaTinha + inseridos.length; // após a sincronização
 
     // 5) Monta mensagem.
