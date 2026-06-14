@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, Fragment } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { TABLE_COL_KEYS, SORTABLE, STANDARD_RENDER, LABEL_PADRAO, ordenarPor } from "@/lib/leadColumns";
 import { useColumnResize } from "@/hooks/useColumnResize";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -48,7 +48,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter } from "lucide-react";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -156,6 +158,49 @@ const FIELD_KIND: Record<string, FieldKind> = {
   tags: "tags",
 };
 
+// Filtro por coluna (estilo Google Sheets): lista os valores da coluna para marcar/desmarcar.
+function ColumnFilter({ values, selected, onChange }: { values: string[]; selected: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const active = selected.length > 0;
+  const lbl = (v: string) => (v === "" ? "(vazio)" : v);
+  const filtered = values.filter((v) => lbl(v).toLowerCase().includes(q.trim().toLowerCase()));
+  const toggle = (v: string) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className={cn("shrink-0 rounded p-0.5 hover:bg-muted", active ? "text-primary" : "text-muted-foreground/50")}
+          title={active ? `Filtrando (${selected.length})` : "Filtrar coluna"}
+        >
+          <Filter className={cn("h-3 w-3", active && "fill-current")} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-60 p-0" align="start" onClick={(e) => e.stopPropagation()}>
+        <div className="p-2 border-b">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar valor..." className="h-8" />
+        </div>
+        <div className="max-h-64 overflow-y-auto py-1">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">Nenhum valor.</p>
+          ) : filtered.map((v) => (
+            <label key={v} className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50">
+              <Checkbox checked={selected.includes(v)} onCheckedChange={() => toggle(v)} />
+              <span className="truncate" title={lbl(v)}>{lbl(v)}</span>
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center justify-between border-t p-1.5">
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onChange(filtered)}>Marcar todos</Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onChange([])}>Limpar</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 const LeadsInsideSales = () => {
   const [dateRange, setDateRange] = useState(() => localStorage.getItem("leads_date_range") || "30d");
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
@@ -255,19 +300,46 @@ const LeadsInsideSales = () => {
     setPage(1);
   }, [sortKey]);
 
-  const filteredLeads = useMemo(() => {
-    let result = leads;
+  // Filtros por coluna (valores selecionados por chave de coluna).
+  const [colFilters, setColFilters] = useState<Record<string, string[]>>({});
+
+  // Texto da célula usado tanto para exibir no filtro quanto para comparar.
+  const cellText = useCallback((l: LeadRow, col: { key: string; isCustom: boolean; chave?: string }): string => {
+    if (col.isCustom) { const v = (l.custom as Record<string, unknown> | null)?.[col.chave!]; return v == null ? "" : String(v); }
+    if (col.key === "data_lead") return l.data_lead ? new Date(l.data_lead).toLocaleDateString("pt-BR") : "";
+    const v = (l as Record<string, unknown>)[col.key];
+    return v == null ? "" : String(v);
+  }, []);
+
+  // Aplica o filtro de nome + filtros de coluna (exceto a coluna informada).
+  const aplicarFiltros = useCallback((list: LeadRow[], exceto?: string) => {
+    let result = list;
     if (nomeFilter.trim()) {
       const term = nomeFilter.trim().toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.nome?.toLowerCase().includes(term) ||
-          l.email?.toLowerCase().includes(term) ||
-          l.telefone?.toLowerCase().includes(term)
-      );
+      result = result.filter((l) =>
+        l.nome?.toLowerCase().includes(term) || l.email?.toLowerCase().includes(term) || l.telefone?.toLowerCase().includes(term));
+    }
+    for (const c of colunas) {
+      if (c.key === exceto) continue;
+      const sel = colFilters[c.key];
+      if (sel && sel.length) result = result.filter((l) => sel.includes(cellText(l, c)));
     }
     return result;
-  }, [leads, nomeFilter]);
+  }, [nomeFilter, colunas, colFilters, cellText]);
+
+  const filteredLeads = useMemo(() => aplicarFiltros(leads), [leads, aplicarFiltros]);
+
+  // Valores distintos por coluna (considerando os demais filtros ativos).
+  const valoresPorColuna = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const c of colunas) {
+      const base = aplicarFiltros(leads, c.key);
+      const set = new Set<string>();
+      for (const l of base) set.add(cellText(l, c));
+      map[c.key] = [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
+    return map;
+  }, [leads, colunas, aplicarFiltros, cellText]);
 
   const sortedLeads = useMemo(() => {
     const arr = [...filteredLeads];
@@ -292,16 +364,27 @@ const LeadsInsideSales = () => {
     return sortDir === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />;
   };
 
-  const sortableHead = (label: string, col: SortKey, className?: string) => (
-    <TableHead className={`${className || ""} relative group`} style={{ minWidth: 80 }}>
-      <button
-        type="button"
-        className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors whitespace-nowrap"
-        onClick={() => toggleSort(col)}
-      >
-        {label}
-        <SortIcon col={col} />
-      </button>
+  const renderHead = (c: typeof colunas[number]) => (
+    <TableHead key={c.key} className="relative group whitespace-nowrap" style={{ minWidth: 110 }}>
+      <div className="flex items-center gap-1">
+        {c.sortable ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
+            onClick={() => toggleSort(c.key as SortKey)}
+          >
+            {c.label}
+            <SortIcon col={c.key as SortKey} />
+          </button>
+        ) : (
+          <span>{c.label}</span>
+        )}
+        <ColumnFilter
+          values={valoresPorColuna[c.key] || []}
+          selected={colFilters[c.key] || []}
+          onChange={(v) => { setColFilters((p) => ({ ...p, [c.key]: v })); setPage(1); }}
+        />
+      </div>
       <div
         onMouseDown={onResizeStart}
         onTouchStart={onResizeStart}
@@ -516,12 +599,13 @@ const LeadsInsideSales = () => {
                 onChange={(e) => { setNomeFilter(e.target.value); setPage(1); }}
                 className="w-[220px] bg-card"
               />
-              {nomeFilter && (
+              {(nomeFilter || Object.values(colFilters).some((v) => v.length)) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     setNomeFilter("");
+                    setColFilters({});
                     setPage(1);
                   }}
                   className="text-muted-foreground"
@@ -559,13 +643,7 @@ const LeadsInsideSales = () => {
                     <TableHead className="w-10">
                       <Checkbox checked={allPageSelected} onCheckedChange={toggleSelectAll} />
                     </TableHead>
-                    {colunas.map((c) => (
-                      <Fragment key={c.key}>
-                        {c.sortable
-                          ? sortableHead(c.label, c.key as SortKey)
-                          : <TableHead style={{ minWidth: 100 }} className="whitespace-nowrap">{c.label}</TableHead>}
-                      </Fragment>
-                    ))}
+                    {colunas.map((c) => renderHead(c))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
