@@ -32,7 +32,7 @@ import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { fetchGoogleAdSpend } from "@/lib/google-ads";
 import { useCidades } from "@/hooks/useCidades";
-import { useLeadsData, getDateRange } from "@/hooks/useLeadsData";
+import { useLeadsData } from "@/hooks/useLeadsData";
 import { useProdutos } from "@/hooks/useProdutos";
 
 const InsideSales = () => {
@@ -100,13 +100,8 @@ const InsideSales = () => {
             return;
           } catch { /* cai para o manual abaixo */ }
         }
-        if (canalInvManual != null) {
-          const { start, end } = getDateRange(filters);
-          const dias = Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
-          setMetaInvestimento(canalInvManual * dias);
-        } else {
-          setMetaInvestimento(null);
-        }
+        // Investimento manual = valor total fixo (mostrado como digitado).
+        setMetaInvestimento(canalInvManual != null ? canalInvManual : null);
         return;
       }
       // Meta Ads (padrão).

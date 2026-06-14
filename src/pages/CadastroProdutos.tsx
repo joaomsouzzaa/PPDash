@@ -250,15 +250,15 @@ const CadastroProdutos = () => {
       )}
       {form.plataforma === "google" && (
         <div className="space-y-1">
-          <Label>Investimento médio por dia (R$) — manual</Label>
+          <Label>Investimento total (R$) — manual</Label>
           <Input
             type="number"
             inputMode="decimal"
             value={form.investimento_manual}
             onChange={(e) => setForm({ ...form, investimento_manual: e.target.value })}
-            placeholder="Ex: 150 (usado enquanto a API do Google não estiver liberada)"
+            placeholder="Ex: 1576,86 (usado enquanto a API do Google não estiver liberada)"
           />
-          <p className="text-xs text-muted-foreground">Opcional. O dashboard multiplica pelo nº de dias do período. Quando a conta Google for selecionada e a API liberar, o valor automático assume.</p>
+          <p className="text-xs text-muted-foreground">Opcional. Mostrado no dashboard exatamente como digitado (não muda com o período). Quando a conta Google for selecionada e a API liberar, o valor automático assume.</p>
         </div>
       )}
       <div className="space-y-1">
