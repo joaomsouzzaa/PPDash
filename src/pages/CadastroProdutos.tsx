@@ -49,7 +49,7 @@ const CadastroProdutos = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Produto | null>(null);
   const [deleting, setDeleting] = useState<Produto | null>(null);
-  const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "" });
+  const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "", investimento_manual: "" });
 
   // Contas do Google Ads (carregadas sob demanda quando a plataforma é Google).
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAdAccount[]>([]);
@@ -102,13 +102,13 @@ const CadastroProdutos = () => {
   }, [formOpen, campaignOptions, sourceOptions]);
 
   const openAdd = () => {
-    setForm({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "" });
+    setForm({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "", investimento_manual: "" });
     setAddOpen(true);
   };
 
   const openEdit = (c: Produto) => {
     setEditing(c);
-    setForm({ nome: c.nome, slug: c.slug, slug_source: c.slug_source ?? "", conta_id: c.conta_id ?? "", plataforma: c.plataforma ?? "meta", google_conta_id: c.google_conta_id ?? "" });
+    setForm({ nome: c.nome, slug: c.slug, slug_source: c.slug_source ?? "", conta_id: c.conta_id ?? "", plataforma: c.plataforma ?? "meta", google_conta_id: c.google_conta_id ?? "", investimento_manual: c.investimento_manual != null ? String(c.investimento_manual) : "" });
   };
 
   // Carrega as contas do Google quando a plataforma é Google.
@@ -136,6 +136,7 @@ const CadastroProdutos = () => {
     slug_source: splitCsv(form.slug_source).join(",") || null,
     conta_id: form.plataforma === "meta" ? (form.conta_id || null) : null,
     google_conta_id: form.plataforma === "google" ? (form.google_conta_id || null) : null,
+    investimento_manual: form.investimento_manual.trim() ? Number(form.investimento_manual.replace(",", ".")) : null,
   });
 
   const handleAdd = async () => {
@@ -245,6 +246,19 @@ const CadastroProdutos = () => {
               </SelectContent>
             </Select>
           )}
+        </div>
+      )}
+      {form.plataforma === "google" && (
+        <div className="space-y-1">
+          <Label>Investimento médio por dia (R$) — manual</Label>
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={form.investimento_manual}
+            onChange={(e) => setForm({ ...form, investimento_manual: e.target.value })}
+            placeholder="Ex: 150 (usado enquanto a API do Google não estiver liberada)"
+          />
+          <p className="text-xs text-muted-foreground">Opcional. O dashboard multiplica pelo nº de dias do período. Quando a conta Google for selecionada e a API liberar, o valor automático assume.</p>
         </div>
       )}
       <div className="space-y-1">

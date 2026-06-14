@@ -9,6 +9,7 @@ export interface Produto {
   conta_id: string | null;    // conta de anúncios do Meta (act_...) deste canal
   plataforma: "meta" | "google"; // de onde vem o investimento
   google_conta_id: string | null; // customer id do Google Ads (só dígitos)
+  investimento_manual: number | null; // R$/dia, fallback quando não há API
   ativo: boolean;
 }
 
@@ -18,7 +19,7 @@ export function useProdutos() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("produtos")
-        .select("id, nome, slug, slug_source, conta_id, plataforma, google_conta_id, ativo")
+        .select("id, nome, slug, slug_source, conta_id, plataforma, google_conta_id, investimento_manual, ativo")
         .order("nome", { ascending: true });
 
       if (error) throw error;

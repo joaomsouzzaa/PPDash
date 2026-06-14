@@ -32,7 +32,7 @@ import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { fetchGoogleAdSpend } from "@/lib/google-ads";
 import { useCidades } from "@/hooks/useCidades";
-import { useLeadsData } from "@/hooks/useLeadsData";
+import { useLeadsData, getDateRange } from "@/hooks/useLeadsData";
 import { useProdutos } from "@/hooks/useProdutos";
 
 const InsideSales = () => {
@@ -86,15 +86,27 @@ const InsideSales = () => {
   const canalSlug = canal?.slug || undefined; // slug do UTM Campaign (filtra investimento)
   const canalPlataforma = canal?.plataforma || "meta";
   const canalGoogleId = canal?.google_conta_id || null;
+  const canalInvManual = canal?.investimento_manual ?? null;
 
   const loadSpend = useCallback(async () => {
     setLoadingSpend(true);
     try {
-      // Canal do Google Ads → puxa o gasto pela edge function google-ads.
+      // Canal do Google Ads → API google-ads; se não houver conta/API, usa o investimento manual (R$/dia × dias).
       if (canalPlataforma === "google") {
-        if (!canalGoogleId) { setMetaInvestimento(null); return; }
-        const spend = await fetchGoogleAdSpend(canalGoogleId, filters.dateRange, filters.startDate, filters.endDate, canalSlug);
-        setMetaInvestimento(spend);
+        if (canalGoogleId) {
+          try {
+            const spend = await fetchGoogleAdSpend(canalGoogleId, filters.dateRange, filters.startDate, filters.endDate, canalSlug);
+            setMetaInvestimento(spend);
+            return;
+          } catch { /* cai para o manual abaixo */ }
+        }
+        if (canalInvManual != null) {
+          const { start, end } = getDateRange(filters);
+          const dias = Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
+          setMetaInvestimento(canalInvManual * dias);
+        } else {
+          setMetaInvestimento(null);
+        }
         return;
       }
       // Meta Ads (padrão).
@@ -117,7 +129,7 @@ const InsideSales = () => {
     } finally {
       setLoadingSpend(false);
     }
-  }, [isMetaConnected, canalContaId, canalSlug, canalPlataforma, canalGoogleId, filters.dateRange, filters.startDate, filters.endDate]);
+  }, [isMetaConnected, canalContaId, canalSlug, canalPlataforma, canalGoogleId, canalInvManual, filters.dateRange, filters.startDate, filters.endDate]);
 
   useEffect(() => {
     loadSpend();
