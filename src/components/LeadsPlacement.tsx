@@ -73,10 +73,10 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
             Sem leads no período (ou sem dado de posicionamento).
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            <ResponsiveContainer width="60%" height={320}>
+          <div className="flex flex-col gap-3">
+            <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={125} innerRadius={62}
+                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={45}
                   labelLine={false} label={renderPct} stroke="hsl(var(--card))" strokeWidth={2}>
                   {data.map((d, i) => <Cell key={d.name} fill={cor(i, d.name)} />)}
                 </Pie>
@@ -86,7 +86,7 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
                 />
               </PieChart>
             </ResponsiveContainer>
-            <div className="flex-1 space-y-2">
+            <div className="space-y-1.5">
               {data.map((d, i) => (
                 <div key={d.name} className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex items-center gap-2">

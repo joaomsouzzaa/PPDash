@@ -330,20 +330,18 @@ const InsideSales = () => {
               />
             </div>
 
-            {/* Funil + ranking de cidades | Origem (pizza) + ranking de estados */}
-            <div className="grid gap-4 lg:grid-cols-2 items-start">
-              <div className="space-y-4">
-                <SalesFunnel steps={funnelSteps} />
-                <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} />
-              </div>
-              <div className="space-y-4">
-                <LeadsPlacement filters={filters} />
-                <LeadsRanking filters={filters} title="Estados com mais leads" icon={Map} field={{ kind: "custom", key: "estado" }} />
-              </div>
+            {/* Funil centralizado */}
+            <div className="mx-auto w-full max-w-2xl">
+              <SalesFunnel steps={funnelSteps} />
             </div>
 
-            {/* Criativos (utm_content) que mais trouxeram leads */}
-            <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={12} />
+            {/* Linha 4 colunas: Origem (pizza), Criativos, Cidades, Estados */}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 items-start">
+              <LeadsPlacement filters={filters} />
+              <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={10} />
+              <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} limit={10} />
+              <LeadsRanking filters={filters} title="Estados com mais leads" icon={Map} field={{ kind: "custom", key: "estado" }} limit={10} />
+            </div>
             </div>
           </div>
         </main>
