@@ -15,6 +15,9 @@ import {
   Camera,
   Tv,
   Loader2,
+  MapPin,
+  Map,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -24,6 +27,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesFunnel } from "@/components/SalesFunnel";
 import { LeadsPlacement } from "@/components/LeadsPlacement";
+import { LeadsRanking } from "@/components/LeadsRanking";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
@@ -326,11 +330,20 @@ const InsideSales = () => {
               />
             </div>
 
-            {/* Funil + Origem dos leads (2 colunas) */}
-            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
-              <SalesFunnel steps={funnelSteps} />
-              <LeadsPlacement filters={filters} />
+            {/* Funil + ranking de cidades | Origem (pizza) + ranking de estados */}
+            <div className="grid gap-4 lg:grid-cols-2 items-start">
+              <div className="space-y-4">
+                <SalesFunnel steps={funnelSteps} />
+                <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} />
+              </div>
+              <div className="space-y-4">
+                <LeadsPlacement filters={filters} />
+                <LeadsRanking filters={filters} title="Estados com mais leads" icon={Map} field={{ kind: "custom", key: "estado" }} />
+              </div>
             </div>
+
+            {/* Criativos (utm_content) que mais trouxeram leads */}
+            <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={12} />
             </div>
           </div>
         </main>

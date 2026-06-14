@@ -7,23 +7,10 @@ import type { Filters } from "@/lib/mockData";
 import { getDateRange } from "@/hooks/useLeadsData";
 import { useProdutos } from "@/hooks/useProdutos";
 
-// Tom sobre tom (vermelho do painel) + cinza para "Outros".
-const COR_POR_NOME: Record<string, string> = {
-  Feed: "#e11d2a",
-  Stories: "#a31621",
-  Reels: "#6e0d16",
-  Explore: "#3d0a0e",
-  Outros: "#6b7280",
-};
-
-function classificar(s: string): string {
-  const t = (s || "").toLowerCase();
-  if (/reel/.test(t)) return "Reels";
-  if (/stor/.test(t)) return "Stories";
-  if (/feed/.test(t)) return "Feed";
-  if (/explore/.test(t)) return "Explore";
-  return "Outros";
-}
+// Paleta tom sobre tom (vermelho do painel) + cinza para "Outros".
+const PALETA = ["#e11d2a", "#a31621", "#6e0d16", "#3d0a0e", "#f97316", "#b45309", "#7c3aed", "#2563eb", "#0891b2", "#15803d"];
+const COR_OUTROS = "#6b7280";
+const cor = (i: number, name: string) => (name === "Outros" ? COR_OUTROS : PALETA[i % PALETA.length]);
 
 const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
   if (percent < 0.06) return null;
@@ -46,7 +33,7 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
     queryFn: async () => {
       const { data } = await supabase
         .from("leads")
-        .select("utm_content, ad_name, utm_term, utm_source")
+        .select("utm_source")
         .gte("data_lead", start)
         .lte("data_lead", end);
       const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -55,10 +42,18 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
       (data || [])
         .filter((l: any) => alvos.length === 0 || (l.utm_source && alvos.some((s) => norm(l.utm_source).includes(s))))
         .forEach((l: any) => {
-        const k = classificar(`${l.utm_content || ""} ${l.ad_name || ""} ${l.utm_term || ""}`);
-        counts[k] = (counts[k] || 0) + 1;
-      });
-      return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+          const k = (l.utm_source || "").trim() || "(sem source)";
+          counts[k] = (counts[k] || 0) + 1;
+        });
+      const arr = Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+      // Agrupa a cauda longa em "Outros" para a pizza não ficar poluída.
+      if (arr.length > 8) {
+        const top = arr.slice(0, 7);
+        const outros = arr.slice(7).reduce((s, d) => s + d.value, 0);
+        top.push({ name: "Outros", value: outros });
+        return top;
+      }
+      return arr;
     },
     refetchInterval: 60_000,
   });
@@ -69,7 +64,7 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <PieIcon className="h-4 w-4 text-primary" /> Origem dos leads (posicionamento)
+          <PieIcon className="h-4 w-4 text-primary" /> Origem dos leads (UTM Source)
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -83,7 +78,7 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
               <PieChart>
                 <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={125} innerRadius={62}
                   labelLine={false} label={renderPct} stroke="hsl(var(--card))" strokeWidth={2}>
-                  {data.map((d) => <Cell key={d.name} fill={COR_POR_NOME[d.name] ?? "#6b7280"} />)}
+                  {data.map((d, i) => <Cell key={d.name} fill={cor(i, d.name)} />)}
                 </Pie>
                 <Tooltip
                   contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
@@ -92,10 +87,10 @@ export function LeadsPlacement({ filters }: { filters: Filters }) {
               </PieChart>
             </ResponsiveContainer>
             <div className="flex-1 space-y-2">
-              {data.map((d) => (
+              {data.map((d, i) => (
                 <div key={d.name} className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-sm" style={{ background: COR_POR_NOME[d.name] ?? "#6b7280" }} />
+                    <span className="h-3 w-3 rounded-sm" style={{ background: cor(i, d.name) }} />
                     {d.name}
                   </span>
                   <span className="font-medium">{d.value} <span className="text-xs text-muted-foreground">({((d.value / total) * 100).toFixed(0)}%)</span></span>
