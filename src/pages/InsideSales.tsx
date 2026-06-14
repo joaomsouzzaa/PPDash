@@ -87,8 +87,12 @@ const InsideSales = () => {
   const canalPlataforma = canal?.plataforma || "meta";
   const canalGoogleId = canal?.google_conta_id || null;
   const canalInvManual = canal?.investimento_manual ?? null;
+  // Canal selecionado mas produtos ainda não carregaram → não puxar (evita
+  // mostrar o investimento do Meta por engano num canal Google).
+  const canalCarregando = !!filters.canalId && !canal;
 
   const loadSpend = useCallback(async () => {
+    if (canalCarregando) return;
     setLoadingSpend(true);
     try {
       // Canal do Google Ads → API google-ads; se não houver conta/API, usa o investimento manual (R$/dia × dias).
@@ -124,7 +128,7 @@ const InsideSales = () => {
     } finally {
       setLoadingSpend(false);
     }
-  }, [isMetaConnected, canalContaId, canalSlug, canalPlataforma, canalGoogleId, canalInvManual, filters.dateRange, filters.startDate, filters.endDate]);
+  }, [isMetaConnected, canalCarregando, canalContaId, canalSlug, canalPlataforma, canalGoogleId, canalInvManual, filters.dateRange, filters.startDate, filters.endDate]);
 
   useEffect(() => {
     loadSpend();
