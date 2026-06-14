@@ -28,7 +28,6 @@ export function CacCriativos({ filters }: { filters: Filters }) {
   const { data: criativos = [] } = useCriativos();
   const { data: utmOptions = [] } = useDistinctUtmContent();
   const queryClient = useQueryClient();
-  const { start, end } = getDateRange(filters);
 
   const [adNames, setAdNames] = useState<string[]>([]);
   useEffect(() => {
@@ -73,8 +72,9 @@ export function CacCriativos({ filters }: { filters: Filters }) {
   // Calcula as métricas por criativo no período selecionado.
   const linkKey = JSON.stringify(criativos.map((c) => ({ i: c.id, u: c.utm_contents, a: c.ad_names, at: c.ativo, n: c.nome })));
   const { data: linhas = [], isFetching } = useQuery({
-    queryKey: ["cac-criativos", start, end, linkKey],
+    queryKey: ["cac-criativos", filters.dateRange, filters.startDate?.toISOString() ?? "", filters.endDate?.toISOString() ?? "", linkKey],
     queryFn: async (): Promise<LinhaCac[]> => {
+      const { start, end } = getDateRange(filters);
       const ativos = criativos.filter((c) => c.ativo);
       if (ativos.length === 0) return [];
 

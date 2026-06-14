@@ -20,7 +20,6 @@ function cor(count: number, max: number): string {
 }
 
 export function BrazilHeatMap({ filters }: { filters: Filters }) {
-  const { start, end } = getDateRange(filters);
   const { data: produtos = [] } = useProdutos();
   const slugSource = filters.canalId
     ? produtos.find((p) => p.id === filters.canalId)?.slug_source || null
@@ -28,8 +27,9 @@ export function BrazilHeatMap({ filters }: { filters: Filters }) {
   const [hover, setHover] = useState<{ uf: string; n: number } | null>(null);
 
   const { data: counts = {} } = useQuery({
-    queryKey: ["leads-por-estado", start, end, slugSource],
+    queryKey: ["leads-por-estado", filters.dateRange, filters.startDate?.toISOString() ?? "", filters.endDate?.toISOString() ?? "", slugSource],
     queryFn: async () => {
+      const { start, end } = getDateRange(filters);
       const { data } = await supabase
         .from("leads")
         .select("utm_source, custom")

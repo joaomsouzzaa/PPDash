@@ -20,15 +20,15 @@ interface Props {
 }
 
 export function LeadsRanking({ filters, title, icon: Icon, field, limit = 8 }: Props) {
-  const { start, end } = getDateRange(filters);
   const { data: produtos = [] } = useProdutos();
   const slugSource = filters.canalId
     ? produtos.find((p) => p.id === filters.canalId)?.slug_source || null
     : null;
 
   const { data = [] } = useQuery({
-    queryKey: ["leads-ranking", field.kind, field.key, start, end, slugSource],
+    queryKey: ["leads-ranking", field.kind, field.key, filters.dateRange, filters.startDate?.toISOString() ?? "", filters.endDate?.toISOString() ?? "", slugSource],
     queryFn: async () => {
+      const { start, end } = getDateRange(filters);
       const { data } = await supabase
         .from("leads")
         .select("utm_source, cidade, utm_content, custom")

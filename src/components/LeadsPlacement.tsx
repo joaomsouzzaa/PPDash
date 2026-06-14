@@ -22,15 +22,15 @@ const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any)
 };
 
 export function LeadsPlacement({ filters }: { filters: Filters }) {
-  const { start, end } = getDateRange(filters);
   const { data: produtos = [] } = useProdutos();
   const slugSource = filters.canalId
     ? produtos.find((p) => p.id === filters.canalId)?.slug_source || null
     : null;
 
   const { data = [] } = useQuery({
-    queryKey: ["leads-placement", start, end, slugSource],
+    queryKey: ["leads-placement", filters.dateRange, filters.startDate?.toISOString() ?? "", filters.endDate?.toISOString() ?? "", slugSource],
     queryFn: async () => {
+      const { start, end } = getDateRange(filters);
       const { data } = await supabase
         .from("leads")
         .select("utm_source")

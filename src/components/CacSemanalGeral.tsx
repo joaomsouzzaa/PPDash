@@ -23,11 +23,10 @@ interface LinhaSemana {
 }
 
 export function CacSemanalGeral({ filters }: { filters: Filters }) {
-  const { start, end } = getDateRange(filters);
-
   const { data: linhas = [], isFetching } = useQuery({
-    queryKey: ["cac-semanal-geral", start, end],
+    queryKey: ["cac-semanal-geral", filters.dateRange, filters.startDate?.toISOString() ?? "", filters.endDate?.toISOString() ?? ""],
     queryFn: async (): Promise<LinhaSemana[]> => {
+      const { start, end } = getDateRange(filters);
       const startD = new Date(start);
       const endD = new Date(end);
 

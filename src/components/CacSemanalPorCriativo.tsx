@@ -21,13 +21,13 @@ interface Linha { key: string; label: string; investimento: number; leads: numbe
 
 export function CacSemanalPorCriativo({ filters }: { filters: Filters }) {
   const { data: criativos = [] } = useCriativos();
-  const { start, end } = getDateRange(filters);
   const ativos = criativos.filter((c) => c.ativo);
   const linkKey = JSON.stringify(ativos.map((c) => ({ i: c.id, u: c.utm_contents, a: c.ad_names, n: c.nome })));
 
   const { data, isFetching } = useQuery({
-    queryKey: ["cac-semanal-criativo", start, end, linkKey],
+    queryKey: ["cac-semanal-criativo", filters.dateRange, filters.startDate?.toISOString() ?? "", filters.endDate?.toISOString() ?? "", linkKey],
     queryFn: async () => {
+      const { start, end } = getDateRange(filters);
       const startD = new Date(start), endD = new Date(end);
       const semanas: { key: string; label: string }[] = [];
       let cur = segunda(startD);
