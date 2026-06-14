@@ -8,6 +8,7 @@ import { CacCriativos } from "@/components/CacCriativos";
 import { CacSemanalGeral } from "@/components/CacSemanalGeral";
 import { CacSemanalPorCriativo } from "@/components/CacSemanalPorCriativo";
 import { useProdutos } from "@/hooks/useProdutos";
+import { fetchGoogleAdSpend } from "@/lib/google-ads";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -131,6 +132,9 @@ export default function Performance() {
   }, []);
 
   const enabled = metaConnected && !isTokenExpired();
+  const canalPlataforma = canal?.plataforma || "meta"; // Geral = Meta (todas as contas)
+  // As métricas detalhadas (impressões, CTR, demografia…) só existem no Meta.
+  const metaEnabled = enabled && canalPlataforma === "meta";
 
   const getAccountIds = async () => {
     if (canalContaId) return [canalContaId];
@@ -142,20 +146,33 @@ export default function Performance() {
 
   const { data: kpis, isLoading: loadingKpis } = useQuery({
     queryKey: ["perf-kpis", ...qkey],
-    enabled,
+    enabled: metaEnabled,
     queryFn: async () => fetchAccountInsights(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
   const { data: daily = [], isLoading: loadingDaily } = useQuery({
     queryKey: ["perf-daily", ...qkey],
-    enabled,
+    enabled: metaEnabled,
     queryFn: async () => fetchDailyMetrics(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
 
   const bq = (breakdown: string, keyField?: string) => ({
     queryKey: ["perf-bd", breakdown, keyField || "", ...qkey],
-    enabled,
+    enabled: metaEnabled,
     queryFn: async () => fetchBreakdown(await getAccountIds(), breakdown, filters.startDate, filters.endDate, filters.dateRange, slug, false, keyField),
   });
+
+  // Investimento respeita a plataforma do canal (Meta usa o insights; Google/None usam suas fontes).
+  const { data: investNonMeta = 0 } = useQuery({
+    queryKey: ["perf-invest-nm", filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.canalId, canalPlataforma],
+    enabled: canalPlataforma !== "meta",
+    queryFn: async () => {
+      if (canalPlataforma === "google" && canal?.google_conta_id) {
+        try { return await fetchGoogleAdSpend(canal.google_conta_id, filters.dateRange, filters.startDate, filters.endDate, canal.slug || undefined); } catch { return 0; }
+      }
+      return canal?.investimento_manual ?? 0;
+    },
+  });
+  const investimento = canalPlataforma === "meta" ? (kpis?.spend ?? 0) : investNonMeta;
   const qGenero = useQuery(bq("gender"));
   const qIdade = useQuery(bq("age"));
   const qDispositivo = useQuery(bq("impression_device"));
@@ -196,9 +213,14 @@ export default function Performance() {
               </CardContent></Card>
             ) : (
               <>
+                {canalPlataforma !== "meta" && (
+                  <Card><CardContent className="py-3 text-sm text-muted-foreground">
+                    Este canal é <span className="text-foreground font-medium">{canalPlataforma === "google" ? "Google Ads" : "sem plataforma"}</span>. As métricas detalhadas (impressões, CTR, demografia…) são do Meta — aqui mostramos apenas o <span className="text-foreground font-medium">Investimento</span> do canal.
+                  </CardContent></Card>
+                )}
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Resumo Executivo</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <KpiCard title="Investimento Total" value={L(fmtBRL(kpis?.spend || 0))} icon={DollarSign} />
+                  <KpiCard title="Investimento Total" value={L(fmtBRL(investimento))} icon={DollarSign} />
                   <KpiCard title="Impressões" value={L(fmtNum(kpis?.impressions || 0))} icon={Eye} />
                   <KpiCard title="CPM" value={L(fmtBRL(kpis?.cpm || 0))} icon={Layers} />
                   <KpiCard title="CTR" value={L(fmtPct(kpis?.ctr || 0))} icon={Target} />
