@@ -281,13 +281,15 @@ const InsideSales = () => {
               {show("reuniao_agendada") && <KpiCard title="Reunião Agendada" value={String(reunioesAgendadas)} icon={CalendarCheck} />}
               {show("reuniao_realizada") && <KpiCard title="Reunião Realizada" value={String(reunioesRealizadas)} icon={Video} />}
               {show("vendas") && <KpiCard title="Vendas" value={String(vendas)} icon={ShoppingCart} />}
+              {/* Sem ROAS no canal → Faturamento entra na grade principal, ao lado de Vendas */}
+              {show("faturamento") && !show("roas") && <KpiCard title="Faturamento" value={fmt(faturamentoVenda)} icon={BadgeDollarSign} />}
             </div>
 
-            {/* Faturamento + ROAS: linha própria de 2 colunas (preenche toda a largura) */}
-            {(show("faturamento") || show("roas")) && (
+            {/* Faturamento + ROAS: linha própria de 2 colunas (quando há ROAS) */}
+            {show("roas") && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {show("faturamento") && <KpiCard title="Faturamento" value={fmt(faturamentoVenda)} icon={BadgeDollarSign} />}
-              {show("roas") && <KpiCard title="ROAS" value={`${roas.toFixed(2)}x`} icon={TrendingUp} />}
+              <KpiCard title="ROAS" value={`${roas.toFixed(2)}x`} icon={TrendingUp} />
             </div>
             )}
 
