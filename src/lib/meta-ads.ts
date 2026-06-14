@@ -716,6 +716,31 @@ export async function fetchAdSpendByName(
   return out;
 }
 
+// Gasto diário por anúncio: { ad_name: { "YYYY-MM-DD": spend } }. Usado no CAC semanal por criativo.
+export async function fetchDailyAdSpendByName(
+  accountIds: string[], dateRange: string, startDate?: Date, endDate?: Date
+): Promise<Record<string, Record<string, number>>> {
+  const timeRange = clampTimeRange(startDate && endDate
+    ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
+    : buildTimeRange(dateRange));
+  const param = JSON.stringify(timeRange);
+  const out: Record<string, Record<string, number>> = {};
+  await Promise.all(accountIds.map(async (id) => {
+    try {
+      const rows = await graphApiFetchAll(`/${id}/insights`, {
+        level: "ad", fields: "ad_name,spend", time_range: param, time_increment: "1", limit: "500",
+      });
+      for (const r of rows as Array<{ ad_name?: string; spend?: string; date_start?: string }>) {
+        const n = (r.ad_name || "").trim();
+        const d = r.date_start;
+        if (!n || !d) continue;
+        (out[n] ||= {})[d] = (out[n][d] || 0) + (parseFloat(r.spend || "0") || 0);
+      }
+    } catch { /* ignora */ }
+  }));
+  return out;
+}
+
 export async function fetchAdBreakdown(
   accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d", campaignSlug?: string, strictSales = false
 ): Promise<AdRow[]> {
