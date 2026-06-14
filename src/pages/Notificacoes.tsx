@@ -50,6 +50,11 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
     desc: "Consolidado de todas as cidades, 1x/dia",
     vars: ["total_cidades", "participantes_total", "bilheteria_total", "investimento_total", "bilheteria_resultado_total", "data"],
   },
+  diario_performance: {
+    label: "Diário de performance (agendado)",
+    desc: "Métricas do dia anterior (investimento, leads, CPL, MQL, CPL/MQL, taxa MQL), 1x/dia",
+    vars: ["investimento", "leads", "cpl", "mql", "cpl_mql", "taxa_mql", "data"],
+  },
   manual: {
     label: "Manual / sob demanda",
     desc: "Enviado quando você clicar em Enviar. Usa o resumo da cidade selecionada.",
@@ -366,8 +371,8 @@ export default function Notificacoes() {
   }, [dialogOpen]);
 
   const gatilhoAtual = GATILHOS[form.gatilho];
-  const precisaCidade = form.gatilho === "nova_venda" || form.gatilho === "novo_lead" || form.gatilho === "resumo_cidade" || form.gatilho === "manual";
-  const precisaHorario = form.gatilho === "resumo_cidade" || form.gatilho === "resumo_geral";
+  const precisaCidade = form.gatilho === "nova_venda" || form.gatilho === "resumo_cidade" || form.gatilho === "manual";
+  const precisaHorario = form.gatilho === "resumo_cidade" || form.gatilho === "resumo_geral" || form.gatilho === "diario_performance";
 
   return (
     <SidebarProvider>
@@ -436,7 +441,7 @@ export default function Notificacoes() {
                               ? n.destinatarios
                               : [{ tipo: n.destinatario_tipo, valor: n.destinatario, nome: n.destinatario_nome }]
                             ).map((d: any) => d.nome || d.valor).join(", ")}
-                          {n.cidade_slug ? ` · ${n.cidade_slug}` : ""}{n.horario && (n.gatilho.startsWith("resumo")) ? ` · ${n.horario}` : ""}
+                          {n.cidade_slug ? ` · ${n.cidade_slug}` : ""}{n.horario && (n.gatilho.startsWith("resumo") || n.gatilho === "diario_performance") ? ` · ${n.horario}` : ""}
                         </p>
                       </div>
                       <Switch checked={n.ativo} onCheckedChange={() => toggleAtivo(n)} />

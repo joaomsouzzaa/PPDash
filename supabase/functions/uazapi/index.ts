@@ -345,6 +345,60 @@ async function resumoGeral(supabase: any): Promise<Record<string, string | numbe
   };
 }
 
+// Gasto total da conta no dia anterior (BRT).
+async function metaSpendDia(meta: any, since: string, until: string): Promise<number> {
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
+  const r = await fetch(`${GRAPH}/${meta.account_id}/insights?fields=spend&time_range=${tr}&access_token=${meta.access_token}`);
+  const j = await r.json();
+  let s = 0; for (const row of j.data || []) s += parseFloat(row.spend) || 0; return s;
+}
+
+// Diário de Performance: métricas do DIA ANTERIOR (investimento, leads, CPL, MQL, CPL/MQL, taxa MQL).
+async function resumoDiarioPerformance(supabase: any, orgId: string | null): Promise<Record<string, string | number>> {
+  // Ontem em BRT (00:00–23:59 -03:00) → janela em UTC.
+  const now = new Date();
+  const ini = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 3, 0, 0));
+  const fim = new Date(ini.getTime() + 86400000 - 1);
+  const ymd = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
+  const ontemStr = ini.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+  let q = supabase.from("leads").select("custom").gte("data_lead", ini.toISOString()).lte("data_lead", fim.toISOString());
+  if (orgId) q = q.eq("org_id", orgId);
+  const { data: leads } = await q;
+
+  let cq = supabase.from("lead_campos").select("chave,padrao,mql_valores");
+  if (orgId) cq = cq.eq("org_id", orgId);
+  const { data: campos } = await cq;
+  const triggers = ((campos as any[]) || [])
+    .filter((c) => Array.isArray(c.mql_valores) && c.mql_valores.length)
+    .map((c) => ({ chave: c.chave, padrao: !!c.padrao, valores: new Set((c.mql_valores as any[]).map((v) => String(v).trim())) }));
+  const isMql = (l: any) => triggers.some((t) => {
+    const raw = t.padrao ? l[t.chave] : l.custom?.[t.chave];
+    return raw != null && t.valores.has(String(raw).trim());
+  });
+
+  const totalLeads = (leads || []).length;
+  const mql = (leads || []).filter(isMql).length;
+
+  const meta = (await supabase.from("meta_config").select("*").maybeSingle()).data;
+  let inv = 0;
+  if (meta?.access_token && meta?.account_id) {
+    try { inv = await metaSpendDia(meta, ymd(ini), ymd(ini)); } catch { /* meta off */ }
+  }
+  const cpl = totalLeads ? inv / totalLeads : 0;
+  const cplMql = mql ? inv / mql : 0;
+  const taxaMql = totalLeads ? (mql / totalLeads) * 100 : 0;
+  return {
+    investimento: fmtBRL(inv),
+    leads: totalLeads,
+    cpl: fmtBRL(cpl),
+    mql,
+    cpl_mql: fmtBRL(cplMql),
+    taxa_mql: `${taxaMql.toFixed(1)}%`,
+    data: ontemStr,
+  };
+}
+
 // Slugs a processar: 1 por cidade ATIVA (evento >= hoje) quando "todas",
 // senão a cidade específica da notificação.
 async function slugsDaNotif(supabase: any, n: any): Promise<(string | null)[]> {
@@ -378,6 +432,9 @@ async function buildVarsList(supabase: any, n: any): Promise<Record<string, stri
   }
   if (n.gatilho === "resumo_geral") {
     return [await resumoGeral(supabase)];
+  }
+  if (n.gatilho === "diario_performance") {
+    return [await resumoDiarioPerformance(supabase, n.org_id)];
   }
   const slugs = await slugsDaNotif(supabase, n);
   const out: Record<string, string | number>[] = [];
@@ -557,7 +614,7 @@ Deno.serve(async (req) => {
       case "run_scheduled": {
         // Chamado por um cron; envia os resumos cujo horário == agora (HH:MM)
         const agora = payload.horario || new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-        const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).in("gatilho", ["resumo_cidade", "resumo_geral"]);
+        const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).in("gatilho", ["resumo_cidade", "resumo_geral", "diario_performance"]);
         let enviados = 0;
         const hhmm = agora.slice(0, 5);
         const tokenCache = new Map<string, string | null>();
