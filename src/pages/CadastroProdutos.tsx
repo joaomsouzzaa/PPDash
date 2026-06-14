@@ -446,7 +446,7 @@ const CadastroProdutos = () => {
 
       {/* Add Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Novo Canal de Aquisição</DialogTitle>
           </DialogHeader>
@@ -460,7 +460,7 @@ const CadastroProdutos = () => {
 
       {/* Edit Dialog */}
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Canal de Aquisição</DialogTitle>
           </DialogHeader>
