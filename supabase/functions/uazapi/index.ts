@@ -361,17 +361,47 @@ async function metaSpendDia(token: string, accs: string[], since: string, until:
 }
 
 // Diário de Performance: métricas do DIA ANTERIOR (investimento, leads, CPL, MQL, CPL/MQL, taxa MQL).
-async function resumoDiarioPerformance(supabase: any, orgId: string | null): Promise<Record<string, string | number>> {
-  // Ontem em BRT (00:00–23:59 -03:00) → janela em UTC.
+// Gasto de um canal Meta no dia (campanhas que casam o slug; sem slug = todas as campanhas das contas).
+async function metaSpendCanalDia(token: string, accounts: string[], slug: string, day: string): Promise<number> {
+  const tr = encodeURIComponent(JSON.stringify({ since: day, until: day }));
+  const variants = slugVariants(slug);
+  let s = 0;
+  for (const acc of accounts) {
+    try {
+      const r = await fetch(`${GRAPH}/${acc}/insights?level=campaign&fields=spend,campaign_name&time_range=${tr}&limit=500&access_token=${token}`);
+      const j = await r.json();
+      for (const row of j.data || []) {
+        if (variants.length && !variants.some((v) => (row.campaign_name || "").toLowerCase().includes(v))) continue;
+        s += parseFloat(row.spend) || 0;
+      }
+    } catch { /* ignora */ }
+  }
+  return s;
+}
+
+async function resumoDiarioPerformance(supabase: any, orgId: string | null, canaisIds?: string[]): Promise<Record<string, string | number>> {
   const now = new Date();
   const ini = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 3, 0, 0));
   const fim = new Date(ini.getTime() + 86400000 - 1);
-  const ymd = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // YYYY-MM-DD
+  const ymd = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
   const ontemStr = ini.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-  let q = supabase.from("leads").select("custom").gte("data_lead", ini.toISOString()).lte("data_lead", fim.toISOString());
+  // Canais: os selecionados; sem seleção = todos Meta+Google (padrão).
+  let pq = supabase.from("produtos").select("id, nome, plataforma, conta_id, slug, slug_source, google_conta_id, investimento_manual, ativo");
+  if (orgId) pq = pq.eq("org_id", orgId);
+  const { data: prods } = await pq;
+  let canais = (prods as any[]) || [];
+  if (Array.isArray(canaisIds) && canaisIds.length) canais = canais.filter((p) => canaisIds.includes(p.id));
+  else canais = canais.filter((p) => p.plataforma === "meta" || p.plataforma === "google");
+
+  // Leads do dia, filtrados pelos utm_source dos canais (slug_source). Sem alvos = todos.
+  const alvos: string[] = [];
+  for (const c of canais) for (const v of String(c.slug_source || "").split(",")) { const n = norm(v.trim()); if (n) alvos.push(n); }
+  let q = supabase.from("leads").select("custom, utm_source").gte("data_lead", ini.toISOString()).lte("data_lead", fim.toISOString());
   if (orgId) q = q.eq("org_id", orgId);
-  const { data: leads } = await q;
+  const { data: leadsRaw } = await q;
+  const leads = (leadsRaw || []).filter((l: any) => alvos.length === 0 || (l.utm_source && alvos.some((a) => norm(l.utm_source).includes(a))));
 
   let cq = supabase.from("lead_campos").select("chave,padrao,mql_valores");
   if (orgId) cq = cq.eq("org_id", orgId);
@@ -383,11 +413,10 @@ async function resumoDiarioPerformance(supabase: any, orgId: string | null): Pro
     const raw = t.padrao ? l[t.chave] : l.custom?.[t.chave];
     return raw != null && t.valores.has(String(raw).trim());
   });
+  const totalLeads = leads.length;
+  const mql = leads.filter(isMql).length;
 
-  const totalLeads = (leads || []).length;
-  const mql = (leads || []).filter(isMql).length;
-
-  // meta_config pode ter várias linhas: token válido mais recente + contas conectadas (distintas).
+  // Token + contas conectadas do Meta.
   const { data: cfgs } = await supabase.from("meta_config")
     .select("account_id, contas, access_token, token_expires_at").not("access_token", "is", null)
     .order("token_expires_at", { ascending: false });
@@ -397,10 +426,19 @@ async function resumoDiarioPerformance(supabase: any, orgId: string | null): Pro
     if (Array.isArray(c.contas)) for (const a of c.contas) accSet.add(String(a).startsWith("act_") ? a : `act_${a}`);
     if (c.account_id) accSet.add(c.account_id);
   }
+
+  // Investimento agregado dos canais selecionados.
   let inv = 0;
-  if (metaToken && accSet.size) {
-    try { inv = await metaSpendDia(metaToken, [...accSet], ymd(ini), ymd(ini)); } catch { /* meta off */ }
+  for (const c of canais) {
+    if (c.plataforma === "meta" && metaToken) {
+      const accs = c.conta_id ? [c.conta_id] : [...accSet];
+      try { inv += await metaSpendCanalDia(metaToken, accs, c.slug || "", ymd(ini)); } catch { /* off */ }
+    } else if (c.plataforma === "none" && c.investimento_manual != null) {
+      inv += Number(c.investimento_manual) || 0;
+    }
+    // google: API ainda sem acesso (Basic Access pendente) → soma 0 por ora.
   }
+
   const cpl = totalLeads ? inv / totalLeads : 0;
   const cplMql = mql ? inv / mql : 0;
   const taxaMql = totalLeads ? (mql / totalLeads) * 100 : 0;
@@ -450,7 +488,7 @@ async function buildVarsList(supabase: any, n: any): Promise<Record<string, stri
     return [await resumoGeral(supabase)];
   }
   if (n.gatilho === "diario_performance") {
-    return [await resumoDiarioPerformance(supabase, n.org_id)];
+    return [await resumoDiarioPerformance(supabase, n.org_id, Array.isArray(n.canais) ? n.canais : undefined)];
   }
   const slugs = await slugsDaNotif(supabase, n);
   const out: Record<string, string | number>[] = [];

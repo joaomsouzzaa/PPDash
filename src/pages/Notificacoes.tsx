@@ -25,6 +25,7 @@ import { Bot, Plus, Pencil, Trash2, Send, Wifi, WifiOff, RefreshCw, QrCode, Eye,
 import { supabase } from "@/integrations/supabase/client";
 import { syncMetaTokenToServer } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
+import { useProdutos } from "@/hooks/useProdutos";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -85,6 +86,7 @@ const emptyForm = {
   destinatarios: [{ tipo: "grupo", valor: "", nome: "" }] as Dest[],
   mensagem: "",
   cidade_slug: null as string | null,
+  canais: [] as string[],
   horario: "09:00" as string | null,
   disparo_dia_evento: false,
   horario_evento: "12:00" as string | null,
@@ -98,6 +100,7 @@ const emptyForm = {
 export default function Notificacoes() {
   const queryClient = useQueryClient();
   const { data: cidades = [] } = useCidades();
+  const { data: produtosList = [] } = useProdutos();
 
   // ---- Grupos do WhatsApp (para escolher destinatários) ----
   const [loadingGrupos, setLoadingGrupos] = useState(false);
@@ -206,7 +209,7 @@ export default function Notificacoes() {
     setForm({
       nome: n.nome, gatilho: n.gatilho, ativo: n.ativo,
       destinatarios: dests, mensagem: n.mensagem,
-      cidade_slug: n.cidade_slug, horario: n.horario || "09:00",
+      cidade_slug: n.cidade_slug, canais: Array.isArray((n as any).canais) ? (n as any).canais : [], horario: n.horario || "09:00",
       disparo_dia_evento: (n as any).disparo_dia_evento || false,
       horario_evento: (n as any).horario_evento || "12:00",
       sheets_ativo: (n as any).sheets_ativo || false,
@@ -227,6 +230,7 @@ export default function Notificacoes() {
     const payload = {
       nome: form.nome, gatilho: form.gatilho, ativo: form.ativo,
       mensagem: form.mensagem, cidade_slug: form.cidade_slug, horario: form.horario,
+      canais: form.gatilho === "diario_performance" ? form.canais : null,
       disparo_dia_evento: form.disparo_dia_evento,
       horario_evento: form.horario_evento,
       destinatarios: dests,
@@ -586,6 +590,23 @@ export default function Notificacoes() {
                     {cidades.map((c) => <SelectItem key={c.id} value={c.slug}>{c.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            {form.gatilho === "diario_performance" && (
+              <div className="space-y-1.5">
+                <Label>Canais incluídos</Label>
+                <p className="text-xs text-muted-foreground">Soma investimento e leads dos canais marcados. Nenhum marcado = todos os canais Meta + Google.</p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {produtosList.filter((p) => p.ativo).map((p) => {
+                    const sel = form.canais.includes(p.id);
+                    return (
+                      <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Switch checked={sel} onCheckedChange={() => setForm({ ...form, canais: sel ? form.canais.filter((x) => x !== p.id) : [...form.canais, p.id] })} />
+                        <span className="truncate">{p.nome}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {precisaHorario && (
