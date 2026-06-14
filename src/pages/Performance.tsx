@@ -185,8 +185,6 @@ export default function Performance() {
           <div className="p-6 space-y-6 min-w-0 max-w-full overflow-x-hidden">
             <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} />
 
-            <CacCriativos filters={filters} />
-
             {!enabled ? (
               <Card><CardContent className="py-10 text-center text-muted-foreground">
                 Conecte o Meta Ads em <span className="text-foreground font-medium">Integrações</span> para ver a performance.
@@ -214,6 +212,8 @@ export default function Performance() {
                   <KpiCard title="Vendas (compras)" value={L(fmtNum(kpis?.purchases || 0))} icon={MousePointerClick} />
                   <KpiCard title="CAC" value={L(fmtBRL(kpis?.cac || 0))} icon={DollarSign} />
                 </div>
+
+                <CacCriativos filters={filters} />
 
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Engajamento</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
