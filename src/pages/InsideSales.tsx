@@ -28,6 +28,7 @@ import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesFunnel } from "@/components/SalesFunnel";
 import { LeadsPlacement } from "@/components/LeadsPlacement";
 import { LeadsRanking } from "@/components/LeadsRanking";
+import { BrazilHeatMap } from "@/components/BrazilHeatMap";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
@@ -330,9 +331,10 @@ const InsideSales = () => {
               />
             </div>
 
-            {/* Funil centralizado */}
-            <div className="mx-auto w-full max-w-2xl">
+            {/* Funil + mapa de calor do Brasil (2 colunas) */}
+            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
               <SalesFunnel steps={funnelSteps} />
+              <BrazilHeatMap filters={filters} />
             </div>
 
             {/* Linha 4 colunas: Origem (pizza), Criativos, Cidades, Estados */}
