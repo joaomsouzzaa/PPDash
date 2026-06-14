@@ -330,19 +330,19 @@ const InsideSales = () => {
               />
             </div>
 
-            {/* Funil | (Mapa + ranking de estados) com ranking de cidades abaixo */}
+            {/* Linha 1: Funil | Mapa + ranking de estados (mesma altura) */}
             <div className="grid gap-4 lg:grid-cols-2 items-start">
               <SalesFunnel steps={funnelSteps} />
-              <div className="space-y-4">
-                <BrazilHeatMap filters={filters} />
-                <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} limit={10} />
-              </div>
+              <BrazilHeatMap filters={filters} />
             </div>
 
-            {/* Origem (pizza) + Criativos */}
-            <div className="grid gap-4 lg:grid-cols-2 items-start">
-              <LeadsPlacement filters={filters} />
-              <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={10} />
+            {/* Linha 2: (Origem + Criativos) | Cidades ao lado, mesma altura */}
+            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
+              <div className="space-y-4">
+                <LeadsPlacement filters={filters} />
+                <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={10} />
+              </div>
+              <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} limit={16} />
             </div>
             </div>
           </div>
