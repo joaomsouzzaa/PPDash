@@ -331,7 +331,7 @@ const InsideSales = () => {
             </div>
 
             {/* Linha 1: Funil | Mapa + ranking de estados (mesma altura) */}
-            <div className="grid gap-4 lg:grid-cols-2 items-start">
+            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
               <SalesFunnel steps={funnelSteps} />
               <BrazilHeatMap filters={filters} />
             </div>

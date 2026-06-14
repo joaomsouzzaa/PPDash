@@ -96,7 +96,7 @@ export function BrazilHeatMap({ filters }: { filters: Filters }) {
           <div className="mt-4 border-t pt-4">
             <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Estados com mais leads</p>
             <div className="space-y-2.5">
-              {ranking.slice(0, 10).map((d, i) => (
+              {ranking.slice(0, 5).map((d, i) => (
                 <div key={d.uf} className="space-y-1">
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="flex items-center gap-2">
