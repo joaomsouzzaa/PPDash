@@ -139,6 +139,26 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // Lista as contas que o Gmail conectado acessa (com nome e se é gerenciadora/MCC).
+    if (action === "list_accessible") {
+      const headers = await adsHeaders(supabase, orgId);
+      const r = await fetch(`${ADS_API}/customers:listAccessibleCustomers`, { headers });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error?.message || `Google Ads API ${r.status}`);
+      const ids: string[] = (j.resourceNames || []).map((rn: string) => rn.split("/")[1]);
+      const accounts: { id: string; name: string; manager: boolean }[] = [];
+      for (const id of ids) {
+        try {
+          const rows = await gaql(supabase, orgId, id, "SELECT customer.descriptive_name, customer.manager FROM customer LIMIT 1", id);
+          const c = rows[0]?.customer;
+          accounts.push({ id, name: c?.descriptiveName || id, manager: !!c?.manager });
+        } catch {
+          accounts.push({ id, name: id, manager: false });
+        }
+      }
+      return json({ accounts });
+    }
+
     // Lista as contas (customers) acessíveis sob o MCC, com nome e id.
     if (action === "list_accounts") {
       const cfg = await getCfg(supabase, orgId);

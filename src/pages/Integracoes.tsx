@@ -524,39 +524,52 @@ const GoogleSheetsSection = () => {
 const GoogleAdsSection = () => {
   const [open, setOpen] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
   const [hasDevToken, setHasDevToken] = useState(false);
-  const [mcc, setMcc] = useState("");
   const [savedMcc, setSavedMcc] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [acessiveis, setAcessiveis] = useState<{ id: string; name: string; manager: boolean }[]>([]);
   const [loading, setLoading] = useState(false);
 
   const status = async () => {
-    const { data } = await (supabase as any).functions.invoke("google-ads", { body: { action: "status" } });
-    if (data) {
-      setConnected(!!data.connected);
-      setHasDevToken(!!data.has_dev_token);
-      setSavedMcc(data.login_customer_id || null);
-      if (data.login_customer_id) setMcc(data.login_customer_id);
-    }
+    const [ga, sheets] = await Promise.all([
+      (supabase as any).functions.invoke("google-ads", { body: { action: "status" } }),
+      (supabase as any).functions.invoke("google-sheets", { body: { action: "status" } }),
+    ]);
+    if (ga.data) { setConnected(!!ga.data.connected); setHasDevToken(!!ga.data.has_dev_token); setSavedMcc(ga.data.login_customer_id || null); }
+    if (sheets.data) setEmail(sheets.data.email || null);
   };
   useEffect(() => { status(); }, []);
 
-  const salvarMcc = async () => {
+  // Conecta usando o MESMO OAuth do Google Sheets (o callback ?code= é tratado na seção Sheets).
+  const conectar = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "set_login_customer", login_customer_id: mcc } });
+    const { data, error } = await (supabase as any).functions.invoke("google-sheets", { body: { action: "get_auth_url" } });
     setLoading(false);
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
-    sonner.success("MCC salvo"); status();
+    window.location.href = data.url;
+  };
+  const desconectar = async () => {
+    await (supabase as any).functions.invoke("google-sheets", { body: { action: "disconnect" } });
+    sonner.success("Google desconectado"); setAcessiveis([]); status();
   };
 
-  const testar = async () => {
+  const detectar = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "list_accounts" } });
+    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "list_accessible" } });
     setLoading(false);
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
-    setAccounts(data.accounts || []);
-    sonner.success(`${(data.accounts || []).length} conta(s) encontrada(s)`);
+    setAcessiveis(data.accounts || []);
+    if (!(data.accounts || []).length) sonner.error("Nenhuma conta acessível encontrada para este Gmail.");
   };
+
+  const escolherMcc = async (id: string) => {
+    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "set_login_customer", login_customer_id: id } });
+    if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
+    sonner.success("Conta gerenciadora definida"); status();
+  };
+
+  const pronto = connected && hasDevToken && !!savedMcc;
+  const fmtId = (id: string) => id.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -573,38 +586,59 @@ const GoogleAdsSection = () => {
                   <p className="text-xs text-muted-foreground mt-0.5">Puxar investimento das campanhas do Google</p>
                 </div>
               </div>
-              <Badge variant={connected && hasDevToken && savedMcc ? "default" : "outline"} className="gap-1">
-                {connected && hasDevToken && savedMcc ? <><Wifi className="h-3 w-3" /> Pronto</> : <><WifiOff className="h-3 w-3" /> Configurar</>}
+              <Badge variant={pronto ? "default" : "outline"} className="gap-1">
+                {pronto ? <><Wifi className="h-3 w-3" /> Pronto</> : <><WifiOff className="h-3 w-3" /> Configurar</>}
               </Badge>
             </div>
           </CardHeader>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent className="pt-0 space-y-3">
-            <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
-              <li>Conexão Google: <strong>{connected ? "conectada" : "não conectada"}</strong> {connected ? "" : "(conecte na seção Google Sheets acima — mesma conta serve para o Ads)"}</li>
-              <li>Developer Token: <strong>{hasDevToken ? "configurado" : "ausente"}</strong></li>
-            </ul>
-            {connected && (
-              <p className="text-xs text-amber-600">
-                Se você já estava conectado antes desta atualização, clique em <strong>Desconectar/Conectar Google</strong> (na seção Google Sheets) uma vez para autorizar o acesso ao Google Ads.
-              </p>
-            )}
-            <div className="space-y-1">
-              <Label>ID da conta gerenciadora (MCC)</Label>
-              <div className="flex gap-2">
-                <Input value={mcc} onChange={(e) => setMcc(e.target.value)} placeholder="123-456-7890" className="max-w-[220px]" />
-                <Button onClick={salvarMcc} disabled={loading || !mcc}>Salvar</Button>
-                <Button variant="outline" onClick={testar} disabled={loading || !savedMcc}>
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Testar (listar contas)
-                </Button>
+          <CardContent className="pt-0 space-y-4">
+            {/* 1. Conexão Google */}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">1. Conecte a conta Google (mesma conexão do Google Sheets).</p>
+              <div className="flex items-center gap-2">
+                {!connected ? (
+                  <Button onClick={conectar} disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart3 className="mr-2 h-4 w-4" />} Conectar com Google
+                  </Button>
+                ) : (
+                  <>
+                    <Badge variant="default" className="gap-1"><Wifi className="h-3 w-3" /> {email || "Conectado"}</Badge>
+                    <Button variant="outline" size="sm" onClick={conectar} disabled={loading}>Reautorizar</Button>
+                    <Button variant="destructive" size="sm" onClick={desconectar}>Desconectar</Button>
+                  </>
+                )}
               </div>
+              {!hasDevToken && <p className="text-xs text-destructive">Developer Token ausente — configure o secret GOOGLE_ADS_DEVELOPER_TOKEN.</p>}
             </div>
-            {accounts.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                Contas acessíveis: {accounts.map((a) => `${a.name} (${a.id})`).join(", ")}
+
+            {/* 2. Escolher conta gerenciadora */}
+            {connected && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">2. Escolha a conta gerenciadora (MCC) entre as que este Gmail acessa.</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button variant="outline" size="sm" onClick={detectar} disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Listar contas do Google
+                  </Button>
+                  {savedMcc && <Badge variant="secondary">MCC atual: {fmtId(savedMcc)}</Badge>}
+                </div>
+                {acessiveis.length > 0 && (
+                  <div className="space-y-1">
+                    {acessiveis.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-2 rounded border border-border px-3 py-1.5 text-sm">
+                        <span>{a.name} <span className="text-xs text-muted-foreground">({fmtId(a.id)})</span> {a.manager && <Badge variant="outline" className="ml-1 text-[10px]">MCC</Badge>}</span>
+                        <Button size="sm" variant={savedMcc === a.id ? "default" : "outline"} onClick={() => escolherMcc(a.id)}>
+                          {savedMcc === a.id ? "Selecionada" : "Usar esta"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
+
+            {pronto && <p className="text-xs text-muted-foreground">Pronto! Crie um canal em <strong>Canais de Aquisição</strong> com a plataforma <strong>Google Ads</strong>.</p>}
           </CardContent>
         </CollapsibleContent>
       </Card>

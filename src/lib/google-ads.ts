@@ -22,6 +22,12 @@ export async function fetchGoogleAdAccounts(): Promise<GoogleAdAccount[]> {
   return accounts || [];
 }
 
+// Contas que o Gmail conectado acessa (para escolher a gerenciadora/MCC).
+export async function listAccessibleGoogleAccounts(): Promise<{ id: string; name: string; manager: boolean }[]> {
+  const { accounts } = await call<{ accounts: { id: string; name: string; manager: boolean }[] }>("list_accessible");
+  return accounts || [];
+}
+
 // Gasto de uma conta Google Ads no período, filtrado pelo nome da campanha (slug), como no Meta.
 export async function fetchGoogleAdSpend(
   customerId: string,
