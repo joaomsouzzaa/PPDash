@@ -35,9 +35,10 @@ function freqStatus(f: number): { label: string; cls: string; dot: string } {
 
 export default function Campanhas() {
   const [metaConnected, setMetaConnected] = useState(() => localStorage.getItem("meta_connected") === "true");
-  const init = (() => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 89); return { s, e }; })();
+  // Campanhas abre sempre no mês atual (reseta no F5).
+  const init = (() => { const e = new Date(); const s = new Date(e.getFullYear(), e.getMonth(), 1); return { s, e }; })();
   const [filters, setFilters] = useState<Filters>({
-    dateRange: "90d", startDate: init.s, endDate: init.e,
+    dateRange: "this_month", startDate: init.s, endDate: init.e,
     adAccount: localStorage.getItem("selected_ad_account") || "all",
     city: localStorage.getItem("selected_city") || "all", produtos: [], canalId: "",
   });
