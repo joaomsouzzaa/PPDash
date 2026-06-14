@@ -163,6 +163,12 @@ function varsDaLead(l: any): Record<string, string | number> {
     anuncio: l.ad_name || "",
     instagram: l.instagram || "",
     data: l.data_lead ? new Date(l.data_lead).toLocaleDateString("pt-BR") : "",
+    capacidade: (l.custom && l.custom.capacidade_investimento) || l.faturamento || "",
+    tempo: (l.custom && l.custom.quando_iniciar) || "",
+    utm_source: l.utm_source || "",
+    utm_campaign: l.utm_campaign || "",
+    utm_medium: l.utm_medium || "",
+    utm_content: l.utm_content || "",
   };
 }
 

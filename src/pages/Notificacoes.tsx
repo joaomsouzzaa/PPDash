@@ -38,7 +38,7 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
   novo_lead: {
     label: "Novo lead",
     desc: "Dispara quando um lead é registrado (via webhook do CRM)",
-    vars: ["nome", "email", "telefone", "cidade", "status", "campanha", "origem", "anuncio", "instagram", "data"],
+    vars: ["nome", "email", "telefone", "cidade", "status", "campanha", "origem", "anuncio", "instagram", "data", "capacidade", "tempo", "utm_source", "utm_campaign", "utm_medium", "utm_content"],
   },
   resumo_cidade: {
     label: "Resumo de cidade (agendado)",
@@ -309,6 +309,9 @@ export default function Notificacoes() {
       participantes: "120", vips: "15", convidados: "8", bilheteria: "R$ 30.000,00", bilheteria_resultado: "R$ 18.000,00",
       cac: "R$ 180,00", projecao: "150", investimento: "R$ 12.000,00", projecao_investimento: "R$ 20.000,00",
       total_cidades: "6", participantes_total: "540", bilheteria_total: "R$ 130.000,00", investimento_total: "R$ 60.000,00", bilheteria_resultado_total: "R$ 70.000,00",
+      campanha: "[Captacao]+[Franquia]", origem: "Instagram_Feed", anuncio: "Criativo VDs", instagram: "@fulano",
+      capacidade: "De R$ 9.900,00 a R$ 12.000,00 - Tenho condições de adquirir a franquia.",
+      tempo: "Nos próximos 15 a 30 dias", utm_source: "Instagram_Feed", utm_campaign: "[Captacao]+[Franquia]", utm_medium: "paid", utm_content: "VDs-Depoimento",
     };
     const valores: Record<string, string> = {};
     for (const [col, tpl] of Object.entries(form.sheets_mapa)) {
