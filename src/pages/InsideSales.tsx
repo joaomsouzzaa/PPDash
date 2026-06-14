@@ -44,14 +44,12 @@ const InsideSales = () => {
     const savedEndDate = localStorage.getItem("is_end_date");
     const savedProdutos = localStorage.getItem("is_produtos");
     const savedCanal = localStorage.getItem("is_canal");
-    const dr = savedDateRange || "90d";
-    // Só restaura datas salvas quando o período é "personalizado"; nos presets
-    // (90d, 30d, etc.) usa o cálculo do preset — evita um range antigo travado.
-    const isCustom = dr === "custom";
+    // Dashboard sempre abre no mês atual (até hoje), reseta no F5.
+    void savedDateRange; void savedStartDate; void savedEndDate;
     return {
-      dateRange: dr,
-      startDate: isCustom && savedStartDate ? new Date(savedStartDate) : undefined,
-      endDate: isCustom && savedEndDate ? new Date(savedEndDate) : undefined,
+      dateRange: "this_month",
+      startDate: undefined,
+      endDate: undefined,
       adAccount: savedAccount || "all",
       city: savedCity || "all",
       produtos: savedProdutos ? JSON.parse(savedProdutos) : [],
