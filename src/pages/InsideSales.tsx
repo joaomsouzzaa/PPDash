@@ -268,9 +268,15 @@ const InsideSales = () => {
               {show("reuniao_agendada") && <KpiCard title="Reunião Agendada" value={String(reunioesAgendadas)} icon={CalendarCheck} />}
               {show("reuniao_realizada") && <KpiCard title="Reunião Realizada" value={String(reunioesRealizadas)} icon={Video} />}
               {show("vendas") && <KpiCard title="Vendas" value={String(vendas)} icon={ShoppingCart} />}
+            </div>
+
+            {/* Faturamento + ROAS: linha própria de 2 colunas (preenche toda a largura) */}
+            {(show("faturamento") || show("roas")) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {show("faturamento") && <KpiCard title="Faturamento" value={fmt(faturamentoVenda)} icon={BadgeDollarSign} />}
               {show("roas") && <KpiCard title="ROAS" value={`${roas.toFixed(2)}x`} icon={TrendingUp} />}
             </div>
+            )}
 
             {/* Linha 1: Funil | Mapa + ranking de estados (mesma altura) */}
             {(show("funil") || show("mapa")) && (
