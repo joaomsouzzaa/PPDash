@@ -50,6 +50,7 @@ export function BrazilHeatMap({ filters }: { filters: Filters }) {
   });
 
   const max = Math.max(0, ...Object.values(counts));
+  const ranking = Object.entries(counts).map(([uf, n]) => ({ uf, n })).sort((a, b) => b.n - a.n);
 
   return (
     <Card className="h-full">
@@ -89,6 +90,28 @@ export function BrazilHeatMap({ filters }: { filters: Filters }) {
               }
             </Geographies>
           </ComposableMap>
+        )}
+
+        {ranking.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <p className="mb-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Estados com mais leads</p>
+            <div className="space-y-2.5">
+              {ranking.slice(0, 10).map((d, i) => (
+                <div key={d.uf} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-4 shrink-0 text-right">{i + 1}.</span>
+                      {d.uf}
+                    </span>
+                    <span className="font-medium">{d.n}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${max ? (d.n / max) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>
