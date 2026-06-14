@@ -11,6 +11,7 @@ export interface Produto {
   google_conta_id: string | null; // customer id do Google Ads (só dígitos)
   investimento_manual: number | null; // R$/dia, fallback quando não há API
   metricas: string[] | null; // blocos/KPIs visíveis no dash (null = todos)
+  paginas: string[] | null; // páginas onde o botão aparece (null = todas)
   ativo: boolean;
 }
 
@@ -20,7 +21,7 @@ export function useProdutos() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("produtos")
-        .select("id, nome, slug, slug_source, conta_id, plataforma, google_conta_id, investimento_manual, metricas, ativo")
+        .select("id, nome, slug, slug_source, conta_id, plataforma, google_conta_id, investimento_manual, metricas, paginas, ativo")
         .order("nome", { ascending: true });
 
       if (error) throw error;

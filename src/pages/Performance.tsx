@@ -205,7 +205,7 @@ export default function Performance() {
           </header>
 
           <div className="p-6 space-y-6 min-w-0 max-w-full overflow-x-hidden">
-            <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} hideCityFilter showChannelButtons />
+            <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} hideCityFilter showChannelButtons pagina="performance" />
 
             {!enabled ? (
               <Card><CardContent className="py-10 text-center text-muted-foreground">

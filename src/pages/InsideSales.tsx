@@ -251,7 +251,7 @@ const InsideSales = () => {
           </header>
 
           <div className={tvMode ? "tv-content" : "p-6 space-y-6"}>
-            {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showChannelButtons />}
+            {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showChannelButtons pagina="dashboard" />}
 
             <div ref={kpisRef} className="space-y-6">
             {/* KPIs (grade única; cada card respeita as métricas do canal) */}

@@ -23,9 +23,10 @@ interface DashboardFiltersProps {
   hideCityFilter?: boolean;
   showProductFilter?: boolean;
   showChannelButtons?: boolean;
+  pagina?: "dashboard" | "performance" | "campanhas";
 }
 
-export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = false, showProductFilter = false, showChannelButtons = false }: DashboardFiltersProps) {
+export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = false, showProductFilter = false, showChannelButtons = false, pagina }: DashboardFiltersProps) {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
@@ -45,6 +46,8 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
 
   const { data: produtos = [], isLoading: loadingProdutos } = useProdutos();
   const activeProdutos = produtos.filter((p) => p.ativo);
+  // Canais visíveis na página atual (paginas null/vazio = todas as páginas).
+  const canaisDaPagina = activeProdutos.filter((p) => !pagina || !Array.isArray(p.paginas) || p.paginas.length === 0 || p.paginas.includes(pagina));
 
   const loadAccounts = () => {
     const connected = localStorage.getItem("meta_connected") === "true";
@@ -134,7 +137,7 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
           >
             Geral
           </Button>
-          {activeProdutos.map((c) => (
+          {canaisDaPagina.map((c) => (
             <Button
               key={c.id}
               variant={filters.canalId === c.id ? "default" : "outline"}

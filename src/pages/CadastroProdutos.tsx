@@ -30,6 +30,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+// Páginas onde o botão do canal pode aparecer.
+const PAGINAS: { key: string; label: string }[] = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "performance", label: "Performance" },
+  { key: "campanhas", label: "Campanhas" },
+];
+
 // Converte string vírgula-separada <-> array (para os seletores múltiplos).
 function splitCsv(value: string): string[] {
   return value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -54,6 +61,8 @@ const CadastroProdutos = () => {
   const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "", investimento_manual: "" });
   // Métricas visíveis no dash para o canal (null/[] tratados como "todas").
   const [metricas, setMetricas] = useState<string[] | null>(null);
+  // Páginas onde o botão do canal aparece (null = todas).
+  const [paginas, setPaginas] = useState<string[] | null>(null);
 
   // Contas do Google Ads (carregadas sob demanda quando a plataforma é Google).
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAdAccount[]>([]);
@@ -108,6 +117,7 @@ const CadastroProdutos = () => {
   const openAdd = () => {
     setForm({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "", investimento_manual: "" });
     setMetricas(null);
+    setPaginas(null);
     setAddOpen(true);
   };
 
@@ -115,6 +125,7 @@ const CadastroProdutos = () => {
     setEditing(c);
     setForm({ nome: c.nome, slug: c.slug, slug_source: c.slug_source ?? "", conta_id: c.conta_id ?? "", plataforma: c.plataforma ?? "meta", google_conta_id: c.google_conta_id ?? "", investimento_manual: c.investimento_manual != null ? String(c.investimento_manual) : "" });
     setMetricas(Array.isArray(c.metricas) ? c.metricas : null);
+    setPaginas(Array.isArray(c.paginas) ? c.paginas : null);
   };
 
   // Carrega as contas do Google quando a plataforma é Google.
@@ -145,6 +156,8 @@ const CadastroProdutos = () => {
     investimento_manual: form.investimento_manual.trim() ? Number(form.investimento_manual.replace(",", ".")) : null,
     // null = todas as métricas; array = só as selecionadas.
     metricas: metricas && metricas.length < ALL_METRIC_KEYS.length ? metricas : null,
+    // null = todas as páginas; array = só as marcadas.
+    paginas: paginas && paginas.length < PAGINAS.length ? paginas : null,
   });
 
   const handleAdd = async () => {
@@ -292,6 +305,28 @@ const CadastroProdutos = () => {
           allowCustom
           emptyText="Nenhum utm_source encontrado nos leads."
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Aparece nas páginas</Label>
+        <p className="text-xs text-muted-foreground">Em quais telas o botão deste canal aparece. (Nenhuma marcada = todas.)</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {PAGINAS.map((p) => {
+            const sel = paginas === null || paginas.includes(p.key);
+            return (
+              <label key={p.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={sel}
+                  onCheckedChange={() => {
+                    const base = paginas === null ? PAGINAS.map((x) => x.key) : [...paginas];
+                    setPaginas(sel ? base.filter((k) => k !== p.key) : [...base, p.key]);
+                  }}
+                />
+                {p.label}
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       <div className="space-y-2">

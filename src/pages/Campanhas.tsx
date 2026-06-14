@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { useCidades } from "@/hooks/useCidades";
-import { getHiddenCidades } from "@/components/EditCidadeDialog";
+import { useProdutos } from "@/hooks/useProdutos";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,32 +48,29 @@ export default function Campanhas() {
 
   const { data: cidades = [] } = useCidades();
   const selectedCidade = cidades.find((c) => c.slug === filters.city);
-  // Cidades ativas (evento de hoje em diante, não ocultas).
-  const hojeC = new Date(); hojeC.setHours(0, 0, 0, 0);
-  const hidden = getHiddenCidades();
-  const activeCidades = cidades.filter((c) => !hidden.includes(c.id) && (!c.data_evento || new Date(c.data_evento) >= hojeC));
-  // "Todas as cidades" = agrega APENAS as cidades ativas (não a conta inteira).
-  const slug = filters.city !== "all"
-    ? selectedCidade?.slug
-    : (activeCidades.map((c) => c.slug).join(",") || undefined);
+  const { data: produtos = [] } = useProdutos();
+  // Canal de aquisição selecionado define conta (conta_id) e campanha (slug).
+  const canal = filters.canalId ? produtos.find((p) => p.id === filters.canalId) : null;
+  const slug = canal?.slug || undefined;
+  const canalContaId = canal?.conta_id || null;
 
   useEffect(() => { (async () => { if (await hydrateMetaTokenFromServer()) setMetaConnected(true); })(); }, []);
   const enabled = metaConnected && !isTokenExpired();
-  const getAccountIds = async () => filters.adAccount !== "all" ? [filters.adAccount] : (await fetchAdAccounts()).map((a) => a.id);
-  const qk = [filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.adAccount, slug];
+  const getAccountIds = async () => canalContaId ? [canalContaId] : (await fetchAdAccounts()).map((a) => a.id);
+  const qk = [filters.dateRange, filters.startDate?.toISOString(), filters.endDate?.toISOString(), filters.canalId, slug];
 
   // keepPreviousData: mantém layout/tabelas enquanto novos dados carregam (só os dados mudam).
   const { data: campanhas = [], isFetching: lc } = useQuery({
     queryKey: ["camp", ...qk], enabled, placeholderData: (p) => p,
-    queryFn: async () => fetchCampaignBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
+    queryFn: async () => fetchCampaignBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
   const { data: adsets = [], isFetching: loadingAdsets } = useQuery({
     queryKey: ["adsets", ...qk], enabled, placeholderData: (p) => p,
-    queryFn: async () => fetchAdSetBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
+    queryFn: async () => fetchAdSetBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
   const { data: ads = [], isFetching: loadingAds } = useQuery({
     queryKey: ["ads", ...qk], enabled, placeholderData: (p) => p,
-    queryFn: async () => fetchAdBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, true),
+    queryFn: async () => fetchAdBreakdown(await getAccountIds(), filters.startDate, filters.endDate, filters.dateRange, slug, false),
   });
 
   // Alertas & Insights gerados pela IA (Gestor de Tráfego), por cidade (cron 9h).
@@ -143,7 +140,7 @@ export default function Campanhas() {
           </header>
 
           <div className="p-6 space-y-6 min-w-0 max-w-full">
-            <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} />
+            <DashboardFilters filters={filters} onFiltersChange={onFiltersChange} hideCityFilter showChannelButtons pagina="campanhas" />
 
             {!enabled ? (
               <Card><CardContent className="py-10 text-center text-muted-foreground">
