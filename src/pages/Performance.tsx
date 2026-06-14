@@ -248,9 +248,14 @@ export default function Performance() {
                   <KpiCard title="CAC" value={L(fmtBRL(kpis?.cac || 0))} icon={DollarSign} />
                 </div>
 
-                <CacSemanalGeral filters={filters} />
-                <CacCriativos filters={filters} />
-                <CacSemanalPorCriativo filters={filters} />
+                {/* Tabelas de CAC só no Geral e em canais Meta (não no Google/orgânico). */}
+                {canalPlataforma === "meta" && (
+                  <>
+                    <CacSemanalGeral filters={filters} />
+                    <CacCriativos filters={filters} />
+                    <CacSemanalPorCriativo filters={filters} />
+                  </>
+                )}
 
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Engajamento</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
