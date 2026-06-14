@@ -345,14 +345,14 @@ async function resumoGeral(supabase: any): Promise<Record<string, string | numbe
   };
 }
 
-// Gasto total no período (todas as contas Meta da config — igual ao "Geral").
-async function metaSpendDia(meta: any, since: string, until: string): Promise<number> {
+// Gasto total no período somando as contas conectadas (account_ids do meta_config).
+async function metaSpendDia(token: string, accs: string[], since: string, until: string): Promise<number> {
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
-  const contas: string[] = Array.isArray(meta.contas) && meta.contas.length ? meta.contas : [meta.account_id];
+  if (accs.length === 0) return 0;
   let s = 0;
-  for (const acc of contas) {
+  for (const acc of accs) {
     try {
-      const r = await fetch(`${GRAPH}/${acc}/insights?fields=spend&time_range=${tr}&access_token=${meta.access_token}`);
+      const r = await fetch(`${GRAPH}/${acc}/insights?fields=spend&time_range=${tr}&access_token=${token}`);
       const j = await r.json();
       for (const row of j.data || []) s += parseFloat(row.spend) || 0;
     } catch { /* ignora conta sem dados */ }
@@ -387,10 +387,19 @@ async function resumoDiarioPerformance(supabase: any, orgId: string | null): Pro
   const totalLeads = (leads || []).length;
   const mql = (leads || []).filter(isMql).length;
 
-  const meta = (await supabase.from("meta_config").select("*").maybeSingle()).data;
+  // meta_config pode ter várias linhas: token válido mais recente + contas conectadas (distintas).
+  const { data: cfgs } = await supabase.from("meta_config")
+    .select("account_id, contas, access_token, token_expires_at").not("access_token", "is", null)
+    .order("token_expires_at", { ascending: false });
+  const metaToken = (cfgs as any[])?.[0]?.access_token as string | undefined;
+  const accSet = new Set<string>();
+  for (const c of (cfgs as any[]) || []) {
+    if (Array.isArray(c.contas)) for (const a of c.contas) accSet.add(String(a).startsWith("act_") ? a : `act_${a}`);
+    if (c.account_id) accSet.add(c.account_id);
+  }
   let inv = 0;
-  if (meta?.access_token && meta?.account_id) {
-    try { inv = await metaSpendDia(meta, ymd(ini), ymd(ini)); } catch { /* meta off */ }
+  if (metaToken && accSet.size) {
+    try { inv = await metaSpendDia(metaToken, [...accSet], ymd(ini), ymd(ini)); } catch { /* meta off */ }
   }
   const cpl = totalLeads ? inv / totalLeads : 0;
   const cplMql = mql ? inv / mql : 0;
