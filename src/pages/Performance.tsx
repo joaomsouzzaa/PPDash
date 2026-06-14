@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { CacCriativos } from "@/components/CacCriativos";
+import { CacSemanalGeral } from "@/components/CacSemanalGeral";
 import { useCidades } from "@/hooks/useCidades";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
@@ -214,6 +215,7 @@ export default function Performance() {
                 </div>
 
                 <CacCriativos filters={filters} />
+                <CacSemanalGeral filters={filters} />
 
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Engajamento</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
