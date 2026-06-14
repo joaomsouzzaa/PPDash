@@ -179,7 +179,11 @@ export default function Performance() {
     enabled: !filters.canalId && gidsGeral.length > 0,
     queryFn: async () => fetchGoogleTotalSpend(gidsGeral, filters.dateRange, filters.startDate, filters.endDate),
   });
-  const investimento = canalPlataforma === "meta" ? (kpis?.spend ?? 0) + (!filters.canalId ? geralGoogle : 0) : investNonMeta;
+  // No "Geral", soma também o investimento manual dos canais sem plataforma (ex.: Portal).
+  const geralManual = !filters.canalId
+    ? produtos.filter((p) => p.plataforma === "none" && p.investimento_manual != null).reduce((s, p) => s + (p.investimento_manual || 0), 0)
+    : 0;
+  const investimento = canalPlataforma === "meta" ? (kpis?.spend ?? 0) + (!filters.canalId ? geralGoogle : 0) + geralManual : investNonMeta;
   const qGenero = useQuery(bq("gender"));
   const qIdade = useQuery(bq("age"));
   const qDispositivo = useQuery(bq("impression_device"));

@@ -108,6 +108,8 @@ const InsideSales = () => {
         }
         const gids = [...new Set(produtos.filter((p) => p.plataforma === "google" && p.google_conta_id).map((p) => p.google_conta_id as string))];
         if (gids.length) total += await fetchGoogleTotalSpend(gids, filters.dateRange, filters.startDate, filters.endDate);
+        // Canais sem plataforma (ex.: Portal do Franchising) somam o investimento manual.
+        total += produtos.filter((p) => p.plataforma === "none" && p.investimento_manual != null).reduce((s, p) => s + (p.investimento_manual || 0), 0);
         setMetaInvestimento(total);
         return;
       }
