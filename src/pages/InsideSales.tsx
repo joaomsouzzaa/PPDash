@@ -257,7 +257,7 @@ const InsideSales = () => {
             {/* KPIs (grade única; cada card respeita as métricas do canal) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {show("investimento") && <KpiCard title="Investimento Total" value={loadingSpend ? "Carregando..." : fmt(investimento)} icon={DollarSign} />}
-              {show("leads") && <KpiCard title="Leads Totais" value={String(leads)} icon={Users} />}
+              {show("leads") && <KpiCard title="Leads Totais (CRM)" value={String(leads)} icon={Users} />}
               {show("cpl") && <KpiCard title="Custo por Lead (CPL)" value={fmt(cpl)} icon={Target} />}
               {show("mql") && <KpiCard title="Leads MQL" value={String(mql)} icon={UserCheck} />}
               {show("mql_pct") && <KpiCard title="Percentual MQL" value={`${mqlPercent.toFixed(1)}%`} icon={Percent} />}

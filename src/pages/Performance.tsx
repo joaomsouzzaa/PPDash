@@ -210,7 +210,7 @@ export default function Performance() {
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Conversão</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="Conversão da LP" value={L(fmtPct(kpis?.convLP || 0))} icon={Target} />
-                  <KpiCard title="Leads" value={L(fmtNum(kpis?.leads || 0))} icon={Users} />
+                  <KpiCard title="Leads (Meta)" value={L(fmtNum(kpis?.leads || 0))} icon={Users} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="Vendas (compras)" value={L(fmtNum(kpis?.purchases || 0))} icon={MousePointerClick} />
