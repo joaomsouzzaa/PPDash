@@ -145,7 +145,7 @@ export function CacCriativos({ filters }: { filters: Filters }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base"><Megaphone className="h-4 w-4 text-primary" /> CAC por criativo {isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base"><Megaphone className="h-4 w-4 text-primary" /> CAC geral por criativo {isFetching && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}</CardTitle>
         <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" /> Novo criativo</Button>
       </CardHeader>
       <CardContent className="overflow-x-auto">
