@@ -16,7 +16,7 @@ import {
 } from "@/lib/meta-ads";
 import {
   DollarSign, Eye, Layers, MousePointerClick, Target, TrendingUp, BarChart3, Link2, CreditCard,
-  ShoppingCart, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle, PieChart as PieChartIcon, Loader2,
+  Users, MessageSquare, Bookmark, Heart, MessageCircle, PlayCircle, PieChart as PieChartIcon, Loader2,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -208,10 +208,9 @@ export default function Performance() {
                 </div>
 
                 <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas de Conversão</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="Conversão da LP" value={L(fmtPct(kpis?.convLP || 0))} icon={Target} />
-                  <KpiCard title="Inicialização de Checkout" value={L(fmtNum(kpis?.checkouts || 0))} icon={ShoppingCart} />
-                  <KpiCard title="Conversão do Checkout" value={L(fmtPct(kpis?.convCheckout || 0))} icon={Target} />
+                  <KpiCard title="Leads" value={L(fmtNum(kpis?.leads || 0))} icon={Users} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="Vendas (compras)" value={L(fmtNum(kpis?.purchases || 0))} icon={MousePointerClick} />

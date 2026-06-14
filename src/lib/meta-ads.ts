@@ -464,7 +464,7 @@ export async function fetchDailySpendBreakdown(
 
 export interface AccountInsights {
   spend: number; impressions: number; clicks: number; linkClicks: number;
-  reach: number; pageViews: number; checkouts: number; purchases: number;
+  reach: number; pageViews: number; checkouts: number; purchases: number; leads: number;
   cpm: number; ctr: number; cpc: number; connectRate: number; costPerPageView: number;
   convLP: number; convCheckout: number; cac: number;
   // Engajamento
@@ -498,7 +498,7 @@ export async function fetchAccountInsights(
     ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
     : buildTimeRange(dateRange));
   const timeRangeParam = JSON.stringify(timeRange);
-  const agg = { spend: 0, impressions: 0, clicks: 0, linkClicks: 0, reach: 0, pageViews: 0, checkouts: 0, purchases: 0, dms: 0, saves: 0, reactions: 0, comments: 0, videoViews: 0 };
+  const agg = { spend: 0, impressions: 0, clicks: 0, linkClicks: 0, reach: 0, pageViews: 0, checkouts: 0, purchases: 0, leads: 0, dms: 0, saves: 0, reactions: 0, comments: 0, videoViews: 0 };
   const variants = campaignSlug ? slugVariants(campaignSlug) : [];
   const acc = (r: any) => {
     agg.spend += parseFloat(r.spend) || 0;
@@ -509,6 +509,7 @@ export async function fetchAccountInsights(
     agg.pageViews += sumAction(r.actions, ["landing_page_view"]);
     agg.checkouts += pickAction(r.actions, ["omni_initiated_checkout", "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout"]);
     agg.purchases += pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+    agg.leads += pickAction(r.actions, LEAD_ACTIONS);
     agg.dms += pickAction(r.actions, ["onsite_conversion.messaging_conversation_started_7d", "messaging_conversation_started_7d"]);
     agg.saves += pickAction(r.actions, ["onsite_conversion.post_save", "post_save"]);
     agg.reactions += sumAction(r.actions, ["post_reaction"]);
@@ -536,7 +537,7 @@ export async function fetchAccountInsights(
     cpc: agg.clicks > 0 ? agg.spend / agg.clicks : 0,
     connectRate: agg.linkClicks > 0 ? (agg.pageViews / agg.linkClicks) * 100 : 0,
     costPerPageView: agg.pageViews > 0 ? agg.spend / agg.pageViews : 0,
-    convLP: agg.pageViews > 0 ? (agg.checkouts / agg.pageViews) * 100 : 0,
+    convLP: agg.pageViews > 0 ? (agg.leads / agg.pageViews) * 100 : 0,
     convCheckout: agg.checkouts > 0 ? (agg.purchases / agg.checkouts) * 100 : 0,
     cac: agg.purchases > 0 ? agg.spend / agg.purchases : 0,
   };
