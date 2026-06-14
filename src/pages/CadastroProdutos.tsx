@@ -211,10 +211,11 @@ const CadastroProdutos = () => {
           <SelectContent>
             <SelectItem value="meta">Meta Ads</SelectItem>
             <SelectItem value="google">Google Ads</SelectItem>
+            <SelectItem value="none">Nenhuma (sem investimento)</SelectItem>
           </SelectContent>
         </Select>
       </div>
-      {form.plataforma === "meta" ? (
+      {form.plataforma === "meta" && (
         <div className="space-y-1">
           <Label>Conta de Anúncios (Meta)</Label>
           <Select value={form.conta_id || "all"} onValueChange={(v) => setForm({ ...form, conta_id: v === "all" ? "" : v })}>
@@ -229,7 +230,8 @@ const CadastroProdutos = () => {
             </SelectContent>
           </Select>
         </div>
-      ) : (
+      )}
+      {form.plataforma === "google" && (
         <div className="space-y-1">
           <Label>Conta do Google Ads</Label>
           {googleErro ? (

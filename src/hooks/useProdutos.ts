@@ -7,7 +7,7 @@ export interface Produto {
   slug: string;               // slug do UTM Campaign / nome da campanha (para o investimento)
   slug_source: string | null; // slug do UTM Source (para contar os leads)
   conta_id: string | null;    // conta de anúncios do Meta (act_...) deste canal
-  plataforma: "meta" | "google"; // de onde vem o investimento
+  plataforma: "meta" | "google" | "none"; // de onde vem o investimento ("none" = sem investimento)
   google_conta_id: string | null; // customer id do Google Ads (só dígitos)
   investimento_manual: number | null; // R$/dia, fallback quando não há API
   ativo: boolean;

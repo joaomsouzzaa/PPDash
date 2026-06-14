@@ -95,6 +95,8 @@ const InsideSales = () => {
     if (canalCarregando) return;
     setLoadingSpend(true);
     try {
+      // Canal sem plataforma de investimento → zera.
+      if (canalPlataforma === "none") { setMetaInvestimento(0); return; }
       // Canal do Google Ads → API google-ads; se não houver conta/API, usa o investimento manual (R$/dia × dias).
       if (canalPlataforma === "google") {
         if (canalGoogleId) {
