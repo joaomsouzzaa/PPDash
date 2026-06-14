@@ -52,7 +52,7 @@ const renderPct = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any)
 
 function BreakCard({ title, rows, type, max, loading }: { title: string; rows: BreakdownRow[]; type: "pie" | "bar"; max?: number; loading?: boolean }) {
   const [tipo, setTipo] = useState<"pie" | "bar">(type);
-  const data = rows.map((r) => ({ name: lbl(r.label), value: r.purchases })).filter((d) => d.value > 0).slice(0, max ?? 99);
+  const data = rows.map((r) => ({ name: lbl(r.label), value: r.leads })).filter((d) => d.value > 0).slice(0, max ?? 99);
   return (
     <Card>
       <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2 space-y-0">
@@ -75,14 +75,14 @@ function BreakCard({ title, rows, type, max, loading }: { title: string; rows: B
               <Loader2 className="h-6 w-6 animate-spin" /> Carregando...
             </div>
           ) : data.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sem compras neste segmento</div>
+            <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sem leads neste segmento</div>
           ) : tipo === "pie" ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={45} outerRadius={78} paddingAngle={2} label={renderPct} labelLine={false}>
                   {data.map((_, i) => <Cell key={i} fill={BR_COLORS[i % BR_COLORS.length]} />)}
                 </Pie>
-                <Tooltip separator="" contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} itemStyle={{ color: "#fff" }} labelStyle={{ color: "#fff", fontWeight: 600 }} formatter={(v: number) => [`${v} compras`, ""]} />
+                <Tooltip separator="" contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} itemStyle={{ color: "#fff" }} labelStyle={{ color: "#fff", fontWeight: 600 }} formatter={(v: number) => [`${v} leads`, ""]} />
                 <Legend verticalAlign="bottom" height={36} iconType="circle" formatter={(value: string) => <span className="text-xs text-muted-foreground">{value}</span>} />
               </PieChart>
             </ResponsiveContainer>
@@ -91,7 +91,7 @@ function BreakCard({ title, rows, type, max, loading }: { title: string; rows: B
               <BarChart data={data} layout="vertical" margin={{ left: 10, right: 16 }}>
                 <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" width={90} stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <Tooltip cursor={{ fill: "hsl(var(--muted)/0.3)" }} separator="" contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} itemStyle={{ color: "#fff" }} labelStyle={{ color: "#fff", fontWeight: 600 }} formatter={(v: number) => [`${v} compras`, ""]} />
+                <Tooltip cursor={{ fill: "hsl(var(--muted)/0.3)" }} separator="" contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} itemStyle={{ color: "#fff" }} labelStyle={{ color: "#fff", fontWeight: 600 }} formatter={(v: number) => [`${v} leads`, ""]} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {data.map((_, i) => <Cell key={i} fill={BR_COLORS[i % BR_COLORS.length]} />)}
                 </Bar>

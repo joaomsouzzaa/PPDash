@@ -776,7 +776,9 @@ export async function fetchAdBreakdown(
   return top50;
 }
 
-export interface BreakdownRow { label: string; spend: number; impressions: number; clicks: number; purchases: number; }
+export interface BreakdownRow { label: string; spend: number; impressions: number; clicks: number; purchases: number; leads: number; }
+
+const LEAD_ACTIONS = ["lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead", "leadgen.other"];
 
 /** Insights segmentados por um breakdown do Meta (age, gender, impression_device, publisher_platform, device_platform...). */
 export async function fetchBreakdown(
@@ -791,7 +793,7 @@ export async function fetchBreakdown(
   // Alguns breakdowns só funcionam combinados (ex.: publisher_platform,platform_position).
   // keyField define por qual campo agregar (default = o próprio breakdown).
   const kf = keyField || breakdown;
-  const map = new Map<string, { spend: number; impressions: number; clicks: number; purchases: number }>();
+  const map = new Map<string, { spend: number; impressions: number; clicks: number; purchases: number; leads: number }>();
   await Promise.all(accountIds.map(async (id) => {
     const params: Record<string, string> = campaignSlug
       ? { level: "campaign", breakdowns: breakdown, fields: "campaign_name,spend,impressions,clicks,actions", time_range, limit: "500" }
@@ -800,16 +802,17 @@ export async function fetchBreakdown(
     for (const r of rows) {
       if (campaignSlug && !campaignMatchesSlug(r.campaign_name, variants, strictSales)) continue;
       const key = String(r[kf] ?? "—");
-      const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0 };
+      const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0, leads: 0 };
       cur.spend += parseFloat(r.spend) || 0;
       cur.impressions += parseInt(r.impressions) || 0;
       cur.clicks += parseInt(r.clicks) || 0;
       cur.purchases += pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+      cur.leads += pickAction(r.actions, LEAD_ACTIONS);
       map.set(key, cur);
     }
   }));
   const out = Array.from(map.entries()).map(([label, v]) => ({ label, ...v }))
-    .sort((a, b) => (b.purchases - a.purchases) || (b.spend - a.spend));
+    .sort((a, b) => (b.leads - a.leads) || (b.spend - a.spend));
   _spendCache.set(cacheKey, { data: out, ts: Date.now() });
   return out;
 }
@@ -844,19 +847,20 @@ export async function warmBreakdownsForCities(
     // Separa/agrega por cidade e grava no cache de fetchBreakdown.
     for (const c of cities) {
       const variants = slugVariants(c.slug);
-      const map = new Map<string, { spend: number; impressions: number; clicks: number; purchases: number }>();
+      const map = new Map<string, { spend: number; impressions: number; clicks: number; purchases: number; leads: number }>();
       for (const r of allRows) {
         if (!campaignMatchesSlug(r.campaign_name, variants, true)) continue;
         const key = String(r[kf] ?? "—");
-        const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0 };
+        const cur = map.get(key) || { spend: 0, impressions: 0, clicks: 0, purchases: 0, leads: 0 };
         cur.spend += parseFloat(r.spend) || 0;
         cur.impressions += parseInt(r.impressions) || 0;
         cur.clicks += parseInt(r.clicks) || 0;
         cur.purchases += pickAction(r.actions, ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"]);
+        cur.leads += pickAction(r.actions, LEAD_ACTIONS);
         map.set(key, cur);
       }
       const out = Array.from(map.entries()).map(([label, v]) => ({ label, ...v }))
-        .sort((a, b) => (b.purchases - a.purchases) || (b.spend - a.spend));
+        .sort((a, b) => (b.leads - a.leads) || (b.spend - a.spend));
       const cacheKey = `bd_${accountIds.join(",")}_${breakdown}_${keyField || ""}_${time_range}_${c.slug}_true`;
       _spendCache.set(cacheKey, { data: out, ts: Date.now() });
     }
