@@ -212,6 +212,8 @@ export default function Performance() {
                   <KpiCard title="Conversão da LP" value={L(fmtPct(kpis?.convLP || 0))} icon={Target} />
                   <KpiCard title="Inicialização de Checkout" value={L(fmtNum(kpis?.checkouts || 0))} icon={ShoppingCart} />
                   <KpiCard title="Conversão do Checkout" value={L(fmtPct(kpis?.convCheckout || 0))} icon={Target} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <KpiCard title="Vendas (compras)" value={L(fmtNum(kpis?.purchases || 0))} icon={MousePointerClick} />
                   <KpiCard title="CAC" value={L(fmtBRL(kpis?.cac || 0))} icon={DollarSign} />
                 </div>
