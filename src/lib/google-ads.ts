@@ -1,0 +1,41 @@
+import { supabase } from "@/integrations/supabase/client";
+
+export interface GoogleAdAccount { id: string; name: string }
+
+async function call<T>(action: string, extra: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("google-ads", { body: { action, ...extra } });
+  if (error) throw new Error(error.message);
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as T;
+}
+
+export function getGoogleAdsStatus() {
+  return call<{ connected: boolean; email: string | null; has_dev_token: boolean; login_customer_id: string | null }>("status");
+}
+
+export function setGoogleAdsLoginCustomer(loginCustomerId: string) {
+  return call<{ ok: boolean }>("set_login_customer", { login_customer_id: loginCustomerId });
+}
+
+export async function fetchGoogleAdAccounts(): Promise<GoogleAdAccount[]> {
+  const { accounts } = await call<{ accounts: GoogleAdAccount[] }>("list_accounts");
+  return accounts || [];
+}
+
+// Gasto de uma conta Google Ads no período, filtrado pelo nome da campanha (slug), como no Meta.
+export async function fetchGoogleAdSpend(
+  customerId: string,
+  dateRange: string,
+  startDate?: Date,
+  endDate?: Date,
+  campaignSlug?: string,
+): Promise<number> {
+  const { spend } = await call<{ spend: number }>("spend", {
+    customer_id: customerId,
+    dateRange,
+    start: startDate?.toISOString(),
+    end: endDate?.toISOString(),
+    campaignSlug: campaignSlug || "",
+  });
+  return spend || 0;
+}

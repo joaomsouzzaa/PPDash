@@ -10,6 +10,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/adwords", // Google Ads (mesma conexão Google serve Sheets + Ads)
 ].join(" ");
 
 function svc() {

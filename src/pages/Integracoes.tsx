@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users, Sheet, SlidersHorizontal } from "lucide-react";
+import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users, Sheet, SlidersHorizontal, BarChart3 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -416,6 +416,9 @@ const Integracoes = () => {
 
             {/* Google Sheets */}
             <GoogleSheetsSection />
+
+            {/* Google Ads */}
+            <GoogleAdsSection />
           </div>
         </main>
       </div>
@@ -510,6 +513,97 @@ const GoogleSheetsSection = () => {
                 </div>
                 {connected && <p className="text-xs text-muted-foreground">Conectado. Configure a planilha em cada notificação (Notificações → editar).</p>}
               </>
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+};
+
+const GoogleAdsSection = () => {
+  const [open, setOpen] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [hasDevToken, setHasDevToken] = useState(false);
+  const [mcc, setMcc] = useState("");
+  const [savedMcc, setSavedMcc] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const status = async () => {
+    const { data } = await (supabase as any).functions.invoke("google-ads", { body: { action: "status" } });
+    if (data) {
+      setConnected(!!data.connected);
+      setHasDevToken(!!data.has_dev_token);
+      setSavedMcc(data.login_customer_id || null);
+      if (data.login_customer_id) setMcc(data.login_customer_id);
+    }
+  };
+  useEffect(() => { status(); }, []);
+
+  const salvarMcc = async () => {
+    setLoading(true);
+    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "set_login_customer", login_customer_id: mcc } });
+    setLoading(false);
+    if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
+    sonner.success("MCC salvo"); status();
+  };
+
+  const testar = async () => {
+    setLoading(true);
+    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "list_accounts" } });
+    setLoading(false);
+    if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
+    setAccounts(data.accounts || []);
+    sonner.success(`${(data.accounts || []).length} conta(s) encontrada(s)`);
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer hover:bg-secondary/40 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <BarChart3 className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Google Ads</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Puxar investimento das campanhas do Google</p>
+                </div>
+              </div>
+              <Badge variant={connected && hasDevToken && savedMcc ? "default" : "outline"} className="gap-1">
+                {connected && hasDevToken && savedMcc ? <><Wifi className="h-3 w-3" /> Pronto</> : <><WifiOff className="h-3 w-3" /> Configurar</>}
+              </Badge>
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 space-y-3">
+            <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4">
+              <li>Conexão Google: <strong>{connected ? "conectada" : "não conectada"}</strong> {connected ? "" : "(conecte na seção Google Sheets acima — mesma conta serve para o Ads)"}</li>
+              <li>Developer Token: <strong>{hasDevToken ? "configurado" : "ausente"}</strong></li>
+            </ul>
+            {connected && (
+              <p className="text-xs text-amber-600">
+                Se você já estava conectado antes desta atualização, clique em <strong>Desconectar/Conectar Google</strong> (na seção Google Sheets) uma vez para autorizar o acesso ao Google Ads.
+              </p>
+            )}
+            <div className="space-y-1">
+              <Label>ID da conta gerenciadora (MCC)</Label>
+              <div className="flex gap-2">
+                <Input value={mcc} onChange={(e) => setMcc(e.target.value)} placeholder="123-456-7890" className="max-w-[220px]" />
+                <Button onClick={salvarMcc} disabled={loading || !mcc}>Salvar</Button>
+                <Button variant="outline" onClick={testar} disabled={loading || !savedMcc}>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Testar (listar contas)
+                </Button>
+              </div>
+            </div>
+            {accounts.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                Contas acessíveis: {accounts.map((a) => `${a.name} (${a.id})`).join(", ")}
+              </div>
             )}
           </CardContent>
         </CollapsibleContent>

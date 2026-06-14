@@ -22,6 +22,7 @@ import { useProdutos, type Produto } from "@/hooks/useProdutos";
 import { useDistinctUtmSources } from "@/hooks/useDistinctUtmSources";
 import { MultiSelectCombobox } from "@/components/MultiSelectCombobox";
 import { fetchAdAccounts, fetchCampaignNames, hydrateMetaTokenFromServer, type AdAccount } from "@/lib/meta-ads";
+import { fetchGoogleAdAccounts, type GoogleAdAccount } from "@/lib/google-ads";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2 } from "lucide-react";
@@ -48,13 +49,17 @@ const CadastroProdutos = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Produto | null>(null);
   const [deleting, setDeleting] = useState<Produto | null>(null);
-  const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "" });
+  const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "" });
+
+  // Contas do Google Ads (carregadas sob demanda quando a plataforma é Google).
+  const [googleAccounts, setGoogleAccounts] = useState<GoogleAdAccount[]>([]);
+  const [googleErro, setGoogleErro] = useState<string | null>(null);
 
   // Campanhas do Meta para a conta selecionada (ou todas as contas, se vazio).
   const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
   const formOpen = addOpen || !!editing;
   useEffect(() => {
-    if (!formOpen) return;
+    if (!formOpen || form.plataforma !== "meta") { setCampaignOptions([]); return; }
     let cancelled = false;
     (async () => {
       const ids = form.conta_id ? [form.conta_id] : adAccounts.map((a) => a.id);
@@ -65,7 +70,7 @@ const CadastroProdutos = () => {
       } catch { if (!cancelled) setCampaignOptions([]); }
     })();
     return () => { cancelled = true; };
-  }, [formOpen, form.conta_id, adAccounts]);
+  }, [formOpen, form.conta_id, form.plataforma, adAccounts]);
 
   // Reconcilia valores salvos com as opções reais: converte para a grafia
   // canônica (case-insensitive) e remove duplicados. Cura valores legados
@@ -97,25 +102,40 @@ const CadastroProdutos = () => {
   }, [formOpen, campaignOptions, sourceOptions]);
 
   const openAdd = () => {
-    setForm({ nome: "", slug: "", slug_source: "", conta_id: "" });
+    setForm({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "" });
     setAddOpen(true);
   };
 
   const openEdit = (c: Produto) => {
     setEditing(c);
-    setForm({ nome: c.nome, slug: c.slug, slug_source: c.slug_source ?? "", conta_id: c.conta_id ?? "" });
+    setForm({ nome: c.nome, slug: c.slug, slug_source: c.slug_source ?? "", conta_id: c.conta_id ?? "", plataforma: c.plataforma ?? "meta", google_conta_id: c.google_conta_id ?? "" });
   };
+
+  // Carrega as contas do Google quando a plataforma é Google.
+  useEffect(() => {
+    if (!formOpen || form.plataforma !== "google") return;
+    let cancelled = false;
+    setGoogleErro(null);
+    (async () => {
+      try {
+        const accs = await fetchGoogleAdAccounts();
+        if (!cancelled) setGoogleAccounts(accs);
+      } catch (e) {
+        if (!cancelled) { setGoogleAccounts([]); setGoogleErro((e as Error).message); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [formOpen, form.plataforma]);
 
   const payload = () => ({
     nome: form.nome,
-    // UTM Campaign: nomes reais das campanhas do Meta — NÃO normalizar (precisa
-    // casar literalmente, via includes, com o campaign_name).
+    plataforma: form.plataforma,
+    // UTM Campaign: nomes reais das campanhas — NÃO normalizar (casa via includes com o nome da campanha).
     slug: splitCsv(form.slug).join(","),
-    // UTM Source: valores vêm dos utm_source reais dos leads — NÃO normalizar
-    // (normalizeSlug removeria "_" e quebraria o match em useLeadsData, que já
-    // faz a comparação case-insensitive via includes).
+    // UTM Source: valores vêm dos utm_source reais dos leads — NÃO normalizar.
     slug_source: splitCsv(form.slug_source).join(",") || null,
-    conta_id: form.conta_id || null,
+    conta_id: form.plataforma === "meta" ? (form.conta_id || null) : null,
+    google_conta_id: form.plataforma === "google" ? (form.google_conta_id || null) : null,
   });
 
   const handleAdd = async () => {
@@ -184,19 +204,49 @@ const CadastroProdutos = () => {
         />
       </div>
       <div className="space-y-1">
-        <Label>Conta de Anúncios (de onde vem o investimento)</Label>
-        <Select value={form.conta_id || "all"} onValueChange={(v) => setForm({ ...form, conta_id: v === "all" ? "" : v })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Todas as contas" />
-          </SelectTrigger>
+        <Label>Plataforma (de onde vem o investimento)</Label>
+        <Select value={form.plataforma} onValueChange={(v) => setForm({ ...form, plataforma: v })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas as contas</SelectItem>
-            {adAccounts.map((a) => (
-              <SelectItem key={a.id} value={a.id}>{a.name || a.account_id}</SelectItem>
-            ))}
+            <SelectItem value="meta">Meta Ads</SelectItem>
+            <SelectItem value="google">Google Ads</SelectItem>
           </SelectContent>
         </Select>
       </div>
+      {form.plataforma === "meta" ? (
+        <div className="space-y-1">
+          <Label>Conta de Anúncios (Meta)</Label>
+          <Select value={form.conta_id || "all"} onValueChange={(v) => setForm({ ...form, conta_id: v === "all" ? "" : v })}>
+            <SelectTrigger>
+              <SelectValue placeholder="Todas as contas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as contas</SelectItem>
+              {adAccounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>{a.name || a.account_id}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <Label>Conta do Google Ads</Label>
+          {googleErro ? (
+            <p className="text-sm text-destructive">{googleErro} (conecte o Google Ads em Integrações e informe o MCC)</p>
+          ) : (
+            <Select value={form.google_conta_id} onValueChange={(v) => setForm({ ...form, google_conta_id: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder={googleAccounts.length ? "Selecione a conta" : "Carregando contas..."} />
+              </SelectTrigger>
+              <SelectContent>
+                {googleAccounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.name} ({a.id})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
       <div className="space-y-1">
         <Label>UTM Campaign (nome da campanha — filtra o investimento)</Label>
         <MultiSelectCombobox
