@@ -90,6 +90,9 @@ const InsideSales = () => {
   // Canal selecionado mas produtos ainda não carregaram → não puxar (evita
   // mostrar o investimento do Meta por engano num canal Google).
   const canalCarregando = !!filters.canalId && !canal;
+  // Métricas/blocos visíveis para o canal (sem config = mostra tudo).
+  const metricasCanal = canal?.metricas ?? null;
+  const show = (key: string) => !metricasCanal || metricasCanal.includes(key);
 
   const loadSpend = useCallback(async () => {
     if (canalCarregando) return;
@@ -251,110 +254,44 @@ const InsideSales = () => {
             {!tvMode && <DashboardFilters filters={filters} onFiltersChange={handleFiltersChange} hideCityFilter showChannelButtons />}
 
             <div ref={kpisRef} className="space-y-6">
-            {/* Row 1: Investimento, Leads, CPL */}
+            {/* KPIs (grade única; cada card respeita as métricas do canal) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Investimento Total"
-                value={loadingSpend ? "Carregando..." : fmt(investimento)}
-                icon={DollarSign}
-              />
-              <KpiCard
-                title="Leads Totais"
-                value={String(leads)}
-                icon={Users}
-              />
-              <KpiCard
-                title="Custo por Lead (CPL)"
-                value={fmt(cpl)}
-                icon={Target}
-              />
-            </div>
-
-            {/* Row 2: MQL, MQL%, CPL MQL */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Leads MQL"
-                value={String(mql)}
-                icon={UserCheck}
-              />
-              <KpiCard
-                title="Percentual MQL"
-                value={`${mqlPercent.toFixed(1)}%`}
-                icon={Percent}
-              />
-              <KpiCard
-                title="Custo por MQL"
-                value={fmt(cplMql)}
-                icon={TrendingDown}
-              />
-            </div>
-
-            {/* Row 3: SQL, SQL%, CPL SQL */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Leads SQL"
-                value={String(sql)}
-                icon={UserPlus}
-              />
-              <KpiCard
-                title="Percentual SQL"
-                value={`${sqlPercent.toFixed(1)}%`}
-                icon={Percent}
-              />
-              <KpiCard
-                title="Custo por SQL"
-                value={fmt(cplSql)}
-                icon={TrendingDown}
-              />
-            </div>
-
-            {/* Row 4: Reunião Agendada, Reunião Realizada, Vendas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <KpiCard
-                title="Reunião Agendada"
-                value={String(reunioesAgendadas)}
-                icon={CalendarCheck}
-              />
-              <KpiCard
-                title="Reunião Realizada"
-                value={String(reunioesRealizadas)}
-                icon={Video}
-              />
-              <KpiCard
-                title="Vendas"
-                value={String(vendas)}
-                icon={ShoppingCart}
-              />
-            </div>
-
-            {/* Row 5: Faturamento, ROAS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <KpiCard
-                title="Faturamento"
-                value={fmt(faturamentoVenda)}
-                icon={BadgeDollarSign}
-              />
-              <KpiCard
-                title="ROAS"
-                value={`${roas.toFixed(2)}x`}
-                icon={TrendingUp}
-              />
+              {show("investimento") && <KpiCard title="Investimento Total" value={loadingSpend ? "Carregando..." : fmt(investimento)} icon={DollarSign} />}
+              {show("leads") && <KpiCard title="Leads Totais" value={String(leads)} icon={Users} />}
+              {show("cpl") && <KpiCard title="Custo por Lead (CPL)" value={fmt(cpl)} icon={Target} />}
+              {show("mql") && <KpiCard title="Leads MQL" value={String(mql)} icon={UserCheck} />}
+              {show("mql_pct") && <KpiCard title="Percentual MQL" value={`${mqlPercent.toFixed(1)}%`} icon={Percent} />}
+              {show("cpl_mql") && <KpiCard title="Custo por MQL" value={fmt(cplMql)} icon={TrendingDown} />}
+              {show("sql") && <KpiCard title="Leads SQL" value={String(sql)} icon={UserPlus} />}
+              {show("sql_pct") && <KpiCard title="Percentual SQL" value={`${sqlPercent.toFixed(1)}%`} icon={Percent} />}
+              {show("cpl_sql") && <KpiCard title="Custo por SQL" value={fmt(cplSql)} icon={TrendingDown} />}
+              {show("reuniao_agendada") && <KpiCard title="Reunião Agendada" value={String(reunioesAgendadas)} icon={CalendarCheck} />}
+              {show("reuniao_realizada") && <KpiCard title="Reunião Realizada" value={String(reunioesRealizadas)} icon={Video} />}
+              {show("vendas") && <KpiCard title="Vendas" value={String(vendas)} icon={ShoppingCart} />}
+              {show("faturamento") && <KpiCard title="Faturamento" value={fmt(faturamentoVenda)} icon={BadgeDollarSign} />}
+              {show("roas") && <KpiCard title="ROAS" value={`${roas.toFixed(2)}x`} icon={TrendingUp} />}
             </div>
 
             {/* Linha 1: Funil | Mapa + ranking de estados (mesma altura) */}
+            {(show("funil") || show("mapa")) && (
             <div className="grid gap-4 lg:grid-cols-2 items-stretch">
-              <SalesFunnel steps={funnelSteps} />
-              <BrazilHeatMap filters={filters} />
+              {show("funil") && <SalesFunnel steps={funnelSteps} />}
+              {show("mapa") && <BrazilHeatMap filters={filters} />}
             </div>
+            )}
 
             {/* Linha 2: (Origem + Criativos) | Cidades ao lado, mesma altura */}
+            {(show("origem") || show("criativos") || show("cidades")) && (
             <div className="grid gap-4 lg:grid-cols-2 items-stretch">
-              <div className="space-y-4">
-                <LeadsPlacement filters={filters} />
-                <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={10} />
-              </div>
-              <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} limit={16} />
+              {(show("origem") || show("criativos")) && (
+                <div className="space-y-4">
+                  {show("origem") && <LeadsPlacement filters={filters} />}
+                  {show("criativos") && <LeadsRanking filters={filters} title="Criativos com mais leads (UTM Content)" icon={Sparkles} field={{ kind: "column", key: "utm_content" }} limit={10} />}
+                </div>
+              )}
+              {show("cidades") && <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} limit={16} />}
             </div>
+            )}
             </div>
           </div>
         </main>

@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DASHBOARD_METRICS, ALL_METRIC_KEYS } from "@/lib/dashboardMetrics";
 import { useProdutos, type Produto } from "@/hooks/useProdutos";
 import { useDistinctUtmSources } from "@/hooks/useDistinctUtmSources";
 import { MultiSelectCombobox } from "@/components/MultiSelectCombobox";
@@ -50,6 +52,8 @@ const CadastroProdutos = () => {
   const [editing, setEditing] = useState<Produto | null>(null);
   const [deleting, setDeleting] = useState<Produto | null>(null);
   const [form, setForm] = useState({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "", investimento_manual: "" });
+  // Métricas visíveis no dash para o canal (null/[] tratados como "todas").
+  const [metricas, setMetricas] = useState<string[] | null>(null);
 
   // Contas do Google Ads (carregadas sob demanda quando a plataforma é Google).
   const [googleAccounts, setGoogleAccounts] = useState<GoogleAdAccount[]>([]);
@@ -103,12 +107,14 @@ const CadastroProdutos = () => {
 
   const openAdd = () => {
     setForm({ nome: "", slug: "", slug_source: "", conta_id: "", plataforma: "meta", google_conta_id: "", investimento_manual: "" });
+    setMetricas(null);
     setAddOpen(true);
   };
 
   const openEdit = (c: Produto) => {
     setEditing(c);
     setForm({ nome: c.nome, slug: c.slug, slug_source: c.slug_source ?? "", conta_id: c.conta_id ?? "", plataforma: c.plataforma ?? "meta", google_conta_id: c.google_conta_id ?? "", investimento_manual: c.investimento_manual != null ? String(c.investimento_manual) : "" });
+    setMetricas(Array.isArray(c.metricas) ? c.metricas : null);
   };
 
   // Carrega as contas do Google quando a plataforma é Google.
@@ -137,6 +143,8 @@ const CadastroProdutos = () => {
     conta_id: form.plataforma === "meta" ? (form.conta_id || null) : null,
     google_conta_id: form.plataforma === "google" ? (form.google_conta_id || null) : null,
     investimento_manual: form.investimento_manual.trim() ? Number(form.investimento_manual.replace(",", ".")) : null,
+    // null = todas as métricas; array = só as selecionadas.
+    metricas: metricas && metricas.length < ALL_METRIC_KEYS.length ? metricas : null,
   });
 
   const handleAdd = async () => {
@@ -284,6 +292,39 @@ const CadastroProdutos = () => {
           allowCustom
           emptyText="Nenhum utm_source encontrado nos leads."
         />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>Métricas visíveis no dashboard</Label>
+          <div className="flex gap-2">
+            <button type="button" className="text-xs text-primary hover:underline" onClick={() => setMetricas(null)}>Todas</button>
+            <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => setMetricas([])}>Nenhuma</button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">Desmarque o que não faz sentido para este canal. (Vazio/Todas = mostra tudo.)</p>
+        {(["KPI", "Gráfico"] as const).map((grupo) => (
+          <div key={grupo} className="space-y-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{grupo === "KPI" ? "Indicadores" : "Gráficos"}</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              {DASHBOARD_METRICS.filter((m) => m.grupo === grupo).map((m) => {
+                const sel = metricas === null || metricas.includes(m.key);
+                return (
+                  <label key={m.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={sel}
+                      onCheckedChange={() => {
+                        const base = metricas === null ? [...ALL_METRIC_KEYS] : [...metricas];
+                        setMetricas(sel ? base.filter((k) => k !== m.key) : [...base, m.key]);
+                      }}
+                    />
+                    <span className="truncate" title={m.label}>{m.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
