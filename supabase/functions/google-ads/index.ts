@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ADS_API = "https://googleads.googleapis.com/v17";
+const ADS_API = "https://googleads.googleapis.com/v21";
 
 function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -143,7 +143,9 @@ Deno.serve(async (req) => {
     if (action === "list_accessible") {
       const headers = await adsHeaders(supabase, orgId);
       const r = await fetch(`${ADS_API}/customers:listAccessibleCustomers`, { headers });
-      const j = await r.json();
+      const raw = await r.text();
+      let j: any;
+      try { j = JSON.parse(raw); } catch { throw new Error(`Resposta não-JSON (${r.status}): ${raw.slice(0, 300)}`); }
       if (!r.ok) throw new Error(j?.error?.message || `Google Ads API ${r.status}`);
       const ids: string[] = (j.resourceNames || []).map((rn: string) => rn.split("/")[1]);
       const accounts: { id: string; name: string; manager: boolean }[] = [];
