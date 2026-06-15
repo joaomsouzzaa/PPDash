@@ -8,7 +8,7 @@ const ORIGINS = [
   { id: "86a02d2c-a7bc-4363-96d3-3260258b9b38", nome: "PP | Leads Desqualificadas" },
 ];
 const DEST = "5581996125512"; // GoBot
-const JANELA_H = 24 * 2; // 2 dias: roda de hora em hora, então qualquer lead perdido pelo webhook é pego em até 1h; 2 dias é só margem. Janela maior puxa histórico antigo desnecessário.
+const JANELA_H = 24 * 3; // 3 dias: roda 1x/dia (08h BRT); 3 dias dá margem p/ recuperar o dia anterior mesmo se uma execução falhar. Janela maior puxaria histórico antigo desnecessário.
 
 function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
 
     // 5) Monta mensagem.
     const linhas: string[] = [];
-    linhas.push("🔄 Sincronização Clint → Banco");
+    linhas.push("🔄 Sincronização diária Clint → Banco");
     linhas.push(`🕐 ${fmtBRdt(new Date())} · desde ${fmtBRdt(new Date(cutoff))} (BRT)`);
     linhas.push("");
     linhas.push("📊 Resumo");
