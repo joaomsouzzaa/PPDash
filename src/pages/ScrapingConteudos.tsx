@@ -252,7 +252,12 @@ export default function ScrapingConteudos() {
                         {c.thumbnail
                           ? <img src={proxyImg(c.thumbnail)} alt="" loading="lazy" referrerPolicy="no-referrer"
                               className="h-full w-full object-cover"
-                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                              onError={(e) => {
+                                const img = e.currentTarget as HTMLImageElement;
+                                // 1ª falha: tenta a URL direta do Instagram; 2ª falha: esconde.
+                                if (img.dataset.fb !== "1" && c.thumbnail) { img.dataset.fb = "1"; img.src = c.thumbnail; }
+                                else img.style.display = "none";
+                              }} />
                           : <div className="h-full w-full flex items-center justify-center text-muted-foreground"><Instagram className="h-8 w-8" /></div>}
                         <div className="absolute top-2 left-2 flex items-center gap-1">
                           {i < 3 && <Badge className="bg-amber-500 text-black"><Trophy className="h-3 w-3 mr-1" />#{i + 1}</Badge>}

@@ -42,9 +42,11 @@ function handleLimpo(raw: string): string {
 
 // Normaliza um item do Apify instagram-scraper para o formato da UI.
 function normalizarItem(it: any) {
-  const likes = Number(it.likesCount ?? 0) || 0;
-  const comments = Number(it.commentsCount ?? 0) || 0;
-  const views = Number(it.videoViewCount ?? it.videoPlayCount ?? 0) || 0;
+  // Instagram às vezes oculta a contagem e o Apify devolve -1; tratamos como 0.
+  const nn = (v: any) => { const n = Number(v ?? 0); return Number.isFinite(n) && n > 0 ? n : 0; };
+  const likes = nn(it.likesCount);
+  const comments = nn(it.commentsCount);
+  const views = nn(it.videoViewCount ?? it.videoPlayCount);
   const isVideo = it.type === "Video" || !!it.videoUrl;
   // Score de engajamento: interações diretas pesam mais; views entram com peso menor.
   const engajamento = likes + comments * 2 + Math.round(views * 0.1);
