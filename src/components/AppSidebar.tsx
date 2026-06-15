@@ -22,6 +22,7 @@ import {
   Palette,
   LayoutGrid,
   Shield,
+  Instagram,
 } from "lucide-react";
 import { useItensOcultos } from "@/hooks/useModulos";
 import { MODULOS_CATALOGO } from "@/lib/modulos";
@@ -56,6 +57,7 @@ const ICONS: Record<string, any> = {
   "growth.chat": MessageSquare,
   "growth.workflow": KanbanSquare,
   "growth.designer": Palette,
+  "growth.scraping": Instagram,
 };
 
 export function AppSidebar() {

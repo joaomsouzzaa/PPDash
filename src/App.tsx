@@ -24,6 +24,7 @@ import Agentes from "./pages/Agentes";
 import Chat from "./pages/Chat";
 import Workflow from "./pages/Workflow";
 import Designer from "./pages/Designer";
+import ScrapingConteudos from "./pages/ScrapingConteudos";
 import Modulos from "./pages/Modulos";
 import Performance from "./pages/Performance";
 import Campanhas from "./pages/Campanhas";
@@ -85,6 +86,7 @@ const App = () => (
             <Route path="/chat" element={<Priv modulo="growth.chat"><Chat /></Priv>} />
             <Route path="/workflow" element={<Priv modulo="growth.workflow"><Workflow /></Priv>} />
             <Route path="/designer" element={<Priv modulo="growth.designer"><Designer /></Priv>} />
+            <Route path="/scraping-conteudos" element={<Priv modulo="growth.scraping"><ScrapingConteudos /></Priv>} />
 
             {/* Configurações (apenas autenticação) */}
             <Route path="/integracoes" element={<Priv><Integracoes /></Priv>} />

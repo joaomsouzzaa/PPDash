@@ -37,6 +37,7 @@ export const MODULOS_CATALOGO: ModuloDef[] = [
       { key: "growth.chat", nome: "Chat", url: "/chat" },
       { key: "growth.workflow", nome: "Workflow", url: "/workflow" },
       { key: "growth.designer", nome: "Designer", url: "/designer" },
+      { key: "growth.scraping", nome: "Scraping de Conteúdos", url: "/scraping-conteudos" },
     ],
   },
 ];
