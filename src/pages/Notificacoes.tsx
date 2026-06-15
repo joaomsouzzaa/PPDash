@@ -141,7 +141,7 @@ export default function Notificacoes() {
   const { data: notificacoes = [] } = useQuery({
     queryKey: ["notificacoes"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from("notificacoes").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("notificacoes").select("*").order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as Notificacao[];
     },
@@ -151,7 +151,7 @@ export default function Notificacoes() {
   const { data: orgCfg } = useQuery({
     queryKey: ["notif-org-cfg"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("organizations").select("id, notif_gatilhos").order("created_at").limit(1).maybeSingle();
+      const { data } = await supabase.from("organizations").select("id, notif_gatilhos").order("created_at").limit(1).maybeSingle();
       return data as { id: string; notif_gatilhos: string[] | null } | null;
     },
   });
@@ -161,7 +161,7 @@ export default function Notificacoes() {
     if (!orgCfg?.id) return;
     const atual = Array.isArray(orgCfg.notif_gatilhos) ? [...orgCfg.notif_gatilhos] : Object.keys(GATILHOS);
     const novo = atual.includes(k) ? atual.filter((x) => x !== k) : [...atual, k];
-    await (supabase as any).from("organizations").update({ notif_gatilhos: novo }).eq("id", orgCfg.id);
+    await supabase.from("organizations").update({ notif_gatilhos: novo }).eq("id", orgCfg.id);
     queryClient.invalidateQueries({ queryKey: ["notif-org-cfg"] });
   };
 
@@ -171,7 +171,7 @@ export default function Notificacoes() {
     queryKey: ["notificacao_logs", logNotif?.id],
     enabled: !!logNotif,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("notificacao_logs")
+      const { data } = await supabase.from("notificacao_logs")
         .select("*").eq("notificacao_id", logNotif!.id).order("created_at", { ascending: false }).limit(200);
       return (data || []) as any[];
     },
@@ -243,12 +243,12 @@ export default function Notificacoes() {
       sheets_mapa: form.sheets_mapa || {},
     };
     if (editingId) {
-      const { error } = await (supabase as any).from("notificacoes").update(payload).eq("id", editingId);
+      const { error } = await supabase.from("notificacoes").update(payload).eq("id", editingId);
       if (error) { toast.error("Erro ao salvar notificação"); return null; }
       queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
       return editingId;
     }
-    const { data, error } = await (supabase as any).from("notificacoes").insert(payload).select("id").single();
+    const { data, error } = await supabase.from("notificacoes").insert(payload).select("id").single();
     if (error) { toast.error("Erro ao salvar notificação"); return null; }
     setEditingId(data.id);
     queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
@@ -274,14 +274,14 @@ export default function Notificacoes() {
 
   const excluir = async () => {
     if (!deleting) return;
-    await (supabase as any).from("notificacoes").delete().eq("id", deleting.id);
+    await supabase.from("notificacoes").delete().eq("id", deleting.id);
     setDeleting(null);
     queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
     toast.success("Notificação excluída");
   };
 
   const toggleAtivo = async (n: Notificacao) => {
-    await (supabase as any).from("notificacoes").update({ ativo: !n.ativo }).eq("id", n.id);
+    await supabase.from("notificacoes").update({ ativo: !n.ativo }).eq("id", n.id);
     queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
   };
 
@@ -366,7 +366,7 @@ export default function Notificacoes() {
   };
 
   const gs = async (action: string, extra: any = {}) => {
-    const { data, error } = await (supabase as any).functions.invoke("google-sheets", { body: { action, ...extra } });
+    const { data, error } = await supabase.functions.invoke("google-sheets", { body: { action, ...extra } });
     if (error || data?.error) throw new Error(data?.error || error?.message || "Erro Google");
     return data;
   };

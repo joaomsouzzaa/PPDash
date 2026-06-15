@@ -34,7 +34,7 @@ function useWebhookToken() {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
     if (!profile?.org_id) return;
-    (supabase as any)
+    supabase
       .from("organizations")
       .select("webhook_token")
       .eq("id", profile.org_id)
@@ -177,7 +177,6 @@ const Integracoes = () => {
     try {
       await loadFacebookSDK();
       const result = await loginWithFacebook();
-      console.log("[Integracoes] Login result:", { status: result.status, hasToken: !!result.accessToken });
       if (result.status === "connected") {
         // Tenta trocar pelo token de longa duração; se falhar (ex.: META_APP_SECRET
         // não configurado), usa o token curto mesmo — conecta sem erro falso.
@@ -434,7 +433,7 @@ const GoogleSheetsSection = () => {
   const [loading, setLoading] = useState(false);
 
   const status = async () => {
-    const { data } = await (supabase as any).functions.invoke("google-sheets", { body: { action: "status" } });
+    const { data } = await supabase.functions.invoke("google-sheets", { body: { action: "status" } });
     if (data) { setConnected(!!data.connected); setEmail(data.email || null); setHasClient(!!data.has_client); }
   };
 
@@ -446,7 +445,7 @@ const GoogleSheetsSection = () => {
     if (code) {
       (async () => {
         setLoading(true);
-        const { data, error } = await (supabase as any).functions.invoke("google-sheets", { body: { action: "exchange", code } });
+        const { data, error } = await supabase.functions.invoke("google-sheets", { body: { action: "exchange", code } });
         setLoading(false);
         window.history.replaceState({}, "", "/integracoes");
         if (error || data?.error) sonner.error(`Erro ao conectar Google: ${data?.error || error?.message}`);
@@ -458,14 +457,14 @@ const GoogleSheetsSection = () => {
 
   const conectar = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any).functions.invoke("google-sheets", { body: { action: "get_auth_url" } });
+    const { data, error } = await supabase.functions.invoke("google-sheets", { body: { action: "get_auth_url" } });
     setLoading(false);
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
     window.location.href = data.url;
   };
 
   const desconectar = async () => {
-    await (supabase as any).functions.invoke("google-sheets", { body: { action: "disconnect" } });
+    await supabase.functions.invoke("google-sheets", { body: { action: "disconnect" } });
     sonner.success("Google desconectado"); status();
   };
 
@@ -532,8 +531,8 @@ const GoogleAdsSection = () => {
 
   const status = async () => {
     const [ga, sheets] = await Promise.all([
-      (supabase as any).functions.invoke("google-ads", { body: { action: "status" } }),
-      (supabase as any).functions.invoke("google-sheets", { body: { action: "status" } }),
+      supabase.functions.invoke("google-ads", { body: { action: "status" } }),
+      supabase.functions.invoke("google-sheets", { body: { action: "status" } }),
     ]);
     if (ga.data) { setConnected(!!ga.data.connected); setHasDevToken(!!ga.data.has_dev_token); setSavedMcc(ga.data.login_customer_id || null); }
     if (sheets.data) setEmail(sheets.data.email || null);
@@ -543,19 +542,19 @@ const GoogleAdsSection = () => {
   // Conecta usando o MESMO OAuth do Google Sheets (o callback ?code= é tratado na seção Sheets).
   const conectar = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any).functions.invoke("google-sheets", { body: { action: "get_auth_url" } });
+    const { data, error } = await supabase.functions.invoke("google-sheets", { body: { action: "get_auth_url" } });
     setLoading(false);
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
     window.location.href = data.url;
   };
   const desconectar = async () => {
-    await (supabase as any).functions.invoke("google-sheets", { body: { action: "disconnect" } });
+    await supabase.functions.invoke("google-sheets", { body: { action: "disconnect" } });
     sonner.success("Google desconectado"); setAcessiveis([]); status();
   };
 
   const detectar = async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "list_accessible" } });
+    const { data, error } = await supabase.functions.invoke("google-ads", { body: { action: "list_accessible" } });
     setLoading(false);
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
     setAcessiveis(data.accounts || []);
@@ -563,7 +562,7 @@ const GoogleAdsSection = () => {
   };
 
   const escolherMcc = async (id: string) => {
-    const { data, error } = await (supabase as any).functions.invoke("google-ads", { body: { action: "set_login_customer", login_customer_id: id } });
+    const { data, error } = await supabase.functions.invoke("google-ads", { body: { action: "set_login_customer", login_customer_id: id } });
     if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
     sonner.success("Conta gerenciadora definida"); status();
   };

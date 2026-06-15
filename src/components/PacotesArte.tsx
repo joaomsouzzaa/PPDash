@@ -42,7 +42,7 @@ export default function PacotesArte() {
   const { data: pacotes = [] } = useQuery({
     queryKey: ["pacotes_arte"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("pacotes_arte").select("*").order("created_at", { ascending: false });
+      const { data } = await supabase.from("pacotes_arte").select("*").order("created_at", { ascending: false });
       return (data || []) as Pacote[];
     },
   });
@@ -51,14 +51,14 @@ export default function PacotesArte() {
   const [nome, setNome] = useState("");
   const criar = async () => {
     if (!nome.trim()) { toast.error("Informe o nome do pacote"); return; }
-    const { error } = await (supabase as any).from("pacotes_arte").insert({ nome: nome.trim() });
+    const { error } = await supabase.from("pacotes_arte").insert({ nome: nome.trim() });
     if (error) { toast.error("Erro ao criar pacote"); return; }
     toast.success("Pacote criado");
     setOpen(false); setNome("");
     queryClient.invalidateQueries({ queryKey: ["pacotes_arte"] });
   };
   const excluir = async (p: Pacote) => {
-    await (supabase as any).from("pacotes_arte").delete().eq("id", p.id);
+    await supabase.from("pacotes_arte").delete().eq("id", p.id);
     queryClient.invalidateQueries({ queryKey: ["pacotes_arte"] });
   };
 
@@ -109,7 +109,7 @@ function PacoteThumbs({ pacoteId }: { pacoteId: string }) {
   const { data: artes = [] } = useQuery({
     queryKey: ["pacote_artes_thumbs", pacoteId],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("pacote_artes").select("id,url").eq("pacote_id", pacoteId).order("ordem").limit(6);
+      const { data } = await supabase.from("pacote_artes").select("id,url").eq("pacote_id", pacoteId).order("ordem").limit(6);
       return (data || []) as { id: string; url: string }[];
     },
   });
@@ -136,14 +136,14 @@ function PacoteDetalhe({ pacote, onBack }: { pacote: Pacote; onBack: () => void 
   const { data: artes = [] } = useQuery({
     queryKey: ["pacote_artes", pacote.id],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("pacote_artes").select("*").eq("pacote_id", pacote.id).order("ordem");
+      const { data } = await supabase.from("pacote_artes").select("*").eq("pacote_id", pacote.id).order("ordem");
       return (data || []) as Arte[];
     },
   });
   const { data: historico = [] } = useQuery({
     queryKey: ["pacote_geracoes", pacote.id],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("pacote_geracoes").select("*").eq("pacote_id", pacote.id).order("created_at", { ascending: false }).limit(500);
+      const { data } = await supabase.from("pacote_geracoes").select("*").eq("pacote_id", pacote.id).order("created_at", { ascending: false }).limit(500);
       return (data || []) as Geracao[];
     },
   });
@@ -159,7 +159,7 @@ function PacoteDetalhe({ pacote, onBack }: { pacote: Pacote; onBack: () => void 
 
   const excluirGeracao = async (g: Geracao) => {
     if (!confirm("Excluir esta geração do histórico?")) return;
-    await (supabase as any).from("pacote_geracoes").delete().eq("id", g.id);
+    await supabase.from("pacote_geracoes").delete().eq("id", g.id);
     queryClient.invalidateQueries({ queryKey: ["pacote_geracoes", pacote.id] });
     toast.success("Geração excluída");
   };
@@ -174,7 +174,7 @@ function PacoteDetalhe({ pacote, onBack }: { pacote: Pacote; onBack: () => void 
         const up = await supabase.storage.from("artes-base").upload(path, file);
         if (up.error) throw up.error;
         const url = supabase.storage.from("artes-base").getPublicUrl(path).data.publicUrl;
-        await (supabase as any).from("pacote_artes").insert({ pacote_id: pacote.id, url, ordem: ordem++ });
+        await supabase.from("pacote_artes").insert({ pacote_id: pacote.id, url, ordem: ordem++ });
       }
       toast.success("Artes enviadas");
       queryClient.invalidateQueries({ queryKey: ["pacote_artes", pacote.id] });
@@ -184,7 +184,7 @@ function PacoteDetalhe({ pacote, onBack }: { pacote: Pacote; onBack: () => void 
   };
 
   const removerArte = async (a: Arte) => {
-    await (supabase as any).from("pacote_artes").delete().eq("id", a.id);
+    await supabase.from("pacote_artes").delete().eq("id", a.id);
     queryClient.invalidateQueries({ queryKey: ["pacote_artes", pacote.id] });
   };
 
@@ -300,7 +300,7 @@ function EditorCampos({ arte, onClose, onSaved }: { arte: Arte; onClose: () => v
   const fimDrag = () => { dragRef.current = null; resizeRef.current = null; };
 
   const salvar = async () => {
-    const { error } = await (supabase as any).from("pacote_artes").update({ campos }).eq("id", arte.id);
+    const { error } = await supabase.from("pacote_artes").update({ campos }).eq("id", arte.id);
     if (error) { toast.error("Erro ao salvar campos"); return; }
     toast.success("Campos salvos");
     onSaved();
@@ -444,7 +444,7 @@ function GerarDialog({ pacote, artes, onClose, onDone }: { pacote: Pacote; artes
         const path = `${orgId}/${pacote.id}/${crypto.randomUUID()}.zip`;
         const up = await supabase.storage.from("pacotes-gerados").upload(path, zipBlob, { contentType: "application/zip" });
         const zipUrl = up.error ? null : supabase.storage.from("pacotes-gerados").getPublicUrl(path).data.publicUrl;
-        await (supabase as any).from("pacote_geracoes").insert({ pacote_id: pacote.id, pacote_nome: pacote.nome, valores, zip_url: zipUrl, qtd: n });
+        await supabase.from("pacote_geracoes").insert({ pacote_id: pacote.id, pacote_nome: pacote.nome, valores, zip_url: zipUrl, qtd: n });
         onDone();
       } catch { /* histórico é best-effort */ }
 

@@ -56,7 +56,7 @@ export default function Configuracoes() {
   const salvarMarca = async () => {
     if (!profile?.org_id) return;
     setSalvandoMarca(true);
-    const { error } = await (supabase as any).from("organizations")
+    const { error } = await supabase.from("organizations")
       .update({ marca_nome: marcaNome.trim() || null, marca_logo_url: logoUrl })
       .eq("id", profile.org_id);
     setSalvandoMarca(false);

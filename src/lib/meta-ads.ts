@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export interface AdAccount {
   id: string;
@@ -26,13 +27,13 @@ export async function syncMetaTokenToServer(): Promise<void> {
     if (account_id) payload.account_id = account_id;
     if (expires) payload.token_expires_at = Number(expires);
     if (user_name) payload.user_name = user_name;
-    const { data: existing } = await (supabase as any)
+    const { data: existing } = await supabase
       .from("meta_config").select("id,access_token").maybeSingle();
     if (existing?.id && existing.access_token === token) return; // já está atualizado
     if (existing?.id) {
-      await (supabase as any).from("meta_config").update(payload).eq("id", existing.id);
+      await supabase.from("meta_config").update(payload).eq("id", existing.id);
     } else {
-      await (supabase as any).from("meta_config").insert(payload);
+      await supabase.from("meta_config").insert(payload);
     }
   } catch {
     /* silencioso — não atrapalha o dashboard */
@@ -45,7 +46,7 @@ export async function hydrateMetaTokenFromServer(): Promise<boolean> {
   try {
     // Já tem token válido localmente? Não precisa.
     if (localStorage.getItem("meta_access_token") && isTokenValid()) return false;
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("meta_config").select("access_token,account_id,token_expires_at,user_name,contas").maybeSingle();
     if (!data?.access_token) return false;
     // Token do banco expirado? Não hidrata (precisa reconectar de verdade).
@@ -111,6 +112,27 @@ function flagRateLimited() {
 
 export function clearRateLimitFlag() {
   _rateLimitedUntil = 0;
+}
+
+// Dados defasados: quando a API falha e caímos para a última leitura salva,
+// marcamos como "stale" para a UI poder avisar. O toast dispara só na transição
+// (evita spam quando várias chamadas caem no fallback ao mesmo tempo).
+let _metaDataStale = false;
+
+export function isMetaDataStale(): boolean {
+  return _metaDataStale;
+}
+
+function flagMetaDataStale() {
+  if (_metaDataStale) return;
+  _metaDataStale = true;
+  toast.warning("Dados da Meta podem estar desatualizados", {
+    description: "A Meta não respondeu agora — exibindo a última leitura salva.",
+  });
+}
+
+function clearMetaDataStale() {
+  _metaDataStale = false;
 }
 
 async function graphApiFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
@@ -203,9 +225,9 @@ export async function setContasSelecionadas(ids: string[]): Promise<void> {
   localStorage.setItem("meta_contas", JSON.stringify(ids));
   clearAdAccountsCache();
   try {
-    const { data: existing } = await (supabase as any).from("meta_config").select("id").maybeSingle();
-    if (existing?.id) await (supabase as any).from("meta_config").update({ contas: ids }).eq("id", existing.id);
-    else await (supabase as any).from("meta_config").insert({ contas: ids });
+    const { data: existing } = await supabase.from("meta_config").select("id").maybeSingle();
+    if (existing?.id) await supabase.from("meta_config").update({ contas: ids }).eq("id", existing.id);
+    else await supabase.from("meta_config").insert({ contas: ids });
   } catch { /* silencioso */ }
 }
 
@@ -398,12 +420,13 @@ export async function fetchAdSpend(
 
     _spendCache.set(cacheKey, { data: results, ts: Date.now() });
     persistResult(cacheKey, results);
+    clearMetaDataStale();
     return results;
   } catch (e) {
     // Estouro de limite / erro de rede: usa a última leitura boa em vez de zerar
     const fb = loadPersisted<AdSpendResult[]>(cacheKey);
     if (fb) {
-      console.warn("[Meta API] fetchAdSpend via fallback (última leitura salva)");
+      flagMetaDataStale();
       return fb;
     }
     throw e;
@@ -451,11 +474,12 @@ export async function fetchDailySpendBreakdown(
 
     _spendCache.set(cacheKey, { data: dailyMap, ts: Date.now() });
     persistResult(cacheKey, Array.from(dailyMap.entries()));
+    clearMetaDataStale();
     return dailyMap;
   } catch (e) {
     const fb = loadPersisted<Array<[string, number]>>(cacheKey);
     if (fb) {
-      console.warn("[Meta API] fetchDailySpendBreakdown via fallback (última leitura salva)");
+      flagMetaDataStale();
       return new Map(fb);
     }
     throw e;
@@ -1003,12 +1027,13 @@ export async function fetchCampaignDailyBudget(
 
     _spendCache.set(cacheKey, { data: totalDailyBudget, ts: Date.now() });
     persistResult(cacheKey, totalDailyBudget);
+    clearMetaDataStale();
     return totalDailyBudget;
   } catch (e) {
     // Estouro de limite: usa o último orçamento válido (evita projeção = participantes)
     const fb = loadPersisted<number>(cacheKey);
     if (fb != null) {
-      console.warn("[Meta API] fetchCampaignDailyBudget via fallback (última leitura salva)");
+      flagMetaDataStale();
       return fb;
     }
     throw e;

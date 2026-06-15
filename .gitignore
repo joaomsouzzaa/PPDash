@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Secrets / tokens (NUNCA commitar)
+*.local
+.access-token.local
+supabase/.access-token.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

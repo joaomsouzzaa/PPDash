@@ -33,7 +33,7 @@ export default function Designer() {
   const { data: projetos = [] } = useQuery({
     queryKey: ["projetos_design"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("projetos_design").select("*").order("created_at", { ascending: false });
+      const { data } = await supabase.from("projetos_design").select("*").order("created_at", { ascending: false });
       return (data || []) as Projeto[];
     },
   });
@@ -54,8 +54,8 @@ export default function Designer() {
     if (!form.nome.trim()) { toast.error("Informe o nome do projeto"); return; }
     const payload = { nome: form.nome.trim(), descricao: form.descricao || null, cores: form.cores || null, logo_posicao: form.logo_posicao, palavras_chave: form.palavras_chave || null };
     const res = editing
-      ? await (supabase as any).from("projetos_design").update(payload).eq("id", editing.id)
-      : await (supabase as any).from("projetos_design").insert(payload);
+      ? await supabase.from("projetos_design").update(payload).eq("id", editing.id)
+      : await supabase.from("projetos_design").insert(payload);
     if (res.error) { toast.error("Erro ao salvar projeto"); return; }
     toast.success("Projeto salvo");
     setOpen(false);
@@ -63,7 +63,7 @@ export default function Designer() {
   };
 
   const excluir = async (p: Projeto) => {
-    await (supabase as any).from("projetos_design").delete().eq("id", p.id);
+    await supabase.from("projetos_design").delete().eq("id", p.id);
     queryClient.invalidateQueries({ queryKey: ["projetos_design"] });
     queryClient.invalidateQueries({ queryKey: ["projeto_assets"] });
     toast.success("Projeto excluído");
@@ -153,7 +153,7 @@ function ProjetoCard({ projeto, onEdit, onDelete }: { projeto: Projeto; onEdit: 
   const { data: assets = [] } = useQuery({
     queryKey: ["projeto_assets", projeto.id],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("projeto_assets").select("*").eq("projeto_id", projeto.id).order("created_at");
+      const { data } = await supabase.from("projeto_assets").select("*").eq("projeto_id", projeto.id).order("created_at");
       return (data || []) as Asset[];
     },
   });
@@ -167,7 +167,7 @@ function ProjetoCard({ projeto, onEdit, onDelete }: { projeto: Projeto; onEdit: 
       const up = await supabase.storage.from("projeto-assets").upload(path, file, { upsert: false });
       if (up.error) throw up.error;
       const url = supabase.storage.from("projeto-assets").getPublicUrl(path).data.publicUrl;
-      const ins = await (supabase as any).from("projeto_assets").insert({ projeto_id: projeto.id, tipo, url });
+      const ins = await supabase.from("projeto_assets").insert({ projeto_id: projeto.id, tipo, url });
       if (ins.error) throw ins.error;
       toast.success("Material enviado");
       queryClient.invalidateQueries({ queryKey: ["projeto_assets", projeto.id] });
@@ -179,7 +179,7 @@ function ProjetoCard({ projeto, onEdit, onDelete }: { projeto: Projeto; onEdit: 
   };
 
   const removerAsset = async (a: Asset) => {
-    await (supabase as any).from("projeto_assets").delete().eq("id", a.id);
+    await supabase.from("projeto_assets").delete().eq("id", a.id);
     queryClient.invalidateQueries({ queryKey: ["projeto_assets", projeto.id] });
   };
 

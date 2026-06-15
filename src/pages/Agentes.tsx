@@ -92,7 +92,7 @@ export default function Agentes() {
   const { data: agentes = [] } = useQuery({
     queryKey: ["agentes"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from("agentes").select("*").order("created_at", { ascending: true });
+      const { data, error } = await supabase.from("agentes").select("*").order("created_at", { ascending: true });
       if (error) throw error;
       return (data || []) as Agente[];
     },
@@ -127,8 +127,8 @@ export default function Agentes() {
       system_prompt: form.system_prompt || null, ativo: form.ativo,
     };
     const res = editingId
-      ? await (supabase as any).from("agentes").update(payload).eq("id", editingId)
-      : await (supabase as any).from("agentes").insert(payload);
+      ? await supabase.from("agentes").update(payload).eq("id", editingId)
+      : await supabase.from("agentes").insert(payload);
     if (res.error) { toast.error("Erro ao salvar agente"); return; }
     toast.success("Agente salvo");
     setDialogOpen(false);
@@ -137,14 +137,14 @@ export default function Agentes() {
 
   const excluir = async () => {
     if (!deleting) return;
-    await (supabase as any).from("agentes").delete().eq("id", deleting.id);
+    await supabase.from("agentes").delete().eq("id", deleting.id);
     setDeleting(null);
     queryClient.invalidateQueries({ queryKey: ["agentes"] });
     toast.success("Agente excluído");
   };
 
   const toggleAtivo = useCallback(async (a: Agente) => {
-    await (supabase as any).from("agentes").update({ ativo: !a.ativo }).eq("id", a.id);
+    await supabase.from("agentes").update({ ativo: !a.ativo }).eq("id", a.id);
     queryClient.invalidateQueries({ queryKey: ["agentes"] });
   }, [queryClient]);
 
@@ -166,15 +166,15 @@ export default function Agentes() {
 
   const onNodesChange = useCallback((changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)), []);
   const onNodeDragStop = useCallback(async (_: any, node: Node) => {
-    await (supabase as any).from("agentes").update({ pos_x: Math.round(node.position.x), pos_y: Math.round(node.position.y) }).eq("id", node.id);
+    await supabase.from("agentes").update({ pos_x: Math.round(node.position.x), pos_y: Math.round(node.position.y) }).eq("id", node.id);
   }, []);
   const onConnect = useCallback(async (conn: Connection) => {
     if (!conn.source || !conn.target || conn.source === conn.target) return;
-    await (supabase as any).from("agentes").update({ parent_id: conn.source }).eq("id", conn.target);
+    await supabase.from("agentes").update({ parent_id: conn.source }).eq("id", conn.target);
     queryClient.invalidateQueries({ queryKey: ["agentes"] });
   }, [queryClient]);
   const onEdgesDelete = useCallback(async (eds: Edge[]) => {
-    for (const e of eds) await (supabase as any).from("agentes").update({ parent_id: null }).eq("id", e.target);
+    for (const e of eds) await supabase.from("agentes").update({ parent_id: null }).eq("id", e.target);
     queryClient.invalidateQueries({ queryKey: ["agentes"] });
   }, [queryClient]);
 
@@ -205,7 +205,7 @@ export default function Agentes() {
 
     setNodes((nds) => nds.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)));
     for (const a of agentes) {
-      if (pos[a.id]) await (supabase as any).from("agentes").update({ pos_x: Math.round(pos[a.id].x), pos_y: Math.round(pos[a.id].y) }).eq("id", a.id);
+      if (pos[a.id]) await supabase.from("agentes").update({ pos_x: Math.round(pos[a.id].x), pos_y: Math.round(pos[a.id].y) }).eq("id", a.id);
     }
     toast.success("Layout organizado");
   }, [agentes]);
@@ -218,7 +218,7 @@ export default function Agentes() {
   const [savingKeys, setSavingKeys] = useState(false);
 
   const carregarProvidersSalvos = async () => {
-    const { data } = await (supabase as any).from("ai_config").select("provider");
+    const { data } = await supabase.from("ai_config").select("provider");
     setSavedProviders(new Set((data || []).map((r: any) => r.provider)));
   };
   useEffect(() => { carregarProvidersSalvos(); }, []);
@@ -228,9 +228,9 @@ export default function Agentes() {
     try {
       for (const [provider, key] of Object.entries(aiKeys)) {
         if (!key.trim()) continue;
-        const { data: existing } = await (supabase as any).from("ai_config").select("provider").eq("provider", provider).maybeSingle();
-        if (existing) await (supabase as any).from("ai_config").update({ api_key: key.trim() }).eq("provider", provider);
-        else await (supabase as any).from("ai_config").insert({ provider, api_key: key.trim() });
+        const { data: existing } = await supabase.from("ai_config").select("provider").eq("provider", provider).maybeSingle();
+        if (existing) await supabase.from("ai_config").update({ api_key: key.trim() }).eq("provider", provider);
+        else await supabase.from("ai_config").insert({ provider, api_key: key.trim() });
       }
       toast.success("Chaves salvas");
       setAiKeys({ anthropic: "", openai: "", google: "", higgsfield: "" });

@@ -165,7 +165,7 @@ const CadastroProdutos = () => {
       toast.error("Informe o nome do canal");
       return;
     }
-    const { error } = await (supabase as any).from("produtos").insert(payload());
+    const { error } = await supabase.from("produtos").insert(payload());
     if (error) {
       toast.error("Erro ao cadastrar canal");
       return;
@@ -177,7 +177,7 @@ const CadastroProdutos = () => {
 
   const handleEdit = async () => {
     if (!editing || !form.nome) return;
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from("produtos")
       .update(payload())
       .eq("id", editing.id);

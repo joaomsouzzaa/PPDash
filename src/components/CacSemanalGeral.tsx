@@ -57,7 +57,7 @@ export function CacSemanalGeral({ filters }: { filters: Filters }) {
         .select("data_lead, custom, is_venda_realizada, faturamento_venda")
         .gte("data_lead", start).lte("data_lead", end);
 
-      const { data: campos } = await (supabase as any).from("lead_campos").select("chave, padrao, mql_valores");
+      const { data: campos } = await supabase.from("lead_campos").select("chave, padrao, mql_valores");
       const triggers = ((campos as any[]) || [])
         .filter((c) => Array.isArray(c.mql_valores) && c.mql_valores.length)
         .map((c) => ({ chave: c.chave as string, padrao: !!c.padrao, valores: new Set((c.mql_valores as unknown[]).map((v) => String(v).trim())) }));

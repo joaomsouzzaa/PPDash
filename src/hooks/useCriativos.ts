@@ -14,7 +14,7 @@ export function useCriativos() {
   return useQuery({
     queryKey: ["criativos"],
     queryFn: async (): Promise<Criativo[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("criativos")
         .select("id, nome, utm_contents, ad_names, ativo, ordem")
         .order("ordem", { ascending: true })

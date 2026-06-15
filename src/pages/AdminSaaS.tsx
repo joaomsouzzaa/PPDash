@@ -115,7 +115,7 @@ export default function AdminSaaS() {
   };
   const toggleAtivoPlano = async (p: Plano) => {
     try {
-      const { error } = await (supabase as any).from("planos").update({ ativo: !p.ativo }).eq("id", p.id);
+      const { error } = await supabase.from("planos").update({ ativo: !p.ativo }).eq("id", p.id);
       if (error) throw new Error(error.message);
       await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -127,8 +127,8 @@ export default function AdminSaaS() {
     setSavingPlano(true);
     try {
       const q = editId
-        ? await (supabase as any).from("planos").update(dados).eq("id", editId)
-        : await (supabase as any).from("planos").insert(dados);
+        ? await supabase.from("planos").update(dados).eq("id", editId)
+        : await supabase.from("planos").insert(dados);
       if (q.error) throw new Error(q.error.message);
       toast.success(editId ? "Plano atualizado." : "Plano criado.");
       setOpenPlano(false);
@@ -141,7 +141,7 @@ export default function AdminSaaS() {
     if (emUso) return toast.error("Há clientes usando este plano. Troque-os antes de excluir.");
     if (!confirm(`Excluir o plano "${p.nome}"?`)) return;
     try {
-      const { error } = await (supabase as any).from("planos").delete().eq("id", p.id);
+      const { error } = await supabase.from("planos").delete().eq("id", p.id);
       if (error) throw new Error(error.message);
       toast.success("Plano excluído."); await carregar();
     } catch (e) { toast.error((e as Error).message); }

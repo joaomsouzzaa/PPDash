@@ -35,14 +35,14 @@ export default function Workflow() {
   const { data: colunas = [] } = useQuery({
     queryKey: ["kanban_colunas"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("kanban_colunas").select("*").order("ordem");
+      const { data } = await supabase.from("kanban_colunas").select("*").order("ordem");
       return (data || []) as Coluna[];
     },
   });
   const { data: tarefas = [] } = useQuery({
     queryKey: ["tarefas"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("tarefas").select("*").is("deleted_at", null).order("ordem");
+      const { data } = await supabase.from("tarefas").select("*").is("deleted_at", null).order("ordem");
       return (data || []) as Tarefa[];
     },
     refetchInterval: 15000, // pega tarefas criadas pelos agentes
@@ -50,7 +50,7 @@ export default function Workflow() {
   const { data: agentes = [] } = useQuery({
     queryKey: ["agentes-min"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("agentes").select("id,nome").order("created_at");
+      const { data } = await supabase.from("agentes").select("id,nome").order("created_at");
       return (data || []) as Agente[];
     },
   });
@@ -69,7 +69,7 @@ export default function Workflow() {
     queryKey: ["respostas", editing?.id],
     enabled: !!editing,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("tarefa_respostas").select("*").eq("tarefa_id", editing!.id).order("created_at");
+      const { data } = await supabase.from("tarefa_respostas").select("*").eq("tarefa_id", editing!.id).order("created_at");
       return (data || []) as Resposta[];
     },
   });
@@ -79,7 +79,7 @@ export default function Workflow() {
     enabled: !!editing,
     refetchInterval: (q) => ((q.state.data as Anexo[] | undefined)?.some((a) => a.status === "gerando") ? 4000 : false),
     queryFn: async () => {
-      const { data } = await (supabase as any).from("tarefa_anexos").select("*").eq("tarefa_id", editing!.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("tarefa_anexos").select("*").eq("tarefa_id", editing!.id).order("created_at", { ascending: false });
       return (data || []) as Anexo[];
     },
   });
@@ -96,7 +96,7 @@ export default function Workflow() {
   const { data: projetos = [] } = useQuery({
     queryKey: ["projetos_design_min"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("projetos_design").select("id,nome").order("created_at", { ascending: false });
+      const { data } = await supabase.from("projetos_design").select("id,nome").order("created_at", { ascending: false });
       return (data || []) as { id: string; nome: string }[];
     },
   });
@@ -104,7 +104,7 @@ export default function Workflow() {
   const gerarArte = async (tipo: "imagem" | "video") => {
     if (!editing) { toast.error("Salve a tarefa antes de gerar a arte"); return; }
     setGerando(tipo);
-    const { data, error } = await (supabase as any).functions.invoke("gerar-arte-higgsfield", {
+    const { data, error } = await supabase.functions.invoke("gerar-arte-higgsfield", {
       body: {
         tarefa_id: editing.id, tipo,
         provider: tipo === "video" ? "higgsfield" : provider,
@@ -146,8 +146,8 @@ export default function Workflow() {
       updated_at: new Date().toISOString(),
     };
     const res = editing
-      ? await (supabase as any).from("tarefas").update(payload).eq("id", editing.id)
-      : await (supabase as any).from("tarefas").insert({ ...payload, origem: "manual" });
+      ? await supabase.from("tarefas").update(payload).eq("id", editing.id)
+      : await supabase.from("tarefas").insert({ ...payload, origem: "manual" });
     if (res.error) { toast.error("Erro ao salvar tarefa"); return; }
     toast.success("Tarefa salva");
     setOpen(false);
@@ -157,7 +157,7 @@ export default function Workflow() {
   // Exclusão = soft delete (vai pra lixeira, recuperável). Mantém as respostas.
   const excluir = async () => {
     if (!editing) return;
-    await (supabase as any).from("tarefas").update({ deleted_at: new Date().toISOString() }).eq("id", editing.id);
+    await supabase.from("tarefas").update({ deleted_at: new Date().toISOString() }).eq("id", editing.id);
     setOpen(false);
     queryClient.invalidateQueries({ queryKey: ["tarefas"] });
     queryClient.invalidateQueries({ queryKey: ["tarefas-lixeira"] });
@@ -170,7 +170,7 @@ export default function Workflow() {
     queryKey: ["tarefas-lixeira"],
     enabled: lixeiraOpen,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("tarefas").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false });
+      const { data } = await supabase.from("tarefas").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false });
       return (data || []) as Tarefa[];
     },
   });
@@ -179,28 +179,28 @@ export default function Workflow() {
     queryClient.invalidateQueries({ queryKey: ["tarefas-lixeira"] });
   };
   const restaurar = async (t: Tarefa) => {
-    await (supabase as any).from("tarefas").update({ deleted_at: null }).eq("id", t.id);
+    await supabase.from("tarefas").update({ deleted_at: null }).eq("id", t.id);
     invLixeira();
     toast.success("Tarefa restaurada");
   };
   const excluirDefinitivo = async (t: Tarefa) => {
     if (!confirm(`Excluir definitivamente "${t.titulo}"? Não dá para recuperar.`)) return;
-    await (supabase as any).from("tarefa_respostas").delete().eq("tarefa_id", t.id);
-    await (supabase as any).from("tarefa_anexos").delete().eq("tarefa_id", t.id);
-    await (supabase as any).from("tarefas").delete().eq("id", t.id);
+    await supabase.from("tarefa_respostas").delete().eq("tarefa_id", t.id);
+    await supabase.from("tarefa_anexos").delete().eq("tarefa_id", t.id);
+    await supabase.from("tarefas").delete().eq("id", t.id);
     invLixeira();
     toast.success("Tarefa excluída definitivamente");
   };
 
   const addComentario = async () => {
     if (!editing || !comentario.trim()) return;
-    await (supabase as any).from("tarefa_respostas").insert({ tarefa_id: editing.id, autor: "Você", conteudo: comentario.trim() });
+    await supabase.from("tarefa_respostas").insert({ tarefa_id: editing.id, autor: "Você", conteudo: comentario.trim() });
     setComentario("");
     queryClient.invalidateQueries({ queryKey: ["respostas", editing.id] });
   };
 
   const moverPara = async (tarefaId: string, colunaId: string) => {
-    await (supabase as any).from("tarefas").update({ coluna_id: colunaId, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+    await supabase.from("tarefas").update({ coluna_id: colunaId, updated_at: new Date().toISOString() }).eq("id", tarefaId);
     queryClient.invalidateQueries({ queryKey: ["tarefas"] });
   };
 
@@ -209,11 +209,11 @@ export default function Workflow() {
   const invCols = () => queryClient.invalidateQueries({ queryKey: ["kanban_colunas"] });
   const addColuna = async () => {
     const maxOrdem = colunas.reduce((m, c) => Math.max(m, c.ordem), -1);
-    await (supabase as any).from("kanban_colunas").insert({ nome: "Nova coluna", ordem: maxOrdem + 1 });
+    await supabase.from("kanban_colunas").insert({ nome: "Nova coluna", ordem: maxOrdem + 1 });
     invCols();
   };
   const updateColuna = async (id: string, patch: Partial<Coluna>) => {
-    await (supabase as any).from("kanban_colunas").update(patch).eq("id", id);
+    await supabase.from("kanban_colunas").update(patch).eq("id", id);
     invCols();
   };
   const moveColuna = async (id: string, dir: "up" | "down") => {
@@ -222,14 +222,14 @@ export default function Workflow() {
     const swap = dir === "up" ? idx - 1 : idx + 1;
     if (swap < 0 || swap >= sorted.length) return;
     const a = sorted[idx], b = sorted[swap];
-    await (supabase as any).from("kanban_colunas").update({ ordem: b.ordem }).eq("id", a.id);
-    await (supabase as any).from("kanban_colunas").update({ ordem: a.ordem }).eq("id", b.id);
+    await supabase.from("kanban_colunas").update({ ordem: b.ordem }).eq("id", a.id);
+    await supabase.from("kanban_colunas").update({ ordem: a.ordem }).eq("id", b.id);
     invCols();
   };
   const deleteColuna = async (id: string) => {
     const rest = colunas.filter((c) => c.id !== id).sort((a, b) => a.ordem - b.ordem);
-    if (rest.length) await (supabase as any).from("tarefas").update({ coluna_id: rest[0].id }).eq("coluna_id", id);
-    await (supabase as any).from("kanban_colunas").delete().eq("id", id);
+    if (rest.length) await supabase.from("tarefas").update({ coluna_id: rest[0].id }).eq("coluna_id", id);
+    await supabase.from("kanban_colunas").delete().eq("id", id);
     invCols();
     queryClient.invalidateQueries({ queryKey: ["tarefas"] });
   };

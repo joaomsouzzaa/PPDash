@@ -25,7 +25,7 @@ export function GerenciarCamposLead({ open, onOpenChange, onChanged }: {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem").order("ordem");
+    const { data } = await supabase.from("lead_campos").select("id, chave, label, ordem").order("ordem");
     setCampos((data as Campo[]) ?? []);
     setLoading(false);
   }, []);
@@ -40,7 +40,7 @@ export function GerenciarCamposLead({ open, onOpenChange, onChanged }: {
     if (campos.some((c) => c.chave === chave)) return toast.error("Já existe um campo com esse nome.");
     setSalvando(true);
     try {
-      const { error } = await (supabase as any).from("lead_campos").insert({ label, chave, ordem: campos.length });
+      const { error } = await supabase.from("lead_campos").insert({ label, chave, ordem: campos.length });
       if (error) throw new Error(error.message);
       setNovo(""); await carregar(); onChanged();
     } catch (e) { toast.error((e as Error).message); }
@@ -50,7 +50,7 @@ export function GerenciarCamposLead({ open, onOpenChange, onChanged }: {
   const renomear = async (id: string) => {
     if (!editLabel.trim()) return;
     try {
-      const { error } = await (supabase as any).from("lead_campos").update({ label: editLabel.trim() }).eq("id", id);
+      const { error } = await supabase.from("lead_campos").update({ label: editLabel.trim() }).eq("id", id);
       if (error) throw new Error(error.message);
       setEditId(null); await carregar(); onChanged();
     } catch (e) { toast.error((e as Error).message); }
@@ -59,7 +59,7 @@ export function GerenciarCamposLead({ open, onOpenChange, onChanged }: {
   const excluir = async (c: Campo) => {
     if (!confirm(`Excluir o campo "${c.label}"? Os valores já recebidos ficam guardados, mas a coluna some.`)) return;
     try {
-      const { error } = await (supabase as any).from("lead_campos").delete().eq("id", c.id);
+      const { error } = await supabase.from("lead_campos").delete().eq("id", c.id);
       if (error) throw new Error(error.message);
       await carregar(); onChanged();
     } catch (e) { toast.error((e as Error).message); }

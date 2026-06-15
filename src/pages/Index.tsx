@@ -234,7 +234,6 @@ const Index = () => {
       const currentSlug = filtersRef.current.city;
       const idx = list.findIndex((c) => c.slug === currentSlug);
       const nextIdx = idx === -1 ? 0 : (idx + 1) % list.length;
-      console.log(`[TV Mode] Rotating ${currentSlug} -> ${list[nextIdx].slug} (${list.length} active)`);
       // Rotação do TV não persiste (não sobrescreve a última cidade escolhida manualmente).
       setFilters((f) => ({ ...f, city: list[nextIdx].slug }));
     };
@@ -377,8 +376,6 @@ const Index = () => {
             ? (today.getHours() < 12 ? 0.5 : 0)
             : diffDias + 0.5;
 
-        console.log(`[Projeção] CAC=${cacParticipanteDisplay}, dailyBudget=${dailyBudget}, daysRemaining=${daysRemaining}, participantes=${kpi.participantes}`);
-
         if (cacParticipanteDisplay <= 0 || dailyBudget <= 0) {
           setProjecaoParticipantes(kpi.participantes);
           return;
@@ -387,7 +384,6 @@ const Index = () => {
         // Formula: projection = currentParticipants + (dailyBudget / CAC) * daysRemaining
         const dailyNewParticipants = dailyBudget / cacParticipanteDisplay;
         const projected = Math.ceil(kpi.participantes + dailyNewParticipants * daysRemaining);
-        console.log(`[Projeção] dailyNew=${dailyNewParticipants}, projected=${projected}`);
         setProjecaoParticipantes(projected);
       } catch {
         setProjecaoParticipantes(null);

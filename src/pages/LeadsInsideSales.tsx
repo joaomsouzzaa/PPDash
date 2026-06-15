@@ -253,7 +253,7 @@ const LeadsInsideSales = () => {
   const { data: camposRaw = [], refetch: refetchCampos } = useQuery({
     queryKey: ["lead_campos_all"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("lead_campos").select("id, chave, label, ordem, padrao, oculto").order("ordem");
+      const { data } = await supabase.from("lead_campos").select("id, chave, label, ordem, padrao, oculto").order("ordem");
       return (data || []) as Array<CampoLead & { padrao: boolean; oculto: boolean }>;
     },
   });
@@ -273,7 +273,7 @@ const LeadsInsideSales = () => {
   const { data: ordemRow, refetch: refetchOrdem } = useQuery({
     queryKey: ["lead_ordem"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("organizations").select("lead_ordem").limit(1).maybeSingle();
+      const { data } = await supabase.from("organizations").select("lead_ordem").limit(1).maybeSingle();
       return data;
     },
   });

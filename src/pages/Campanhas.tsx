@@ -79,7 +79,7 @@ export default function Campanhas() {
     queryKey: ["insights-trafego", selectedCidade?.slug],
     enabled: filters.city !== "all" && !!selectedCidade,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("insights_trafego").select("insights").eq("cidade_slug", selectedCidade!.slug).maybeSingle();
+      const { data } = await supabase.from("insights_trafego").select("insights").eq("cidade_slug", selectedCidade!.slug).maybeSingle();
       return (data?.insights || []) as { nivel: string; titulo: string; texto: string }[];
     },
   });

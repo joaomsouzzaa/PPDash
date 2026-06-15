@@ -19,7 +19,7 @@ export function useProdutos() {
   return useQuery({
     queryKey: ["produtos"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("produtos")
         .select("id, nome, slug, slug_source, conta_id, plataforma, google_conta_id, investimento_manual, metricas, paginas, ativo")
         .order("nome", { ascending: true });

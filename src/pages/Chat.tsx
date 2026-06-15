@@ -33,13 +33,13 @@ export default function Chat() {
   );
 
   const carregarAgentes = useCallback(async () => {
-    const { data } = await (supabase as any).from("agentes").select("id,nome,provider,modelo,ativo").eq("ativo", true).order("created_at");
+    const { data } = await supabase.from("agentes").select("id,nome,provider,modelo,ativo").eq("ativo", true).order("created_at");
     setAgentes(data || []);
     if (data?.length && !agenteId) setAgenteId(data[0].id);
   }, [agenteId]);
 
   const carregarConversas = useCallback(async () => {
-    const { data } = await (supabase as any).from("conversas").select("*").order("updated_at", { ascending: false });
+    const { data } = await supabase.from("conversas").select("*").order("updated_at", { ascending: false });
     setConversas(data || []);
   }, []);
 
@@ -51,14 +51,14 @@ export default function Chat() {
   const abrirConversa = async (c: Conversa) => {
     setCurrentId(c.id);
     if (c.agente_id) setAgenteId(c.agente_id);
-    const { data } = await (supabase as any).from("mensagens").select("role,conteudo").eq("conversa_id", c.id).order("created_at");
+    const { data } = await supabase.from("mensagens").select("role,conteudo").eq("conversa_id", c.id).order("created_at");
     setMessages((data || []) as Mensagem[]);
   };
 
   const excluirConversa = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    await (supabase as any).from("mensagens").delete().eq("conversa_id", id);
-    await (supabase as any).from("conversas").delete().eq("id", id);
+    await supabase.from("mensagens").delete().eq("conversa_id", id);
+    await supabase.from("conversas").delete().eq("id", id);
     if (currentId === id) novaConversa();
     carregarConversas();
   };
@@ -75,7 +75,7 @@ export default function Chat() {
       // Cria a conversa na primeira mensagem
       let convId = currentId;
       if (!convId) {
-        const { data, error } = await (supabase as any).from("conversas")
+        const { data, error } = await supabase.from("conversas")
           .insert({ titulo: texto.slice(0, 50), agente_id: agenteId }).select("id").single();
         if (error) throw error;
         convId = data.id;
@@ -86,7 +86,7 @@ export default function Chat() {
       const userMsg: Mensagem = { role: "user", conteudo: texto };
       const novaLista = [...messages, userMsg];
       setMessages(novaLista);
-      await (supabase as any).from("mensagens").insert({ conversa_id: convId, role: "user", conteudo: texto });
+      await supabase.from("mensagens").insert({ conversa_id: convId, role: "user", conteudo: texto });
 
       // Chama o agente via STREAM (NDJSON): cada passo do time chega em tempo real.
       const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -148,11 +148,11 @@ export default function Chat() {
 
       // Persiste todas as mensagens geradas.
       if (novasMsgs.length) {
-        await (supabase as any).from("mensagens").insert(
+        await supabase.from("mensagens").insert(
           novasMsgs.map((m) => ({ conversa_id: convId, role: "assistant", conteudo: m.conteudo })),
         );
       }
-      await (supabase as any).from("conversas").update({ updated_at: new Date().toISOString() }).eq("id", convId);
+      await supabase.from("conversas").update({ updated_at: new Date().toISOString() }).eq("id", convId);
       carregarConversas();
     } catch (e: any) {
       toast.error(e?.message || "Falha ao enviar");

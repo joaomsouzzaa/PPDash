@@ -38,7 +38,7 @@ export function MapeamentoLeads() {
   const salvarOrdem = async (arr: Campo[]) => {
     if (!orgId) return;
     try {
-      await (supabase as any).from("organizations").update({ lead_ordem: arr.map((c) => c.key) }).eq("id", orgId);
+      await supabase.from("organizations").update({ lead_ordem: arr.map((c) => c.key) }).eq("id", orgId);
     } catch (e) { toast.error("Falha ao salvar a ordem."); }
   };
 
@@ -59,9 +59,9 @@ export function MapeamentoLeads() {
     if (!orgId) return;
     setLoading(true);
     const [{ data: rows }, { data: mapRows }, { data: orgRow }] = await Promise.all([
-      (supabase as any).from("lead_campos").select("chave, label, padrao, oculto, excluido, mql_valores").eq("org_id", orgId).order("ordem"),
-      (supabase as any).from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId),
-      (supabase as any).from("organizations").select("lead_ordem").eq("id", orgId).maybeSingle(),
+      supabase.from("lead_campos").select("chave, label, padrao, oculto, excluido, mql_valores").eq("org_id", orgId).order("ordem"),
+      supabase.from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId),
+      supabase.from("organizations").select("lead_ordem").eq("id", orgId).maybeSingle(),
     ]);
     const ordem: string[] = (orgRow?.lead_ordem as string[]) ?? [];
     const mqlArr = (v: unknown): string[] => (Array.isArray(v) ? (v as unknown[]).map(String) : []);
@@ -93,11 +93,11 @@ export function MapeamentoLeads() {
     if (!orgId) return;
     setSalvando(true);
     try {
-      await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId);
+      await supabase.from("lead_mapeamento").delete().eq("org_id", orgId);
       const rows = Object.entries(mapa).filter(([, v]) => (v ?? "").trim())
         .map(([app_field, crm_key]) => ({ app_field, crm_key: crm_key.trim() }));
       if (rows.length) {
-        const { error } = await (supabase as any).from("lead_mapeamento").insert(rows);
+        const { error } = await supabase.from("lead_mapeamento").insert(rows);
         if (error) throw new Error(error.message);
       }
       toast.success("Mapeamento salvo.");
@@ -121,8 +121,8 @@ export function MapeamentoLeads() {
     }
     try {
       // Remove eventual override de um campo padrão excluído com a mesma chave (libera o unique).
-      await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", chave).eq("padrao", true);
-      const { error } = await (supabase as any).from("lead_campos").insert({ label, chave, ordem: campos.length, padrao: false });
+      await supabase.from("lead_campos").delete().eq("org_id", orgId).eq("chave", chave).eq("padrao", true);
+      const { error } = await supabase.from("lead_campos").insert({ label, chave, ordem: campos.length, padrao: false });
       if (error) throw new Error(error.message);
       setNovo(""); await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -134,10 +134,10 @@ export function MapeamentoLeads() {
     if (!label) return;
     try {
       if (c.isCustom) {
-        const { error } = await (supabase as any).from("lead_campos").update({ label }).eq("org_id", orgId).eq("chave", c.chave);
+        const { error } = await supabase.from("lead_campos").update({ label }).eq("org_id", orgId).eq("chave", c.chave);
         if (error) throw new Error(error.message);
       } else {
-        const { error } = await (supabase as any).from("lead_campos")
+        const { error } = await supabase.from("lead_campos")
           .upsert({ chave: c.key, padrao: true, label, oculto: c.oculto }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
       }
@@ -150,13 +150,13 @@ export function MapeamentoLeads() {
     if (c.isCustom) {
       if (!confirm(`Excluir o campo "${c.label}"? A coluna some da tabela de Leads (os valores recebidos ficam guardados).`)) return;
       try {
-        await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
-        await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+        await supabase.from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
+        await supabase.from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
         await carregar();
       } catch (e) { toast.error((e as Error).message); }
     } else {
       try {
-        const { error } = await (supabase as any).from("lead_campos")
+        const { error } = await supabase.from("lead_campos")
           .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
         await carregar();
@@ -170,13 +170,13 @@ export function MapeamentoLeads() {
     if (!confirm(`Excluir o campo "${c.label}"? Ele some da lista. (Os valores já recebidos ficam guardados.)`)) return;
     try {
       if (c.isCustom) {
-        await (supabase as any).from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
-        await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+        await supabase.from("lead_campos").delete().eq("org_id", orgId).eq("chave", c.chave);
+        await supabase.from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
       } else {
-        const { error } = await (supabase as any).from("lead_campos")
+        const { error } = await supabase.from("lead_campos")
           .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true, excluido: true }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
-        await (supabase as any).from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
+        await supabase.from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
       }
       await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -184,7 +184,7 @@ export function MapeamentoLeads() {
 
   const restaurarCampo = async (c: Campo) => {
     try {
-      const { error } = await (supabase as any).from("lead_campos")
+      const { error } = await supabase.from("lead_campos")
         .upsert({ chave: c.key, padrao: true, label: c.label, oculto: false, excluido: false }, { onConflict: "org_id,chave" });
       if (error) throw new Error(error.message);
       await carregar();
@@ -199,7 +199,7 @@ export function MapeamentoLeads() {
     setMqlLoading(true);
     try {
       const col = c.isCustom ? "custom" : c.key;
-      const { data } = await (supabase as any).from("leads").select(col).limit(5000);
+      const { data } = await supabase.from("leads").select(col).limit(5000);
       const set = new Set<string>();
       ((data as any[]) ?? []).forEach((r) => {
         const v = c.isCustom ? r.custom?.[c.chave!] : r[c.key];
@@ -217,12 +217,12 @@ export function MapeamentoLeads() {
     const valores = [...mqlSelected];
     try {
       if (mqlField.isCustom) {
-        const { error } = await (supabase as any).from("lead_campos")
+        const { error } = await supabase.from("lead_campos")
           .update({ mql_valores: valores.length ? valores : null })
           .eq("org_id", orgId).eq("chave", mqlField.chave);
         if (error) throw new Error(error.message);
       } else {
-        const { error } = await (supabase as any).from("lead_campos")
+        const { error } = await supabase.from("lead_campos")
           .upsert({ chave: mqlField.key, padrao: true, label: mqlField.label, oculto: mqlField.oculto, mql_valores: valores.length ? valores : null }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
       }

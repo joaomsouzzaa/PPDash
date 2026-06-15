@@ -57,8 +57,6 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
     // Always clear rate limit on new attempt
     setRateLimited(false);
 
-    console.log("[DashboardFilters] loadAccounts called:", { connected, hasToken: !!token, tokenLen: token?.length, expired, fetching: fetchingRef.current });
-
     if (!connected || !token || expired) {
       setAdAccounts([]);
       return;
@@ -71,7 +69,6 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
 
     fetchAdAccounts()
       .then((accounts) => {
-        console.log("[DashboardFilters] Fetched accounts:", accounts.length);
         setAdAccounts(accounts);
         setRateLimited(false);
         if (
@@ -104,7 +101,6 @@ export function DashboardFilters({ filters, onFiltersChange, hideCityFilter = fa
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
-        console.log("[DashboardFilters] Tab visible, re-checking...");
         loadAccounts();
       }
     };

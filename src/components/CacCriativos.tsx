@@ -48,8 +48,8 @@ export function CacCriativos({ filters }: { filters: Filters }) {
     if (!form.nome.trim()) { toast.error("Informe o nome do criativo"); return; }
     const payload = { nome: form.nome.trim(), utm_contents: form.utm, ad_names: form.ads, ativo: form.ativo };
     const q = id
-      ? (supabase as any).from("criativos").update(payload).eq("id", id)
-      : (supabase as any).from("criativos").insert({ ...payload, ordem: criativos.length });
+      ? supabase.from("criativos").update(payload).eq("id", id)
+      : supabase.from("criativos").insert({ ...payload, ordem: criativos.length });
     const { error } = await q;
     if (error) { toast.error("Erro ao salvar criativo"); return; }
     toast.success(id ? "Criativo atualizado" : "Criativo cadastrado");
@@ -59,13 +59,13 @@ export function CacCriativos({ filters }: { filters: Filters }) {
 
   const excluir = async (c: Criativo) => {
     if (!confirm(`Excluir o criativo "${c.nome}"?`)) return;
-    const { error } = await (supabase as any).from("criativos").delete().eq("id", c.id);
+    const { error } = await supabase.from("criativos").delete().eq("id", c.id);
     if (error) { toast.error("Erro ao excluir"); return; }
     queryClient.invalidateQueries({ queryKey: ["criativos"] });
   };
 
   const toggleAtivo = async (c: Criativo) => {
-    await (supabase as any).from("criativos").update({ ativo: !c.ativo }).eq("id", c.id);
+    await supabase.from("criativos").update({ ativo: !c.ativo }).eq("id", c.id);
     queryClient.invalidateQueries({ queryKey: ["criativos"] });
   };
 
@@ -89,7 +89,7 @@ export function CacCriativos({ filters }: { filters: Filters }) {
         .select("utm_content, custom, is_venda_realizada, faturamento_venda")
         .gte("data_lead", start).lte("data_lead", end);
 
-      const { data: campos } = await (supabase as any).from("lead_campos").select("chave, padrao, mql_valores");
+      const { data: campos } = await supabase.from("lead_campos").select("chave, padrao, mql_valores");
       const triggers = ((campos as any[]) || [])
         .filter((c) => Array.isArray(c.mql_valores) && c.mql_valores.length)
         .map((c) => ({ chave: c.chave as string, padrao: !!c.padrao, valores: new Set((c.mql_valores as unknown[]).map((v) => String(v).trim())) }));

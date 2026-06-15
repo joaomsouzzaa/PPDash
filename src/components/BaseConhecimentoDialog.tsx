@@ -27,7 +27,7 @@ export function BaseConhecimentoDialog({ open, onOpenChange }: { open: boolean; 
 
   const carregar = useCallback(async () => {
     setCarregando(true);
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("base_conhecimento")
       .select("*")
       .order("ordem")
@@ -46,8 +46,8 @@ export function BaseConhecimentoDialog({ open, onOpenChange }: { open: boolean; 
     setSalvando(true);
     const payload = { titulo: form.titulo.trim(), conteudo: form.conteudo, ativo: form.ativo, ordem: form.ordem, updated_at: new Date().toISOString() };
     const { error } = editId && editId !== "novo"
-      ? await (supabase as any).from("base_conhecimento").update(payload).eq("id", editId)
-      : await (supabase as any).from("base_conhecimento").insert(payload);
+      ? await supabase.from("base_conhecimento").update(payload).eq("id", editId)
+      : await supabase.from("base_conhecimento").insert(payload);
     setSalvando(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Base de conhecimento salva");
@@ -58,14 +58,14 @@ export function BaseConhecimentoDialog({ open, onOpenChange }: { open: boolean; 
   const excluir = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Excluir este repositório da base de conhecimento?")) return;
-    const { error } = await (supabase as any).from("base_conhecimento").delete().eq("id", id);
+    const { error } = await supabase.from("base_conhecimento").delete().eq("id", id);
     if (error) { toast.error(error.message); return; }
     carregar();
   };
 
   const alternarAtivo = async (r: Repo, e: React.MouseEvent) => {
     e.stopPropagation();
-    await (supabase as any).from("base_conhecimento").update({ ativo: !r.ativo, updated_at: new Date().toISOString() }).eq("id", r.id);
+    await supabase.from("base_conhecimento").update({ ativo: !r.ativo, updated_at: new Date().toISOString() }).eq("id", r.id);
     carregar();
   };
 

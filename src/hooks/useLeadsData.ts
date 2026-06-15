@@ -93,7 +93,7 @@ export function useLeadsData(filters: Filters) {
       const { start, end } = getDateRange(filters);
 
       // Campos que disparam MQL (mql_valores preenchido no Gerenciar Campos).
-      const { data: camposRaw } = await (supabase as any)
+      const { data: camposRaw } = await supabase
         .from("lead_campos")
         .select("chave, padrao, mql_valores");
       const mqlTriggers: MqlTrigger[] = ((camposRaw as any[]) || [])
