@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
     // Janela: padrão 12h, mas aceita override `desde` (ISO) p/ auditoria completa.
     const cutoff = (body.desde as string) || new Date(Date.now() - JANELA_H * 3600 * 1000).toISOString();
     const dry = body.dry === true; // não insere/vincula, só relata
+    const notificar = body.notificar !== false; // envia o resumo no WhatsApp (default sim; backfill pode passar false)
     const fmtBRdt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
     // 1) Candidatos da Clint (janela): cada NEGÓCIO é um candidato (dedup por deal_id), marcado com a origem.
@@ -182,8 +183,8 @@ Deno.serve(async (req) => {
     linhas.push("🤖 By: GoBot");
     const mensagem = linhas.join("\n");
 
-    // 6) Envia pelo GoBot (via função uazapi). Em dry-run não envia.
-    if (!dry) try {
+    // 6) Envia pelo GoBot (via função uazapi). Em dry-run ou com notificar=false não envia.
+    if (!dry && notificar) try {
       const anon = Deno.env.get("SUPABASE_ANON_KEY") || "";
       await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/uazapi`, {
         method: "POST",
