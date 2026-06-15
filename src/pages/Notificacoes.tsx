@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
-import { Bot, Plus, Pencil, Trash2, Send, Wifi, WifiOff, RefreshCw, QrCode, Eye, EyeOff, Check, ChevronsUpDown, History, CheckCircle2, XCircle, Settings } from "lucide-react";
+import { Bot, Plus, Pencil, Trash2, Send, Wifi, WifiOff, RefreshCw, QrCode, Eye, EyeOff, Check, ChevronsUpDown, History, CheckCircle2, XCircle, Settings, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { syncMetaTokenToServer } from "@/lib/meta-ads";
 import { useCidades } from "@/hooks/useCidades";
@@ -219,6 +219,14 @@ export default function Notificacoes() {
       sheets_mapa: (n as any).sheets_mapa || {},
     });
     setDialogOpen(true);
+  };
+
+  // Abre o dialog pré-preenchido com os dados de `n`, mas como NOVA notificação
+  // (sem editingId) — o usuário revisa e salva como cópia.
+  const duplicar = (n: Notificacao) => {
+    abrirEdicao(n);
+    setEditingId(null);
+    setForm((f) => ({ ...f, nome: `${n.nome} (cópia)` }));
   };
 
   // Persiste e retorna o id (sem fechar o dialog)
@@ -478,7 +486,10 @@ export default function Notificacoes() {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLogNotif(n)} title="Histórico de envios">
                         <History className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirEdicao(n)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicar(n)} title="Duplicar notificação">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrirEdicao(n)} title="Editar">
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleting(n)}>
