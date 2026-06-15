@@ -91,6 +91,7 @@ async function scrape(supabase: any, orgId: string | null, handle: string, limit
   const itens = arr
     .filter((it) => it && (it.shortCode || it.url) && !it.error)
     .map(normalizarItem)
+    .filter((it) => it.isVideo && it.videoUrl) // apenas vídeos/reels — nunca imagem ou post estático
     .sort((a, b) => b.engajamento - a.engajamento);
 
   return { conta, total: itens.length, itens };
