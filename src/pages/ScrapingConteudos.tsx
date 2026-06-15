@@ -37,6 +37,11 @@ type Agente = { id: string; nome: string; slug: string | null };
 
 const fmt = (n: number) => new Intl.NumberFormat("pt-BR", { notation: n >= 10000 ? "compact" : "standard" }).format(n || 0);
 
+// As URLs de thumbnail do Instagram (fbcdn) bloqueiam hotlink/referrer externo.
+// Passamos por um proxy de imagens para conseguir exibir no app.
+const proxyImg = (url: string | null) =>
+  url ? `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=600&h=600&fit=cover` : "";
+
 export default function ScrapingConteudos() {
   const [handle, setHandle] = useState("");
   const [scraping, setScraping] = useState(false);
@@ -232,7 +237,9 @@ export default function ScrapingConteudos() {
                     <Card key={c.id} className={`overflow-hidden transition ${sel ? "ring-2 ring-primary" : ""}`}>
                       <div className="relative aspect-square bg-muted">
                         {c.thumbnail
-                          ? <img src={c.thumbnail} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                          ? <img src={proxyImg(c.thumbnail)} alt="" loading="lazy" referrerPolicy="no-referrer"
+                              className="h-full w-full object-cover"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                           : <div className="h-full w-full flex items-center justify-center text-muted-foreground"><Instagram className="h-8 w-8" /></div>}
                         <div className="absolute top-2 left-2 flex items-center gap-1">
                           {i < 3 && <Badge className="bg-amber-500 text-black"><Trophy className="h-3 w-3 mr-1" />#{i + 1}</Badge>}
