@@ -23,12 +23,13 @@ async function resolveOrg(supabase: any, req: Request): Promise<string | null> {
 async function getKey(supabase: any, provider: string, orgId: string | null, envName: string): Promise<string> {
   let key: string | undefined;
   if (orgId) {
-    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", provider).eq("org_id", orgId).maybeSingle();
-    key = data?.api_key ?? undefined;
+    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", provider).eq("org_id", orgId).limit(1);
+    key = data?.[0]?.api_key ?? undefined;
   }
   if (!key) {
-    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", provider).maybeSingle();
-    key = data?.api_key ?? undefined;
+    // Fallback: qualquer linha do provider (cobre super_admin sem org e chaves globais).
+    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", provider).limit(1);
+    key = data?.[0]?.api_key ?? undefined;
   }
   if (!key) key = Deno.env.get(envName) ?? undefined;
   if (!key) throw new Error(`Configure a chave do provider "${provider}" em Agentes → Configurar modelos`);
