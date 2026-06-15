@@ -13,7 +13,7 @@ import {
   fetchAdAccounts, fetchCampaignBreakdown, fetchAdSetBreakdown, fetchAdBreakdown,
   hydrateMetaTokenFromServer, isTokenExpired, type CampaignRow,
 } from "@/lib/meta-ads";
-import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon, Lightbulb, Sparkles, ShoppingCart, Target, Loader2, Users } from "lucide-react";
+import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon, Lightbulb, Sparkles, ShoppingCart, Target, Loader2, Users, UserPlus } from "lucide-react";
 
 const fmtBRL = (n: number) => `R$ ${(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtNum = (n: number) => (n || 0).toLocaleString("pt-BR");
@@ -45,7 +45,7 @@ export default function Campanhas() {
   // Persiste a cidade (todas as páginas mantêm a última selecionada, inclusive no F5).
   const onFiltersChange = (f: Filters) => { setFilters(f); localStorage.setItem("selected_city", f.city); };
   // Critério do Top Criativos: menor CAC ou mais vendas.
-  const [creativoRank, setCreativoRank] = useState<"cac" | "vendas" | "leads">("cac");
+  const [creativoRank, setCreativoRank] = useState<"cac" | "vendas" | "leads" | "cpl">("cac");
 
   const { data: cidades = [] } = useCidades();
   const selectedCidade = cidades.find((c) => c.slug === filters.city);
@@ -127,6 +127,9 @@ export default function Campanhas() {
     } else if (creativoRank === "leads") {
       const comL = ads.filter((a) => a.leads > 0);
       ordenado = comL.length ? [...comL].sort((a, b) => (b.leads - a.leads) || (a.cpl - b.cpl)) : ads;
+    } else if (creativoRank === "cpl") {
+      const comCpl = ads.filter((a) => a.cpl > 0);
+      ordenado = comCpl.length ? [...comCpl].sort((a, b) => a.cpl - b.cpl) : ads;
     } else {
       const comV = ads.filter((a) => a.purchases > 0);
       ordenado = comV.length ? [...comV].sort((a, b) => a.cac - b.cac) : ads;
@@ -271,9 +274,13 @@ export default function Campanhas() {
                       className={`px-2 py-1 flex items-center gap-1 text-xs ${creativoRank === "vendas" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
                       <ShoppingCart className="h-3.5 w-3.5" /> Mais vendas
                     </button>
-                    <button type="button" onClick={() => setCreativoRank("leads")} title="Menor CPL / Mais leads"
+                    <button type="button" onClick={() => setCreativoRank("leads")} title="Mais leads"
                       className={`px-2 py-1 flex items-center gap-1 text-xs ${creativoRank === "leads" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
                       <Users className="h-3.5 w-3.5" /> Mais leads
+                    </button>
+                    <button type="button" onClick={() => setCreativoRank("cpl")} title="Menor CPL (custo por lead)"
+                      className={`px-2 py-1 flex items-center gap-1 text-xs ${creativoRank === "cpl" ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>
+                      <UserPlus className="h-3.5 w-3.5" /> Menor CPL
                     </button>
                   </div>
                 </div>
