@@ -366,7 +366,7 @@ export default function Performance() {
                             <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                             <YAxis yAxisId="l" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                             <YAxis yAxisId="r" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                            <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+                            <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} itemStyle={{ color: "#fff" }} labelStyle={{ color: "#fff", fontWeight: 600 }} />
                             <Legend />
                             <Area yAxisId="l" type="monotone" dataKey="Investimento" stroke="#ff2d75" fill="url(#gInv)" strokeWidth={2} />
                             <Area yAxisId="r" type="monotone" dataKey="Cliques" stroke="#39ff14" fill="url(#gClk)" strokeWidth={2} />
