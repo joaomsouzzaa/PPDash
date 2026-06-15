@@ -94,7 +94,15 @@ const InsideSales = () => {
   const canalCarregando = !!filters.canalId && !canal;
   // Métricas/blocos visíveis para o canal (sem config = mostra tudo).
   const metricasCanal = canal?.metricas ?? null;
-  const show = (key: string) => !metricasCanal || metricasCanal.includes(key);
+  // Canais Orgânico e YouTube não exibem o Funil de Conversão.
+  const canalSemFunil = (() => {
+    const n = (canal?.nome || "").toLowerCase();
+    return n.includes("orgânico") || n.includes("organico") || n.includes("youtube");
+  })();
+  const show = (key: string) => {
+    if (key === "funil" && canalSemFunil) return false;
+    return !metricasCanal || metricasCanal.includes(key);
+  };
 
   const loadSpend = useCallback(async () => {
     if (canalCarregando) return;
@@ -300,9 +308,10 @@ const InsideSales = () => {
             </div>
             )}
 
-            {/* Linha 1: Funil | Mapa + ranking de estados (mesma altura) */}
+            {/* Linha 1: Funil | Mapa + ranking de estados (mesma altura).
+                Sem funil (Orgânico/YouTube), o mapa ocupa a linha inteira. */}
             {(show("funil") || show("mapa")) && (
-            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
+            <div className={`grid gap-4 items-stretch ${show("funil") && show("mapa") ? "lg:grid-cols-2" : "grid-cols-1"}`}>
               {show("funil") && <SalesFunnel steps={funnelSteps} />}
               {show("mapa") && <BrazilHeatMap filters={filters} />}
             </div>
