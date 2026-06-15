@@ -96,8 +96,10 @@ const InsideSales = () => {
   const metricasCanal = canal?.metricas ?? null;
   // Canais Orgânico e YouTube não exibem o Funil de Conversão.
   const canalSemFunil = (() => {
-    const n = (canal?.nome || "").toLowerCase();
-    return n.includes("orgânico") || n.includes("organico") || n.includes("youtube");
+    const norm = (s: string) =>
+      (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const txt = `${norm(canal?.nome || "")} ${norm(canal?.slug || "")}`;
+    return txt.includes("organico") || txt.includes("youtube");
   })();
   const show = (key: string) => {
     if (key === "funil" && canalSemFunil) return false;
