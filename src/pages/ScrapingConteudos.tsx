@@ -44,6 +44,7 @@ const proxyImg = (url: string | null) =>
 
 export default function ScrapingConteudos() {
   const [handle, setHandle] = useState("");
+  const [dias, setDias] = useState("30");
   const [scraping, setScraping] = useState(false);
   const [conta, setConta] = useState<string | null>(null);
   const [conteudos, setConteudos] = useState<Conteudo[]>([]);
@@ -78,7 +79,7 @@ export default function ScrapingConteudos() {
     setConteudos([]); setSelecionados([]); setTranscricoes({}); setAnalise("");
     try {
       const { data, error } = await supabase.functions.invoke("scraping-instagram", {
-        body: { action: "scrape", handle: handle.trim(), limit: 30 },
+        body: { action: "scrape", handle: handle.trim(), limit: 50, dias: Number(dias) },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -199,6 +200,18 @@ export default function ScrapingConteudos() {
                       onChange={(e) => setHandle(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && buscar()} />
                   </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Período</label>
+                  <Select value={dias} onValueChange={setDias}>
+                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">Últimos 7 dias</SelectItem>
+                      <SelectItem value="15">Últimos 15 dias</SelectItem>
+                      <SelectItem value="30">Últimos 30 dias</SelectItem>
+                      <SelectItem value="90">Últimos 90 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button onClick={buscar} disabled={scraping}>
                   {scraping ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}

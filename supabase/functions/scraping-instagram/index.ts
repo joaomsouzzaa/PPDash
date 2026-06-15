@@ -62,10 +62,13 @@ function normalizarItem(it: any) {
   };
 }
 
-async function scrape(supabase: any, orgId: string | null, handle: string, limit: number) {
+async function scrape(supabase: any, orgId: string | null, handle: string, limit: number, dias: number) {
   const token = await getKey(supabase, "apify", orgId, "APIFY_TOKEN");
   const conta = handleLimpo(handle);
   if (!conta) throw new Error("Informe um @ de Instagram válido");
+
+  const janela = Math.min(Math.max(dias || 30, 1), 365);
+  const desde = new Date(Date.now() - janela * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const url = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
   const r = await fetch(url, {
@@ -74,7 +77,8 @@ async function scrape(supabase: any, orgId: string | null, handle: string, limit
     body: JSON.stringify({
       directUrls: [`https://www.instagram.com/${conta}/`],
       resultsType: "posts",
-      resultsLimit: Math.min(Math.max(limit || 30, 1), 60),
+      resultsLimit: Math.min(Math.max(limit || 50, 1), 100),
+      onlyPostsNewerThan: desde, // só posts do período (acelera e foca no recente)
       addParentData: false,
     }),
   });
@@ -128,7 +132,7 @@ Deno.serve(async (req) => {
     const action = body?.action;
 
     if (action === "scrape") {
-      const out = await scrape(supabase, orgId, body.handle, body.limit);
+      const out = await scrape(supabase, orgId, body.handle, body.limit, body.dias);
       return json(out);
     }
     if (action === "transcrever") {
