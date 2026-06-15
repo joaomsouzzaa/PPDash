@@ -31,6 +31,7 @@ import { LeadsPlacement } from "@/components/LeadsPlacement";
 import { LeadsCustomPie } from "@/components/LeadsCustomPie";
 import { LeadsRanking } from "@/components/LeadsRanking";
 import { BrazilHeatMap } from "@/components/BrazilHeatMap";
+import { InvestimentoLeadsDia } from "@/components/InvestimentoLeadsDia";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
 import { rateioInvestimentoManual, somaManualRateada } from "@/lib/investimento";
@@ -105,6 +106,12 @@ const InsideSales = () => {
     if (key === "funil" && canalSemFunil) return false;
     return !metricasCanal || metricasCanal.includes(key);
   };
+  // Gráfico "Investimento e Leads por dia": só nos canais Geral, Google Ads, Meta Ads e Portal do Franchising.
+  const mostrarGraficoDia = (() => {
+    if (!filters.canalId) return true; // Geral
+    const nm = (canal?.nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    return ["google ads", "meta ads", "portal do franchising"].includes(nm);
+  })();
 
   const loadSpend = useCallback(async () => {
     if (canalCarregando) return;
@@ -338,6 +345,9 @@ const InsideSales = () => {
               <LeadsCustomPie filters={filters} field="quando_iniciar" title="Tempo de investimento" icon={Clock} />
             </div>
             </div>
+
+            {/* Investimento e Leads por dia — só nos canais Geral, Google Ads, Meta Ads e Portal do Franchising */}
+            {mostrarGraficoDia && <InvestimentoLeadsDia filters={filters} />}
           </div>
         </main>
       </div>
