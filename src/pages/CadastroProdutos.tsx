@@ -281,7 +281,7 @@ const CadastroProdutos = () => {
             onChange={(e) => setForm({ ...form, investimento_manual: e.target.value })}
             placeholder="Ex: 1576,86 (deixe vazio para zerar)"
           />
-          <p className="text-xs text-muted-foreground">Opcional. Mostrado no dashboard exatamente como digitado (não muda com o período). Vazio = investimento zerado.</p>
+          <p className="text-xs text-muted-foreground">Opcional. Tratado como o total do mês corrente até hoje: é rateado por dia (total ÷ dia de hoje) e o dashboard mostra o valor proporcional ao período filtrado. Vazio = investimento zerado.</p>
         </div>
       )}
       <div className="space-y-1">

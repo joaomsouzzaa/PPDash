@@ -247,7 +247,7 @@ export function clearAdAccountsCache() {
   _adAccountsCache = null;
 }
 
-function buildTimeRange(dateRange: string): { since: string; until: string } {
+export function buildTimeRange(dateRange: string): { since: string; until: string } {
   const now = new Date();
   const fmt = (d: Date) => d.toISOString().split("T")[0];
   const until = fmt(now);

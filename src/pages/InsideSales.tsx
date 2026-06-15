@@ -30,6 +30,7 @@ import { LeadsRanking } from "@/components/LeadsRanking";
 import { BrazilHeatMap } from "@/components/BrazilHeatMap";
 import { fmt, type Filters } from "@/lib/mockData";
 import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
+import { rateioInvestimentoManual, somaManualRateada } from "@/lib/investimento";
 import { fetchGoogleAdSpend, fetchGoogleTotalSpend } from "@/lib/google-ads";
 import { useCidades } from "@/hooks/useCidades";
 import { useLeadsData } from "@/hooks/useLeadsData";
@@ -108,13 +109,14 @@ const InsideSales = () => {
         }
         const gids = [...new Set(produtos.filter((p) => p.plataforma === "google" && p.google_conta_id).map((p) => p.google_conta_id as string))];
         if (gids.length) total += await fetchGoogleTotalSpend(gids, filters.dateRange, filters.startDate, filters.endDate);
-        // Canais sem plataforma (ex.: Portal do Franchising) somam o investimento manual.
-        total += produtos.filter((p) => p.plataforma === "none" && p.investimento_manual != null).reduce((s, p) => s + (p.investimento_manual || 0), 0);
+        // Canais sem plataforma (ex.: Portal/Google manual) somam o investimento
+        // manual rateado pelo período (total do mês ÷ dia atual × dias do filtro).
+        total += somaManualRateada(produtos, filters.dateRange, filters.startDate, filters.endDate);
         setMetaInvestimento(total);
         return;
       }
-      // Sem plataforma → usa o investimento manual digitado (ou zero).
-      if (canalPlataforma === "none") { setMetaInvestimento(canalInvManual != null ? canalInvManual : 0); return; }
+      // Sem plataforma → investimento manual rateado pelo período (ou zero).
+      if (canalPlataforma === "none") { setMetaInvestimento(rateioInvestimentoManual(canalInvManual, filters.dateRange, filters.startDate, filters.endDate)); return; }
       // Canal do Google Ads → puxa da API google-ads.
       if (canalPlataforma === "google") {
         if (!canalGoogleId) { setMetaInvestimento(null); return; }

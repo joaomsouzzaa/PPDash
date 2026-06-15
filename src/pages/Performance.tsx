@@ -9,6 +9,7 @@ import { CacSemanalGeral } from "@/components/CacSemanalGeral";
 import { CacSemanalPorCriativo } from "@/components/CacSemanalPorCriativo";
 import { useProdutos } from "@/hooks/useProdutos";
 import { fetchGoogleAdSpend, fetchGoogleTotalSpend } from "@/lib/google-ads";
+import { rateioInvestimentoManual, somaManualRateada } from "@/lib/investimento";
 import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -169,7 +170,7 @@ export default function Performance() {
       if (canalPlataforma === "google" && canal?.google_conta_id) {
         try { return await fetchGoogleAdSpend(canal.google_conta_id, filters.dateRange, filters.startDate, filters.endDate, canal.slug || undefined); } catch { return 0; }
       }
-      return canal?.investimento_manual ?? 0;
+      return rateioInvestimentoManual(canal?.investimento_manual, filters.dateRange, filters.startDate, filters.endDate);
     },
   });
   // No "Geral" (sem canal), soma também o Google das contas dos canais Google.
@@ -179,9 +180,9 @@ export default function Performance() {
     enabled: !filters.canalId && gidsGeral.length > 0,
     queryFn: async () => fetchGoogleTotalSpend(gidsGeral, filters.dateRange, filters.startDate, filters.endDate),
   });
-  // No "Geral", soma também o investimento manual dos canais sem plataforma (ex.: Portal).
+  // No "Geral", soma também o investimento manual (rateado pelo período) dos canais sem plataforma.
   const geralManual = !filters.canalId
-    ? produtos.filter((p) => p.plataforma === "none" && p.investimento_manual != null).reduce((s, p) => s + (p.investimento_manual || 0), 0)
+    ? somaManualRateada(produtos, filters.dateRange, filters.startDate, filters.endDate)
     : 0;
   const investimento = canalPlataforma === "meta" ? (kpis?.spend ?? 0) + (!filters.canalId ? geralGoogle : 0) + geralManual : investNonMeta;
   const qGenero = useQuery(bq("gender"));

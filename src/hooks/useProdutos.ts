@@ -9,7 +9,7 @@ export interface Produto {
   conta_id: string | null;    // conta de anúncios do Meta (act_...) deste canal
   plataforma: "meta" | "google" | "none"; // de onde vem o investimento ("none" = sem investimento)
   google_conta_id: string | null; // customer id do Google Ads (só dígitos)
-  investimento_manual: number | null; // R$/dia, fallback quando não há API
+  investimento_manual: number | null; // total do mês até hoje (rateado por período), fallback sem API
   metricas: string[] | null; // blocos/KPIs visíveis no dash (null = todos)
   paginas: string[] | null; // páginas onde o botão aparece (null = todas)
   ativo: boolean;
