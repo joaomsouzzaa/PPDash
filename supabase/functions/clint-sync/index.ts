@@ -20,8 +20,8 @@ async function clintGet(path: string): Promise<any> {
   const r = await fetch(`${CLINT}${path}`, { headers: { "api-token": Deno.env.get("CLINT_API_TOKEN") || "" } });
   return r.json();
 }
-// Todos os negócios de uma origem criados a partir do cutoff (a API não filtra por data, então pagina e filtra).
-async function dealsRecentes(originId: string, cutoffIso: string): Promise<any[]> {
+// Negócios de uma origem criados na janela [cutoff, ate] (a API não filtra por data, então pagina e filtra).
+async function dealsRecentes(originId: string, cutoffIso: string, ateIso?: string): Promise<any[]> {
   const first = await clintGet(`/deals?origin_id=${originId}&limit=1000&page=1`);
   let rows: any[] = [...(first.data || [])];
   const pages = first.totalPages || 1;
@@ -29,7 +29,7 @@ async function dealsRecentes(originId: string, cutoffIso: string): Promise<any[]
     const j = await clintGet(`/deals?origin_id=${originId}&limit=1000&page=${p}`);
     rows = rows.concat(j.data || []);
   }
-  return rows.filter((d) => d.created_at && d.created_at >= cutoffIso);
+  return rows.filter((d) => d.created_at && d.created_at >= cutoffIso && (!ateIso || d.created_at <= ateIso));
 }
 
 function mapStatus(stage: string): string {
@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
 
     // Janela: padrão 12h, mas aceita override `desde` (ISO) p/ auditoria completa.
     const cutoff = (body.desde as string) || new Date(Date.now() - JANELA_H * 3600 * 1000).toISOString();
+    const ate = (body.ate as string) || undefined; // limite superior opcional (ISO) p/ processar em janelas menores
     const dry = body.dry === true; // não insere/vincula, só relata
     const notificar = body.notificar !== false; // envia o resumo no WhatsApp (default sim; backfill pode passar false)
     const fmtBRdt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -64,7 +65,7 @@ Deno.serve(async (req) => {
     let deals: any[] = [];
     const porOrigem: Record<string, number> = {};
     for (const o of ORIGINS) {
-      const r = await dealsRecentes(o.id, cutoff);
+      const r = await dealsRecentes(o.id, cutoff, ate);
       porOrigem[o.nome] = r.length;
       for (const d of r) d._origem = o.nome;
       deals = deals.concat(r);
