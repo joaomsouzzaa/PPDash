@@ -453,7 +453,11 @@ async function resumoDiarioPerformance(supabase: any, orgId: string | null, cana
       const accs = c.conta_id ? [c.conta_id] : [...accSet];
       try { inv += await metaSpendCanalDia(metaToken, accs, c.slug || "", ymd(ini)); } catch { /* off */ }
     } else if (c.plataforma === "none" && c.investimento_manual != null) {
-      inv += Number(c.investimento_manual) || 0;
+      // Investimento manual = TOTAL do mês corrente até hoje. Para o resumo de
+      // 1 dia, rateia: diária = total / (dia do mês atual em SP). Sem isso o
+      // diário somava o total inteiro (puxava o mês todo em vez do dia).
+      const diaAtual = Number(new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }).split("-")[2]) || 1;
+      inv += (Number(c.investimento_manual) || 0) / diaAtual;
     }
     // google: API ainda sem acesso (Basic Access pendente) → soma 0 por ora.
   }
