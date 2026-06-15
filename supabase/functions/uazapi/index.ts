@@ -411,7 +411,13 @@ async function resumoDiarioPerformance(supabase: any, orgId: string | null, cana
   // Leads do dia, filtrados pelos utm_source dos canais (slug_source). Sem alvos = todos.
   const alvos: string[] = [];
   for (const c of canais) for (const v of String(c.slug_source || "").split(",")) { const n = norm(v.trim()); if (n) alvos.push(n); }
-  let q = supabase.from("leads").select("custom, utm_source").gte("data_lead", ini.toISOString()).lte("data_lead", fim.toISOString());
+  // data_lead é gravado como data em meia-noite UTC para parte dos leads, então a
+  // janela de leads usa limites de DIA EM UTC (o gasto do Meta segue o dia BR).
+  // Caso contrário, leads de 00:00Z caíam no dia anterior (MQL sumia do dia certo).
+  const [ly, lm, ld] = ymd(ini).split("-").map(Number);
+  const leadIni = new Date(Date.UTC(ly, lm - 1, ld, 0, 0, 0));
+  const leadFim = new Date(Date.UTC(ly, lm - 1, ld + 1, 0, 0, 0) - 1);
+  let q = supabase.from("leads").select("custom, utm_source").gte("data_lead", leadIni.toISOString()).lte("data_lead", leadFim.toISOString());
   if (orgId) q = q.eq("org_id", orgId);
   const { data: leadsRaw } = await q;
   const leads = (leadsRaw || []).filter((l: any) => alvos.length === 0 || (l.utm_source && alvos.some((a) => norm(l.utm_source).includes(a))));

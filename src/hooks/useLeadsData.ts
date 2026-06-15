@@ -4,60 +4,52 @@ import type { Filters } from "@/lib/mockData";
 import { useProdutos } from "@/hooks/useProdutos";
 
 export function getDateRange(filters: Filters): { start: string; end: string } {
+  // data_lead é gravado como DATA em meia-noite UTC (00:00Z) para parte dos leads.
+  // O filtro precisa usar limites de DIA EM UTC; senão o fuso local (BR, -3h)
+  // converte a meia-noite local para 03:00Z e empurra os leads de 00:00Z para o
+  // dia anterior (era isso que sumia com os MQL do dia correto).
+  const utcStart = (d: Date) =>
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
+  const utcEnd = (d: Date) =>
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1) - 1).toISOString();
+
   if (filters.startDate && filters.endDate) {
-    return {
-      start: filters.startDate.toISOString(),
-      end: new Date(filters.endDate.getTime() + 86400000 - 1).toISOString(),
-    };
+    return { start: utcStart(filters.startDate), end: utcEnd(filters.endDate) };
   }
 
   const now = new Date();
-  let start: Date;
-  const end = now;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diasAtras = (n: number) => { const d = new Date(today); d.setDate(d.getDate() - n); return d; };
 
   switch (filters.dateRange) {
     case "today":
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      break;
+      return { start: utcStart(today), end: utcEnd(today) };
     case "yesterday": {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-      return {
-        start: start.toISOString(),
-        end: new Date(start.getTime() + 86400000 - 1).toISOString(),
-      };
+      const y = diasAtras(1);
+      return { start: utcStart(y), end: utcEnd(y) };
     }
     case "7d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      break;
+      return { start: utcStart(diasAtras(7)), end: utcEnd(today) };
     case "14d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 14);
-      break;
+      return { start: utcStart(diasAtras(14)), end: utcEnd(today) };
     case "30d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 30);
-      break;
+      return { start: utcStart(diasAtras(30)), end: utcEnd(today) };
     case "90d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 90);
-      break;
-    case "this_month":
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      break;
+      return { start: utcStart(diasAtras(90)), end: utcEnd(today) };
+    case "this_month": {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start: utcStart(s), end: utcEnd(today) };
+    }
     case "last_month": {
-      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-      return { start: start.toISOString(), end: endOfMonth.toISOString() };
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { start: utcStart(s), end: utcEnd(e) };
     }
     case "lifetime":
-      return { start: "2000-01-01T00:00:00Z", end: now.toISOString() };
+      return { start: "2000-01-01T00:00:00Z", end: utcEnd(today) };
     default:
-      start = new Date(now);
-      start.setDate(start.getDate() - 30);
+      return { start: utcStart(diasAtras(30)), end: utcEnd(today) };
   }
-
-  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 // Campos marcados como gatilho de MQL (lead_campos.mql_valores preenchido).
