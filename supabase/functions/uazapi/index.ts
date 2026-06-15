@@ -159,7 +159,7 @@ function varsDaLead(l: any): Record<string, string | number> {
     cidade: l.cidade || "",
     status: l.status || "",
     campanha: l.campaign_name || "",
-    origem: l.utm_source || "",
+    origem: l.utm_source || (l.clint_deal_id ? "Inserido Manual Clint" : ""),
     anuncio: l.ad_name || "",
     instagram: l.instagram || "",
     data: l.data_lead ? new Date(l.data_lead).toLocaleDateString("pt-BR") : "",
