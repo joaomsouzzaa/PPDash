@@ -17,6 +17,8 @@ import {
   Loader2,
   MapPin,
   Sparkles,
+  Wallet,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -26,6 +28,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesFunnel } from "@/components/SalesFunnel";
 import { LeadsPlacement } from "@/components/LeadsPlacement";
+import { LeadsCustomPie } from "@/components/LeadsCustomPie";
 import { LeadsRanking } from "@/components/LeadsRanking";
 import { BrazilHeatMap } from "@/components/BrazilHeatMap";
 import { fmt, type Filters } from "@/lib/mockData";
@@ -317,6 +320,12 @@ const InsideSales = () => {
               {show("cidades") && <LeadsRanking filters={filters} title="Cidades com mais leads" icon={MapPin} field={{ kind: "column", key: "cidade" }} limit={16} />}
             </div>
             )}
+
+            {/* Linha 3: pizzas com % de respostas (capacidade x tempo de investimento) */}
+            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
+              <LeadsCustomPie filters={filters} field="capacidade_investimento" title="Capacidade de investimento" icon={Wallet} />
+              <LeadsCustomPie filters={filters} field="quando_iniciar" title="Tempo de investimento" icon={Clock} />
+            </div>
             </div>
           </div>
         </main>
