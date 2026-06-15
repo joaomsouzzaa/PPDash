@@ -8,7 +8,7 @@ const ORIGINS = [
   { id: "86a02d2c-a7bc-4363-96d3-3260258b9b38", nome: "PP | Leads Desqualificadas" },
 ];
 const DEST = "5581996125512"; // GoBot
-const JANELA_H = 12;
+const JANELA_H = 24 * 2; // 2 dias: roda de hora em hora, então qualquer lead perdido pelo webhook é pego em até 1h; 2 dias é só margem. Janela maior puxa histórico antigo desnecessário.
 
 function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -54,12 +54,20 @@ Deno.serve(async (req) => {
       orgId = org?.id || null;
     }
 
-    const cutoff = new Date(Date.now() - JANELA_H * 3600 * 1000).toISOString();
+    // Janela: padrão 12h, mas aceita override `desde` (ISO) p/ auditoria completa.
+    const cutoff = (body.desde as string) || new Date(Date.now() - JANELA_H * 3600 * 1000).toISOString();
+    const dry = body.dry === true; // não insere/vincula, só relata
     const fmtBRdt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-    // 1) Candidatos da Clint (janela): cada NEGÓCIO é um candidato (dedup por deal_id).
+    // 1) Candidatos da Clint (janela): cada NEGÓCIO é um candidato (dedup por deal_id), marcado com a origem.
     let deals: any[] = [];
-    for (const o of ORIGINS) deals = deals.concat(await dealsRecentes(o.id, cutoff));
+    const porOrigem: Record<string, number> = {};
+    for (const o of ORIGINS) {
+      const r = await dealsRecentes(o.id, cutoff);
+      porOrigem[o.nome] = r.length;
+      for (const d of r) d._origem = o.nome;
+      deals = deals.concat(r);
+    }
     const candidatos = new Map<string, any>(); // chave = deal_id
     for (const d of deals) if (d.id && !candidatos.has(d.id)) candidatos.set(d.id, d);
 
@@ -72,7 +80,7 @@ Deno.serve(async (req) => {
     for (const l of nossos || []) { const e = norm(l.email || ""); if (!e) continue; (porEmail.get(e) || porEmail.set(e, []).get(e)).push(l); }
 
     // 3) Para cada negócio: vincular (backfill deal_id num lead do webhook) ou inserir.
-    const inseridos: { nome: string; email: string; stage: string; motivo: string }[] = [];
+    const inseridos: { nome: string; email: string; stage: string; motivo: string; origem: string; criado: string; utm_source: string | null }[] = [];
     const naoInseridos: { nome: string; email: string; motivo: string }[] = [];
     const rowsToInsert: any[] = [];
     const vinculos: { id: string; deal: string }[] = [];
@@ -86,11 +94,12 @@ Deno.serve(async (req) => {
         .sort((a, b) => Math.abs(+new Date(a.data_lead) - +new Date(d.created_at)) - Math.abs(+new Date(b.data_lead) - +new Date(d.created_at)));
       if (pool.length) { claimed.add(pool[0].id); vinculos.push({ id: pool[0].id, deal: d.id }); vinculados++; continue; }
 
-      // Busca o contato completo (campos/utm).
+      // Busca o contato completo (campos/utm). Só quando há email — sem email a busca não filtra e fica lenta.
       let f: any = {};
       let tags = "";
-      try {
-        const cj = await clintGet(`/contacts?email=${encodeURIComponent(d.contact?.email || "")}&limit=1`);
+      const emailDeal = (d.contact?.email || "").trim();
+      if (emailDeal) try {
+        const cj = await clintGet(`/contacts?email=${encodeURIComponent(emailDeal)}&limit=1`);
         const c = (cj.data || [])[0] || {};
         f = c.fields || {};
         tags = (c.tags || []).map((t: any) => t.name).join(", ");
@@ -128,15 +137,15 @@ Deno.serve(async (req) => {
         is_venda_realizada: /venda|ganho/.test(st) ? "Sim" : null,
         custom,
       });
-      inseridos.push({ nome: d.contact?.name || "(sem nome)", email: d.contact?.email || "", stage: d.stage || "", motivo });
+      inseridos.push({ nome: d.contact?.name || "(sem nome)", email: d.contact?.email || "", stage: d.stage || "", motivo, origem: d._origem || "?", criado: d.created_at, utm_source: f.utm_source || null });
     }
 
     // Vincula (backfill deal_id) os leads que o webhook já tinha salvo.
-    for (const v of vinculos) {
+    if (!dry) for (const v of vinculos) {
       await supabase.from("leads").update({ clint_deal_id: v.deal }).eq("id", v.id);
     }
 
-    if (rowsToInsert.length) {
+    if (!dry && rowsToInsert.length) {
       const { error } = await supabase.from("leads").insert(rowsToInsert);
       if (error) {
         for (const i of inseridos) naoInseridos.push({ nome: i.nome, email: i.email, motivo: "erro ao inserir: " + error.message });
@@ -153,7 +162,7 @@ Deno.serve(async (req) => {
     // 5) Monta mensagem.
     const linhas: string[] = [];
     linhas.push("🔄 Sincronização Clint → Banco");
-    linhas.push(`🕐 ${fmtBRdt(new Date())} · janela: últimas ${JANELA_H}h (BRT)`);
+    linhas.push(`🕐 ${fmtBRdt(new Date())} · desde ${fmtBRdt(new Date(cutoff))} (BRT)`);
     linhas.push("");
     linhas.push("📊 Resumo");
     linhas.push(`• Clint (PP Qualif + Desqualif): ${clintCount}`);
@@ -173,17 +182,23 @@ Deno.serve(async (req) => {
     linhas.push("🤖 By: GoBot");
     const mensagem = linhas.join("\n");
 
-    // 6) Envia pelo GoBot (via função uazapi).
-    try {
+    // 6) Envia pelo GoBot (via função uazapi). Em dry-run não envia.
+    if (!dry) try {
       const anon = Deno.env.get("SUPABASE_ANON_KEY") || "";
       await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/uazapi`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${anon}`, apikey: anon },
         body: JSON.stringify({ action: "send", org_id: orgId, destinatario: DEST, mensagem }),
+        signal: AbortSignal.timeout(20000),
       });
     } catch { /* envio falhou; segue */ }
 
-    return json({ ok: true, clint: clintCount, nosso: nossoCount, inseridos: inseridos.length, nao_inseridos: naoInseridos.length });
+    return json({
+      ok: true, dry, desde: cutoff, clint: clintCount, por_origem: porOrigem,
+      ja_tinha: jaTinha, vinculados, nosso: nossoCount,
+      inseridos: inseridos.length, nao_inseridos: naoInseridos.length,
+      faltantes: inseridos.map((i) => ({ nome: i.nome, email: i.email, origem: i.origem, stage: i.stage, criado: i.criado, utm_source: i.utm_source, motivo: i.motivo })),
+    });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "erro" }, 500);
   }
