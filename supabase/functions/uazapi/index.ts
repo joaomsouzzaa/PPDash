@@ -74,7 +74,20 @@ async function uazFetch(path: string, token: string, body?: unknown, method?: st
 
 // Substitui {{var}} pelos valores do mapa
 function render(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ""));
+  // Remove linhas cujos placeholders ficaram todos vazios (ex.: Investimento/Time sem dado).
+  return template
+    .split("\n")
+    .filter((linha) => {
+      const ph = linha.match(/\{\{\s*\w+\s*\}\}/g);
+      if (!ph) return true; // linha sem placeholder (cabeçalho/rodapé) — mantém
+      const algumPreenchido = ph.some((p) => {
+        const k = p.replace(/[{}\s]/g, "");
+        return vars[k] != null && String(vars[k]).trim() !== "";
+      });
+      return algumPreenchido;
+    })
+    .join("\n")
+    .replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ""));
 }
 
 const fmtBRL = (n: number) => `R$ ${(Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -159,7 +172,7 @@ function varsDaLead(l: any): Record<string, string | number> {
     cidade: l.cidade || "",
     status: l.status || "",
     campanha: l.campaign_name || "",
-    origem: l.utm_source || (l.clint_deal_id ? "Inserido Manual Clint" : ""),
+    origem: l.utm_source || (l.clint_deal_id ? "Inserido Manual" : ""),
     anuncio: l.ad_name || "",
     instagram: l.instagram || "",
     data: l.data_lead ? new Date(l.data_lead).toLocaleDateString("pt-BR") : "",
