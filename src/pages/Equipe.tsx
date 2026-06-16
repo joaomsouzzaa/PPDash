@@ -62,21 +62,44 @@ export default function Equipe() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    if (!profile?.org_id) { setMembros([]); setLoading(false); return; }
+    const orgId = profile?.org_id;
+    if (!orgId) { setMembros([]); setLoading(false); return; }
+    // Membros = memberships desta org (papel/status vêm da membership).
+    const { data: mems } = await supabase
+      .from("memberships")
+      .select("user_id, papel, status")
+      .eq("org_id", orgId);
+    const memRows = (mems as { user_id: string; papel: string; status: string }[]) ?? [];
+    const ids = memRows.map((m) => m.user_id);
+    if (ids.length === 0) { setMembros([]); setLoading(false); return; }
+
     const { data: profs } = await supabase
       .from("profiles")
-      .select("id, nome, email, papel, status")
-      .eq("org_id", profile.org_id)
-      .order("created_at");
-    const ids = ((profs as Membro[]) ?? []).map((p) => p.id);
-    const { data: ums } = ids.length
-      ? await supabase.from("user_modulos").select("user_id, modulo_key").in("user_id", ids)
-      : { data: [] as { user_id: string; modulo_key: string }[] };
+      .select("id, nome, email")
+      .in("id", ids);
+    const mapProf = new Map<string, { nome: string | null; email: string | null }>();
+    ((profs as { id: string; nome: string | null; email: string | null }[]) ?? []).forEach((p) =>
+      mapProf.set(p.id, { nome: p.nome, email: p.email })
+    );
+
+    const { data: ums } = await supabase
+      .from("user_modulos")
+      .select("user_id, modulo_key")
+      .eq("org_id", orgId)
+      .in("user_id", ids);
     const mapMods = new Map<string, string[]>();
     ((ums as { user_id: string; modulo_key: string }[]) ?? []).forEach((r) => {
       mapMods.set(r.user_id, [...(mapMods.get(r.user_id) ?? []), r.modulo_key]);
     });
-    setMembros(((profs as Membro[]) ?? []).map((p) => ({ ...p, modulos: mapMods.get(p.id) ?? [] })));
+
+    setMembros(memRows.map((m) => ({
+      id: m.user_id,
+      nome: mapProf.get(m.user_id)?.nome ?? null,
+      email: mapProf.get(m.user_id)?.email ?? null,
+      papel: m.papel,
+      status: m.status,
+      modulos: mapMods.get(m.user_id) ?? [],
+    })));
     setLoading(false);
   }, [profile?.org_id]);
 
@@ -87,11 +110,12 @@ export default function Equipe() {
     if (!convidar && form.senha.length < 6) return toast.error("Defina uma senha (mín. 6 caracteres).");
     setSalvando(true);
     try {
+      const org_id = profile?.org_id;
       if (convidar) {
-        await adminAction("invite_member", { email: form.email, nome: form.nome, modulos: form.modulos });
+        await adminAction("invite_member", { email: form.email, nome: form.nome, modulos: form.modulos, org_id });
         toast.success("Convite enviado por e-mail.");
       } else {
-        await adminAction("create_member", form);
+        await adminAction("create_member", { ...form, org_id });
         toast.success("Membro criado.");
       }
       setOpen(false);
@@ -104,20 +128,20 @@ export default function Equipe() {
   const toggleModulo = async (m: Membro, key: string, on: boolean) => {
     const novos = on ? [...m.modulos, key] : m.modulos.filter((k) => k !== key);
     try {
-      await adminAction("set_member_modules", { user_id: m.id, modulos: novos });
+      await adminAction("set_member_modules", { user_id: m.id, modulos: novos, org_id: profile?.org_id });
       setMembros((prev) => prev.map((x) => x.id === m.id ? { ...x, modulos: novos } : x));
     } catch (e) { toast.error((e as Error).message); }
   };
 
   const toggleStatus = async (m: Membro) => {
     const status = m.status === "ativo" ? "inativo" : "ativo";
-    try { await adminAction("set_member_status", { user_id: m.id, status }); await carregar(); }
+    try { await adminAction("set_member_status", { user_id: m.id, status, org_id: profile?.org_id }); await carregar(); }
     catch (e) { toast.error((e as Error).message); }
   };
 
   const excluir = async (m: Membro) => {
-    if (!confirm(`Excluir ${m.email}?`)) return;
-    try { await adminAction("delete_member", { user_id: m.id }); toast.success("Excluído."); await carregar(); }
+    if (!confirm(`Remover ${m.email} deste cliente?`)) return;
+    try { await adminAction("delete_member", { user_id: m.id, org_id: profile?.org_id }); toast.success("Removido."); await carregar(); }
     catch (e) { toast.error((e as Error).message); }
   };
 

@@ -13,16 +13,17 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Plus, Loader2, Building2, Pencil, Trash2, Check, X } from "lucide-react";
+import { Shield, Plus, Loader2, Building2, Pencil, Trash2, Check, X, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { MODULOS_CATALOGO, expandirItens, itensDoModulo } from "@/lib/modulos";
+import { loginUrlForSlug } from "@/lib/tenant";
 
 interface Plano {
   id: string; nome: string; slug: string; preco: number;
   modulos: string[]; max_usuarios: number; max_instancias: number; ativo: boolean; ordem: number;
 }
 interface Org {
-  id: string; nome: string; status: string; plano_id: string | null;
+  id: string; nome: string; slug: string | null; status: string; plano_id: string | null;
   plano_nome?: string; usuarios?: number;
 }
 
@@ -38,7 +39,7 @@ export default function AdminSaaS() {
   const [savingOrg, setSavingOrg] = useState(false);
   const [editOrgId, setEditOrgId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState("");
-  const [formOrg, setFormOrg] = useState({ nome: "", plano_id: "", admin_nome: "", admin_email: "", admin_senha: "" });
+  const [formOrg, setFormOrg] = useState({ nome: "", slug: "", plano_id: "", admin_nome: "", admin_email: "", admin_senha: "" });
 
   // ----- diálogo de plano -----
   const [openPlano, setOpenPlano] = useState(false);
@@ -48,15 +49,15 @@ export default function AdminSaaS() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [{ data: pls }, { data: os }, { data: profs }] = await Promise.all([
+    const [{ data: pls }, { data: os }, { data: mems }] = await Promise.all([
       supabase.from("planos").select("*").order("ordem"),
-      supabase.from("organizations").select("id, nome, status, plano_id").order("created_at", { ascending: false }),
-      supabase.from("profiles").select("org_id"),
+      supabase.from("organizations").select("id, nome, slug, status, plano_id").order("created_at", { ascending: false }),
+      supabase.from("memberships").select("org_id"),
     ]);
     const planosList = ((pls as unknown as Plano[]) ?? []);
     const contagem = new Map<string, number>();
-    ((profs as { org_id: string | null }[]) ?? []).forEach((p) => {
-      if (p.org_id) contagem.set(p.org_id, (contagem.get(p.org_id) ?? 0) + 1);
+    ((mems as { org_id: string | null }[]) ?? []).forEach((m) => {
+      if (m.org_id) contagem.set(m.org_id, (contagem.get(m.org_id) ?? 0) + 1);
     });
     setPlanos(planosList);
     setOrgs(((os as Org[]) ?? []).map((o) => ({
@@ -69,17 +70,37 @@ export default function AdminSaaS() {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
+  const copiarLink = async (slug: string) => {
+    const url = loginUrlForSlug(slug);
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link de login copiado!");
+    } catch {
+      toast.error("Não foi possível copiar. Link: " + url);
+    }
+  };
+
   // ---------- Clientes ----------
   const criarOrg = async () => {
     if (!formOrg.nome || !formOrg.admin_email || formOrg.admin_senha.length < 6)
       return toast.error("Preencha nome da empresa, e-mail e senha (mín. 6) do admin.");
     setSavingOrg(true);
     try {
-      await adminAction("create_org", formOrg);
-      toast.success("Cliente criado.");
+      const res = await adminAction<{ slug?: string }>("create_org", formOrg);
       setOpenOrg(false);
-      setFormOrg({ nome: "", plano_id: "", admin_nome: "", admin_email: "", admin_senha: "" });
+      setFormOrg({ nome: "", slug: "", plano_id: "", admin_nome: "", admin_email: "", admin_senha: "" });
       await carregar();
+      // Provisiona e mostra a URL de login do novo cliente, com ação de copiar.
+      if (res?.slug) {
+        const url = loginUrlForSlug(res.slug);
+        toast.success("Cliente criado!", {
+          description: url,
+          action: { label: "Copiar link", onClick: () => copiarLink(res.slug!) },
+          duration: 10000,
+        });
+      } else {
+        toast.success("Cliente criado.");
+      }
     } catch (e) { toast.error((e as Error).message); }
     setSavingOrg(false);
   };
@@ -168,6 +189,10 @@ export default function AdminSaaS() {
                   <div className="space-y-3">
                     <div className="space-y-1"><Label>Nome da empresa</Label>
                       <Input value={formOrg.nome} onChange={(e) => setFormOrg({ ...formOrg, nome: e.target.value })} /></div>
+                    <div className="space-y-1"><Label>Slug (subdomínio)</Label>
+                      <Input placeholder="ex.: premiapao (vira premiapao.seudominio.com)"
+                        value={formOrg.slug} onChange={(e) => setFormOrg({ ...formOrg, slug: e.target.value })} />
+                      <p className="text-xs text-muted-foreground">Se vazio, é gerado a partir do nome. Define o subdomínio de acesso do cliente.</p></div>
                     <div className="space-y-1"><Label>Plano</Label>
                       <Select value={formOrg.plano_id} onValueChange={(v) => setFormOrg({ ...formOrg, plano_id: v })}>
                         <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -224,6 +249,19 @@ export default function AdminSaaS() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3 text-sm">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Link de acesso (login)</Label>
+                          {o.slug ? (
+                            <div className="flex items-center gap-1">
+                              <Input readOnly value={loginUrlForSlug(o.slug)} className="h-8 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+                              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Copiar link" onClick={() => copiarLink(o.slug!)}>
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Cliente sem slug — edite para definir o subdomínio.</p>
+                          )}
+                        </div>
                         <div className="text-muted-foreground">{o.usuarios}{plano ? ` / ${plano.max_usuarios}` : ""} usuários</div>
                         <div className="space-y-1">
                           <Label className="text-xs">Plano</Label>

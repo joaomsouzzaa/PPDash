@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { getTenantSlug } from "@/lib/tenant";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,9 +15,21 @@ export default function Login() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [marca, setMarca] = useState<{ nome: string | null; logo: string | null }>({ nome: null, logo: null });
   const navigate = useNavigate();
   const location = useLocation();
   const destino = (location.state as { from?: string } | null)?.from ?? "/";
+
+  // Branding do cliente (subdomínio) via RPC pública por slug.
+  useEffect(() => {
+    let ativo = true;
+    supabase.rpc("org_branding", { p_slug: getTenantSlug() }).then(({ data }) => {
+      if (!ativo) return;
+      const row = (Array.isArray(data) ? data[0] : data) as { marca_nome: string | null; marca_logo_url: string | null } | null;
+      if (row) setMarca({ nome: row.marca_nome, logo: row.marca_logo_url });
+    });
+    return () => { ativo = false; };
+  }, []);
 
   if (!loading && session) return <Navigate to={destino} replace />;
 
@@ -36,10 +50,12 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <LayoutGrid className="h-6 w-6 text-primary" />
+          <div className="mx-auto h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+            {marca.logo
+              ? <img src={marca.logo} alt={marca.nome ?? "Logo"} className="h-full w-full object-contain" />
+              : <LayoutGrid className="h-6 w-6 text-primary" />}
           </div>
-          <CardTitle className="text-2xl">Entrar</CardTitle>
+          <CardTitle className="text-2xl">{marca.nome ? `Entrar — ${marca.nome}` : "Entrar"}</CardTitle>
           <CardDescription>Acesse o painel com seu e-mail e senha</CardDescription>
         </CardHeader>
         <CardContent>

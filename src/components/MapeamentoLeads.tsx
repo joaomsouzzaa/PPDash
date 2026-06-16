@@ -95,7 +95,7 @@ export function MapeamentoLeads() {
     try {
       await supabase.from("lead_mapeamento").delete().eq("org_id", orgId);
       const rows = Object.entries(mapa).filter(([, v]) => (v ?? "").trim())
-        .map(([app_field, crm_key]) => ({ app_field, crm_key: crm_key.trim() }));
+        .map(([app_field, crm_key]) => ({ app_field, crm_key: crm_key.trim(), org_id: orgId }));
       if (rows.length) {
         const { error } = await supabase.from("lead_mapeamento").insert(rows);
         if (error) throw new Error(error.message);
@@ -106,6 +106,7 @@ export function MapeamentoLeads() {
   };
 
   const criarCampo = async () => {
+    if (!orgId) return;
     const label = novo.trim();
     if (!label) return;
     const chave = slugify(label);
@@ -122,7 +123,7 @@ export function MapeamentoLeads() {
     try {
       // Remove eventual override de um campo padrão excluído com a mesma chave (libera o unique).
       await supabase.from("lead_campos").delete().eq("org_id", orgId).eq("chave", chave).eq("padrao", true);
-      const { error } = await supabase.from("lead_campos").insert({ label, chave, ordem: campos.length, padrao: false });
+      const { error } = await supabase.from("lead_campos").insert({ label, chave, ordem: campos.length, padrao: false, org_id: orgId });
       if (error) throw new Error(error.message);
       setNovo(""); await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -138,7 +139,7 @@ export function MapeamentoLeads() {
         if (error) throw new Error(error.message);
       } else {
         const { error } = await supabase.from("lead_campos")
-          .upsert({ chave: c.key, padrao: true, label, oculto: c.oculto }, { onConflict: "org_id,chave" });
+          .upsert({ chave: c.key, padrao: true, label, oculto: c.oculto, org_id: orgId! }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
       }
       setEditKey(null); await carregar();
@@ -157,7 +158,7 @@ export function MapeamentoLeads() {
     } else {
       try {
         const { error } = await supabase.from("lead_campos")
-          .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true }, { onConflict: "org_id,chave" });
+          .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true, org_id: orgId! }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
         await carregar();
       } catch (e) { toast.error((e as Error).message); }
@@ -174,7 +175,7 @@ export function MapeamentoLeads() {
         await supabase.from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
       } else {
         const { error } = await supabase.from("lead_campos")
-          .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true, excluido: true }, { onConflict: "org_id,chave" });
+          .upsert({ chave: c.key, padrao: true, label: c.label, oculto: true, excluido: true, org_id: orgId! }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
         await supabase.from("lead_mapeamento").delete().eq("org_id", orgId).eq("app_field", c.key);
       }
@@ -185,7 +186,7 @@ export function MapeamentoLeads() {
   const restaurarCampo = async (c: Campo) => {
     try {
       const { error } = await supabase.from("lead_campos")
-        .upsert({ chave: c.key, padrao: true, label: c.label, oculto: false, excluido: false }, { onConflict: "org_id,chave" });
+        .upsert({ chave: c.key, padrao: true, label: c.label, oculto: false, excluido: false, org_id: orgId! }, { onConflict: "org_id,chave" });
       if (error) throw new Error(error.message);
       await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -223,7 +224,7 @@ export function MapeamentoLeads() {
         if (error) throw new Error(error.message);
       } else {
         const { error } = await supabase.from("lead_campos")
-          .upsert({ chave: mqlField.key, padrao: true, label: mqlField.label, oculto: mqlField.oculto, mql_valores: valores.length ? valores : null }, { onConflict: "org_id,chave" });
+          .upsert({ chave: mqlField.key, padrao: true, label: mqlField.label, oculto: mqlField.oculto, mql_valores: valores.length ? valores : null, org_id: orgId! }, { onConflict: "org_id,chave" });
         if (error) throw new Error(error.message);
       }
       toast.success(valores.length ? "Gatilho de MQL salvo." : "Campo removido do MQL.");

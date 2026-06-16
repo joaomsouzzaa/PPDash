@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getOrgId } from "@/lib/org";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,9 @@ export function GerenciarCamposLead({ open, onOpenChange, onChanged }: {
     if (campos.some((c) => c.chave === chave)) return toast.error("Já existe um campo com esse nome.");
     setSalvando(true);
     try {
-      const { error } = await supabase.from("lead_campos").insert({ label, chave, ordem: campos.length });
+      const orgId = await getOrgId();
+      if (!orgId) throw new Error("Organização não identificada.");
+      const { error } = await supabase.from("lead_campos").insert({ label, chave, ordem: campos.length, org_id: orgId });
       if (error) throw new Error(error.message);
       setNovo(""); await carregar(); onChanged();
     } catch (e) { toast.error((e as Error).message); }
