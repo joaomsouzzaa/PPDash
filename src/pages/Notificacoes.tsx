@@ -56,6 +56,11 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
     desc: "Métricas do dia anterior (investimento, leads, CPL, MQL, CPL/MQL, taxa MQL), 1x/dia",
     vars: ["investimento", "leads", "cpl", "mql", "cpl_mql", "taxa_mql", "data"],
   },
+  sync_concluido: {
+    label: "Relatório de sincronização (Clint)",
+    desc: "Dispara automaticamente ao final da sincronização diária do Clint (08h)",
+    vars: ["data", "periodo", "clint", "ja_tinha", "inseridos", "total", "detalhes"],
+  },
   manual: {
     label: "Manual / sob demanda",
     desc: "Enviado quando você clicar em Enviar. Usa o resumo da cidade selecionada.",

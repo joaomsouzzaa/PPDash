@@ -161,42 +161,99 @@ Deno.serve(async (req) => {
     const jaTinha = jaTinhaDeal + vinculados; // já existiam (por deal_id ou vinculados do webhook)
     const nossoCount = jaTinha + inseridos.length; // após a sincronização
 
-    // 5) Monta mensagem.
-    const linhas: string[] = [];
-    linhas.push("🔄 Sincronização diária Clint → Banco");
-    linhas.push(`🕐 ${fmtBRdt(new Date())} · desde ${fmtBRdt(new Date(cutoff))} (BRT)`);
-    linhas.push("");
-    linhas.push("📊 Resumo");
-    linhas.push(`• Clint (PP Qualif + Desqualif): ${clintCount}`);
-    linhas.push(`• Já tínhamos no banco: ${jaTinha}`);
-    linhas.push(`• Inseridos agora: ${inseridos.length}`);
-    linhas.push(`• Total no nosso banco: ${nossoCount}`);
+    // 5) Monta o bloco de DETALHES (lista dinâmica de leads) — vira a variável {{detalhes}}.
+    const detLinhas: string[] = [];
     if (inseridos.length || naoInseridos.length) {
-      linhas.push("");
-      linhas.push("🆕 Faltavam no nosso banco:");
-      for (const i of inseridos) { linhas.push(`✅ ${i.nome} · ${i.email} · ${i.stage} — inserido`); linhas.push(`   ↳ Motivo provável: ${i.motivo}`); }
-      for (const n of naoInseridos) { linhas.push(`⚠️ ${n.nome} · ${n.email} — não inserido`); linhas.push(`   ↳ Motivo: ${n.motivo}`); }
+      detLinhas.push("🆕 Faltavam no nosso banco:");
+      for (const i of inseridos) { detLinhas.push(`✅ ${i.nome} · ${i.email} · ${i.stage} — inserido`); detLinhas.push(`   ↳ Motivo provável: ${i.motivo}`); }
+      for (const n of naoInseridos) { detLinhas.push(`⚠️ ${n.nome} · ${n.email} — não inserido`); detLinhas.push(`   ↳ Motivo: ${n.motivo}`); }
     } else {
-      linhas.push("");
-      linhas.push("✅ Tudo sincronizado — nenhum lead faltando.");
+      detLinhas.push("✅ Tudo sincronizado — nenhum lead faltando.");
     }
-    linhas.push("");
-    linhas.push("🤖 By: GoBot");
-    const mensagem = linhas.join("\n");
+    const detalhes = detLinhas.join("\n");
 
-    // 6) Envia pelo GoBot (via função uazapi). Em dry-run ou com notificar=false não envia.
-    if (!dry && notificar) try {
+    // Variáveis disponíveis no template editável da notificação `sync_concluido`.
+    const vars: Record<string, string | number> = {
+      data: fmtBRdt(new Date()),
+      periodo: `desde ${fmtBRdt(new Date(cutoff))}`,
+      clint: clintCount,
+      ja_tinha: jaTinha,
+      inseridos: inseridos.length,
+      total: nossoCount,
+      detalhes,
+    };
+
+    // Template PADRÃO (usado quando não há notificação `sync_concluido` cadastrada).
+    const TEMPLATE_PADRAO = [
+      "🔄 Sincronização diária Clint → Banco",
+      "🕐 {{data}} · {{periodo}} (BRT)",
+      "",
+      "📊 Resumo",
+      "• Clint (PP Qualif + Desqualif): {{clint}}",
+      "• Já tínhamos no banco: {{ja_tinha}}",
+      "• Inseridos agora: {{inseridos}}",
+      "• Total no nosso banco: {{total}}",
+      "",
+      "{{detalhes}}",
+      "",
+      "🤖 By: GoBot",
+    ].join("\n");
+
+    // Substitui {{var}} pelos valores (remove linhas cujos placeholders ficaram vazios).
+    const render = (template: string, v: Record<string, string | number>): string =>
+      template
+        .split("\n")
+        .filter((linha) => {
+          const ph = linha.match(/\{\{\s*\w+\s*\}\}/g);
+          if (!ph) return true;
+          return ph.some((p) => { const k = p.replace(/[{}\s]/g, ""); return v[k] != null && String(v[k]).trim() !== ""; });
+        })
+        .join("\n")
+        .replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (v[k] != null ? String(v[k]) : ""));
+
+    // Destinatários de uma notificação (formato `destinatarios` jsonb ou legado).
+    const destinatariosDe = (n: any): string[] => {
+      if (Array.isArray(n.destinatarios) && n.destinatarios.length) return n.destinatarios.map((d: any) => d.valor).filter(Boolean);
+      return n.destinatario ? [n.destinatario] : [];
+    };
+
+    // 6) Envia. Em dry-run ou com notificar=false não envia.
+    let enviados = 0;
+    if (!dry && notificar) {
       const anon = Deno.env.get("SUPABASE_ANON_KEY") || "";
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/uazapi`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${anon}`, apikey: anon },
-        body: JSON.stringify({ action: "send", org_id: orgId, destinatario: DEST, mensagem }),
-        signal: AbortSignal.timeout(20000),
-      });
-    } catch { /* envio falhou; segue */ }
+      const send = (destinatario: string, mensagem: string) =>
+        fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/uazapi`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${anon}`, apikey: anon },
+          body: JSON.stringify({ action: "send", org_id: orgId, destinatario, mensagem }),
+          signal: AbortSignal.timeout(20000),
+        });
+
+      // Notificações `sync_concluido` ATIVAS desta org (editáveis pelo usuário na tela de Notificações).
+      const { data: notifs } = await supabase.from("notificacoes")
+        .select("*").eq("ativo", true).eq("gatilho", "sync_concluido").eq("org_id", orgId);
+
+      if (notifs && notifs.length) {
+        for (const n of notifs) {
+          const mensagem = render(n.mensagem || TEMPLATE_PADRAO, vars);
+          for (const dest of destinatariosDe(n)) {
+            try {
+              await send(dest, mensagem);
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: orgId, destinatario: dest, mensagem, status: "enviado" });
+              enviados++;
+            } catch (e) {
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: orgId, destinatario: dest, mensagem, status: "erro", erro: String(e) });
+            }
+          }
+        }
+      } else {
+        // Fallback (sem notificação cadastrada): comportamento legado — GoBot fixo.
+        try { await send(DEST, render(TEMPLATE_PADRAO, vars)); enviados++; } catch { /* segue */ }
+      }
+    }
 
     return json({
-      ok: true, dry, desde: cutoff, clint: clintCount, por_origem: porOrigem,
+      ok: true, dry, enviados, desde: cutoff, clint: clintCount, por_origem: porOrigem,
       ja_tinha: jaTinha, vinculados, nosso: nossoCount,
       inseridos: inseridos.length, nao_inseridos: naoInseridos.length,
       faltantes: inseridos.map((i) => ({ nome: i.nome, email: i.email, origem: i.origem, stage: i.stage, criado: i.criado, utm_source: i.utm_source, motivo: i.motivo })),

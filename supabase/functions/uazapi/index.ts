@@ -522,6 +522,14 @@ async function buildVarsList(supabase: any, n: any): Promise<Record<string, stri
   if (n.gatilho === "novo_lead") {
     return [varsDaLead({ nome: "Fulano (teste)", email: "teste@email.com", telefone: "(11) 99999-0000", cidade: "Belém", status: "lead", campaign_name: "Campanha Teste", utm_source: "facebook", data_lead: new Date().toISOString() })];
   }
+  if (n.gatilho === "sync_concluido") {
+    return [{
+      data: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+      periodo: "desde 16/06/2026 08:00",
+      clint: 27, ja_tinha: 25, inseridos: 2, total: 27,
+      detalhes: "🆕 Faltavam no nosso banco:\n✅ Fulano (teste) · teste@email.com · SQL — inserido\n   ↳ Motivo provável: provável falha/timeout do webhook no momento do envio",
+    }];
+  }
   if (n.gatilho === "resumo_geral") {
     return [await resumoGeral(supabase)];
   }
