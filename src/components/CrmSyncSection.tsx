@@ -15,7 +15,7 @@ import { toast } from "sonner";
 // CRMs com conector pronto no backend (crm-sync). Para adicionar um novo: criar o conector
 // na edge function e incluir aqui na lista.
 const CRMS: { value: string; label: string; help: string }[] = [
-  { value: "rd_station", label: "RD Station Marketing", help: "Os leads chegam pelo webhook (tempo real). A sincronização reprocessa eventos que falharam e envia o relatório no WhatsApp. A API do RD não permite listar leads, então não há credenciais a configurar." },
+  { value: "rd_station", label: "Recuperação de Erros (7 dias)", help: "Os leads chegam pelo webhook (tempo real). A sincronização reprocessa eventos que falharam nos últimos 7 dias e envia o relatório no WhatsApp. Não puxa histórico via API — só reprocessa erros nossos." },
   { value: "clint", label: "Clint", help: "Puxa os negócios (deals) das origens configuradas e insere os que faltarem na base. Informe o token da API do Clint." },
 ];
 
