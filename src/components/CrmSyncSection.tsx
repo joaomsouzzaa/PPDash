@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { RefreshCw, Loader2, Save, Wifi, WifiOff, Database } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +38,8 @@ export function CrmSyncSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [dias, setDias] = useState("7");
   const [integ, setInteg] = useState<Integracao | null>(null);
   const [crm, setCrm] = useState<string>("rd_station");
   const [ativo, setAtivo] = useState(true);
@@ -74,13 +77,15 @@ export function CrmSyncSection() {
 
   const sincronizar = async () => {
     if (!orgId) return;
+    const d = Math.max(1, Math.min(365, parseInt(dias, 10) || 7));
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("crm-sync", { body: { org_id: orgId } });
+      const { data, error } = await supabase.functions.invoke("crm-sync", { body: { org_id: orgId, dias: d } });
       if (error) throw new Error(error.message);
       const r = (data as any)?.resultados?.[0];
       if (r?.erro) throw new Error(r.erro);
-      toast.success(`Sincronizado: ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      toast.success(`Sincronizado (${d} dias): ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      setSyncOpen(false);
       await carregar();
     } catch (e) { toast.error("Falha na sincronização: " + (e as Error).message); }
     setSyncing(false);
@@ -156,10 +161,38 @@ export function CrmSyncSection() {
                   <Button size="sm" onClick={salvar} disabled={saving}>
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Salvar
                   </Button>
-                  <Button size="sm" variant="outline" onClick={sincronizar} disabled={syncing}>
+                  <Button size="sm" variant="outline" onClick={() => setSyncOpen(true)} disabled={syncing}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} /> {syncing ? "Sincronizando…" : "Sincronizar agora"}
                   </Button>
                 </div>
+
+                <Dialog open={syncOpen} onOpenChange={(v) => { if (!syncing) setSyncOpen(v); }}>
+                  <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle>Sincronizar agora</DialogTitle>
+                      <DialogDescription>
+                        Buscar e recuperar leads de quantos dias para trás?
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                      <Label htmlFor="sync-dias" className="text-sm">Dias para trás</Label>
+                      <Input id="sync-dias" type="number" min={1} max={365} value={dias}
+                        onChange={(e) => setDias(e.target.value)} className="max-w-[120px]" />
+                      <p className="text-xs text-muted-foreground">
+                        {crm === "clint"
+                          ? "Puxa do CRM os negócios criados nesse período e insere os que faltarem."
+                          : "Reprocessa os eventos do webhook que falharam nesse período."}
+                      </p>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={syncing}>Cancelar</Button>
+                      <Button onClick={sincronizar} disabled={syncing}>
+                        {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Sincronizar
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </>
             )}
           </CardContent>

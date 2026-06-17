@@ -31,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -50,7 +51,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter, RefreshCw } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter, RefreshCw, Loader2 } from "lucide-react";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -269,22 +270,26 @@ const LeadsInsideSales = () => {
   const vis = (key: string) => !overrides.get(key)?.oculto;
   const [gerenciarCampos, setGerenciarCampos] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncDias, setSyncDias] = useState("7");
 
   const sincronizarAgora = useCallback(async () => {
+    const d = Math.max(1, Math.min(365, parseInt(syncDias, 10) || 7));
     setSincronizando(true);
     try {
-      const { data, error } = await supabase.functions.invoke("crm-sync", { body: {} });
+      const { data, error } = await supabase.functions.invoke("crm-sync", { body: { dias: d } });
       if (error) throw new Error(error.message);
       const r = (data as any)?.resultados?.[0];
       if (r?.erro) throw new Error(r.erro);
-      toast.success(`Sincronizado: ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      toast.success(`Sincronizado (${d} dias): ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      setSyncOpen(false);
       await refetchLeads();
     } catch (e) {
       toast.error("Falha na sincronização: " + (e as Error).message);
     } finally {
       setSincronizando(false);
     }
-  }, [refetchLeads]);
+  }, [refetchLeads, syncDias]);
 
   // Ordem das colunas definida no gerenciador (organizations.lead_ordem).
   const { data: ordemRow, refetch: refetchOrdem } = useQuery({
@@ -581,13 +586,34 @@ const LeadsInsideSales = () => {
                 Espelho completo de todos os leads cadastrados
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={sincronizarAgora} disabled={sincronizando}>
+            <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} disabled={sincronizando}>
               <RefreshCw className={`mr-2 h-4 w-4 ${sincronizando ? "animate-spin" : ""}`} /> {sincronizando ? "Sincronizando…" : "Sincronizar agora"}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setGerenciarCampos(true)}>
               <SlidersHorizontal className="mr-2 h-4 w-4" /> Gerenciar campos
             </Button>
           </header>
+
+          <Dialog open={syncOpen} onOpenChange={(v) => { if (!sincronizando) setSyncOpen(v); }}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Sincronizar agora</DialogTitle>
+                <DialogDescription>Buscar e recuperar leads de quantos dias para trás?</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label htmlFor="leads-sync-dias" className="text-sm">Dias para trás</Label>
+                <Input id="leads-sync-dias" type="number" min={1} max={365} value={syncDias}
+                  onChange={(e) => setSyncDias(e.target.value)} className="max-w-[120px]" />
+                <p className="text-xs text-muted-foreground">Recupera os leads que falharam ao entrar nesse período e atualiza a partir do CRM configurado.</p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={sincronizando}>Cancelar</Button>
+                <Button onClick={sincronizarAgora} disabled={sincronizando}>
+                  {sincronizando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Sincronizar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={gerenciarCampos} onOpenChange={(v) => { setGerenciarCampos(v); if (!v) { refetchCampos(); refetchOrdem(); } }}>
             <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">

@@ -93,7 +93,8 @@ async function syncClint(supabase: any, orgId: string | null, integ: any, body: 
     { id: "58e1c948-1cac-4757-aff4-578982c123ad", nome: "PP | Leads Qualificadas" },
     { id: "86a02d2c-a7bc-4363-96d3-3260258b9b38", nome: "PP | Leads Desqualificadas" },
   ]);
-  const janelaH = Number(integ?.config?.janela_h) || 24 * 3;
+  const dias = Number(body.dias);
+  const janelaH = dias > 0 ? dias * 24 : (Number(integ?.config?.janela_h) || 24 * 3);
   const clintGet = async (path: string) => (await fetch(`${CLINT}${path}`, { headers: { "api-token": token } })).json();
   const dealsRecentes = async (originId: string, cutoffIso: string, ateIso?: string) => {
     const first = await clintGet(`/deals?origin_id=${originId}&limit=1000&page=1`);
@@ -165,7 +166,8 @@ function detectTag(tags: string, alvos: string[]): boolean {
 }
 async function syncRdStation(supabase: any, orgId: string | null, _integ: any, body: any) {
   const dry = body.dry === true;
-  const janelaH = Number(body.janela_h) || 24 * 7; // reprocessa erros da última semana por padrão
+  const dias = Number(body.dias);
+  const janelaH = dias > 0 ? dias * 24 : (Number(body.janela_h) || 24 * 7); // reprocessa erros da última semana por padrão
   const cutoff = (body.desde as string) || new Date(Date.now() - janelaH * 3600 * 1000).toISOString();
 
   // Mapeamento + campos personalizados da org (mesma lógica do webhook-leads).
