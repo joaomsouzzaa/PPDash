@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -307,6 +307,45 @@ export type Database = {
         }
         Relationships: []
       }
+      integracoes: {
+        Row: {
+          ativo: boolean
+          config: Json
+          created_at: string
+          credenciais: Json
+          crm: string
+          id: string
+          last_sync_at: string | null
+          last_sync_result: Json | null
+          last_sync_status: string | null
+          org_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          config?: Json
+          created_at?: string
+          credenciais?: Json
+          crm: string
+          id?: string
+          last_sync_at?: string | null
+          last_sync_result?: Json | null
+          last_sync_status?: string | null
+          org_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          config?: Json
+          created_at?: string
+          credenciais?: Json
+          crm?: string
+          id?: string
+          last_sync_at?: string | null
+          last_sync_result?: Json | null
+          last_sync_status?: string | null
+          org_id?: string | null
+        }
+        Relationships: []
+      }
       kanban_colunas: {
         Row: {
           agente_id: string | null
@@ -424,6 +463,8 @@ export type Database = {
           cidade: string | null
           clint_deal_id: string | null
           created_at: string
+          crm_external_id: string | null
+          crm_origem: string | null
           custom: Json
           data_lead: string
           data_venda_realizada: string | null
@@ -459,6 +500,8 @@ export type Database = {
           cidade?: string | null
           clint_deal_id?: string | null
           created_at?: string
+          crm_external_id?: string | null
+          crm_origem?: string | null
           custom?: Json
           data_lead?: string
           data_venda_realizada?: string | null
@@ -494,6 +537,8 @@ export type Database = {
           cidade?: string | null
           clint_deal_id?: string | null
           created_at?: string
+          crm_external_id?: string | null
+          crm_origem?: string | null
           custom?: Json
           data_lead?: string
           data_venda_realizada?: string | null
@@ -1330,6 +1375,42 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_eventos: {
+        Row: {
+          created_at: string
+          crm: string | null
+          erro: string | null
+          external_id: string | null
+          id: string
+          lead_id: string | null
+          org_id: string | null
+          payload: Json | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          crm?: string | null
+          erro?: string | null
+          external_id?: string | null
+          id?: string
+          lead_id?: string | null
+          org_id?: string | null
+          payload?: Json | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          crm?: string | null
+          erro?: string | null
+          external_id?: string | null
+          id?: string
+          lead_id?: string | null
+          org_id?: string | null
+          payload?: Json | null
+          status?: string
+        }
+        Relationships: []
+      }
       whatsapp_config: {
         Row: {
           admin_token: string | null
@@ -1600,3 +1681,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

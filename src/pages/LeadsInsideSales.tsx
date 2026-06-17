@@ -50,7 +50,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter, RefreshCw } from "lucide-react";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -232,7 +232,7 @@ const LeadsInsideSales = () => {
     [dateRange, startDate, endDate]
   );
 
-  const { data: leads = [], isLoading } = useQuery({
+  const { data: leads = [], isLoading, refetch: refetchLeads } = useQuery({
     queryKey: ["leads-tabela", start, end],
     queryFn: async () => {
       const query = supabase
@@ -268,6 +268,23 @@ const LeadsInsideSales = () => {
   const lbl = (key: string, def: string) => overrides.get(key)?.label ?? def;
   const vis = (key: string) => !overrides.get(key)?.oculto;
   const [gerenciarCampos, setGerenciarCampos] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+
+  const sincronizarAgora = useCallback(async () => {
+    setSincronizando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("crm-sync", { body: {} });
+      if (error) throw new Error(error.message);
+      const r = (data as any)?.resultados?.[0];
+      if (r?.erro) throw new Error(r.erro);
+      toast.success(`Sincronizado: ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      await refetchLeads();
+    } catch (e) {
+      toast.error("Falha na sincronização: " + (e as Error).message);
+    } finally {
+      setSincronizando(false);
+    }
+  }, [refetchLeads]);
 
   // Ordem das colunas definida no gerenciador (organizations.lead_ordem).
   const { data: ordemRow, refetch: refetchOrdem } = useQuery({
@@ -564,6 +581,9 @@ const LeadsInsideSales = () => {
                 Espelho completo de todos os leads cadastrados
               </p>
             </div>
+            <Button variant="outline" size="sm" onClick={sincronizarAgora} disabled={sincronizando}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${sincronizando ? "animate-spin" : ""}`} /> {sincronizando ? "Sincronizando…" : "Sincronizar agora"}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setGerenciarCampos(true)}>
               <SlidersHorizontal className="mr-2 h-4 w-4" /> Gerenciar campos
             </Button>

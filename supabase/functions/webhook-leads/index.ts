@@ -49,8 +49,14 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Registra o evento cru recebido (rede de segurança: nada se perde, mesmo se falhar).
+  const logEvento = async (campos: Record<string, unknown>) => {
+    try { await supabase.from("webhook_eventos").insert({ org_id: orgId, ...campos }); } catch { /* não bloqueia o webhook */ }
+  };
+
   try {
     const payload = await req.json();
+    const crmOrigem = payload && (payload as any).leads ? "rd_station" : "webhook";
 
     // Mapeamento da org: campo da app  <-  chave do CRM (explícito).
     const { data: mapRows } = await supabase.from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId);
@@ -59,9 +65,12 @@ Deno.serve(async (req) => {
     const { data: customDefs } = await supabase.from("lead_campos").select("chave").eq("org_id", orgId).eq("padrao", false);
 
     // Lê o valor de um campo da app a partir do payload, conforme o mapeamento.
+    // Suporta caminho aninhado com pontos (ex.: "leads.0.last_conversion.conversion_origin.source"),
+    // com índice numérico de array. Sem ponto = lookup direto de chave de topo.
     const val = (appField: string): any => {
       const k = mapa[appField];
-      return k != null ? payload[k] : undefined;
+      if (k == null) return undefined;
+      return k.split(".").reduce((acc: any, seg: string) => (acc == null ? undefined : acc[seg]), payload);
     };
     const tagsRaw = String(val("tags") ?? "");
 
@@ -93,6 +102,8 @@ Deno.serve(async (req) => {
       is_venda_realizada: (detectVrTag(tagsRaw) || val("is_venda_realizada")) ? "Sim" : null,
       faturamento_venda: parseVendaValue(val("faturamento_venda")),
       data_venda_realizada: parseDateValue(val("data_venda_realizada")) || (detectVrTag(tagsRaw) ? new Date().toISOString() : null),
+      crm_external_id: (val("crm_external_id") != null ? String(val("crm_external_id")) : null),
+      crm_origem: (payload && (payload as any).leads ? "rd_station" : null),
       payload,
       org_id: orgId,
     };
@@ -208,12 +219,14 @@ Deno.serve(async (req) => {
 
       if (updateError) {
         console.error("[Webhook Leads Update Error]", updateError);
+        await logEvento({ crm: crmOrigem, payload, status: "erro", erro: updateError, external_id: lead.crm_external_id as string | null, lead_id: existingId });
         return new Response(JSON.stringify({ error: "Failed to update lead" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      await logEvento({ crm: crmOrigem, payload, status: "processado", external_id: lead.crm_external_id as string | null, lead_id: existingId });
       return new Response(JSON.stringify({ success: true, action: "updated" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -221,22 +234,25 @@ Deno.serve(async (req) => {
     }
 
     // Insert new lead
-    const { error } = await supabase.from("leads").insert(lead);
+    const { data: inserted, error } = await supabase.from("leads").insert(lead).select("id").maybeSingle();
 
     if (error) {
       console.error("[Webhook Leads Error]", error.message);
+      await logEvento({ crm: crmOrigem, payload, status: "erro", erro: error.message, external_id: lead.crm_external_id as string | null });
       return new Response(JSON.stringify({ error: "Failed to process lead" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    await logEvento({ crm: crmOrigem, payload, status: "processado", external_id: lead.crm_external_id as string | null, lead_id: inserted?.id ?? null });
     return new Response(JSON.stringify({ success: true, action: "created" }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("[Webhook Leads Exception]", err instanceof Error ? err.message : "Unknown");
+    await logEvento({ status: "erro", erro: err instanceof Error ? err.message : "Unknown" });
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

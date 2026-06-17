@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
+import { CrmSyncSection } from "@/components/CrmSyncSection";
 import { MetaContasSelecao } from "@/components/MetaContasSelecao";
 import { toast as sonner } from "sonner";
 import {
@@ -412,6 +413,9 @@ const Integracoes = () => {
 
             {/* CRM — Leads */}
             <CrmWebhookSection />
+
+            {/* Sincronização de CRM (pull + relatório) */}
+            <CrmSyncSection />
 
             {/* Google Sheets */}
             <GoogleSheetsSection />
