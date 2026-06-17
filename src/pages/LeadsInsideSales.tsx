@@ -51,8 +51,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter, RefreshCw, Loader2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, X, SlidersHorizontal, Filter, RefreshCw, Loader2, Upload } from "lucide-react";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
+import { LeadsImport } from "@/components/LeadsImport";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -269,6 +270,7 @@ const LeadsInsideSales = () => {
   const lbl = (key: string, def: string) => overrides.get(key)?.label ?? def;
   const vis = (key: string) => !overrides.get(key)?.oculto;
   const [gerenciarCampos, setGerenciarCampos] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncDias, setSyncDias] = useState("7");
@@ -589,10 +591,15 @@ const LeadsInsideSales = () => {
             <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)} disabled={sincronizando}>
               <RefreshCw className={`mr-2 h-4 w-4 ${sincronizando ? "animate-spin" : ""}`} /> {sincronizando ? "Sincronizando…" : "Sincronizar agora"}
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" /> Importar CSV
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setGerenciarCampos(true)}>
               <SlidersHorizontal className="mr-2 h-4 w-4" /> Gerenciar campos
             </Button>
           </header>
+
+          <LeadsImport open={importOpen} onOpenChange={setImportOpen} onImported={() => refetchLeads()} />
 
           <Dialog open={syncOpen} onOpenChange={(v) => { if (!sincronizando) setSyncOpen(v); }}>
             <DialogContent className="sm:max-w-sm">
