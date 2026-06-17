@@ -177,6 +177,18 @@ export default function Notificacoes() {
     },
   });
 
+  // Reenvia um log que falhou; em caso de sucesso ele fica verde (status "enviado").
+  const [reenviando, setReenviando] = useState<string | null>(null);
+  const reenviarLog = async (id: string) => {
+    setReenviando(id);
+    try {
+      await chamarUazapi("resend_log", { id });
+      toast.success("Reenviado");
+      await queryClient.invalidateQueries({ queryKey: ["notificacao_logs", logNotif?.id] });
+    } catch (e: any) { toast.error(e.message); }
+    setReenviando(null);
+  };
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
@@ -809,6 +821,20 @@ export default function Notificacoes() {
                     <div className="flex items-center gap-1 flex-wrap">
                       {l.cidade && <Badge variant="outline" className="text-[10px]">{l.cidade}</Badge>}
                       <Badge variant="secondary" className="text-[10px]">{l.destinatario}</Badge>
+                      {l.status === "erro" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] gap-1"
+                          disabled={reenviando === l.id}
+                          onClick={() => reenviarLog(l.id)}
+                        >
+                          {reenviando === l.id
+                            ? <RefreshCw className="h-3 w-3 animate-spin" />
+                            : <Send className="h-3 w-3" />}
+                          Reenviar
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {l.erro && <p className="text-xs text-destructive">Erro: {l.erro}</p>}

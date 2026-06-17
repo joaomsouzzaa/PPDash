@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-org-slug",
 };
 
 // ===================================================================
@@ -28,13 +28,28 @@ function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-// Resolve a organização: via JWT (UI do cliente) ou via body.org_id (chamadas internas).
+// Resolve a organização ATIVA (multi-tenant N:N):
+//   1) header `x-org-slug` (UI do cliente) → org por slug, validando acesso
+//      (super_admin acessa qualquer org; demais precisam de membership ativa).
+//   2) legado: profiles.org_id (contas antigas 1:1).
+//   3) body.org_id (chamadas internas dos triggers, com service role).
 async function getOrgId(supabase: any, req: Request, body: any): Promise<string | null> {
+  const slug = req.headers.get("x-org-slug");
   const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
   if (token) {
     const { data: u } = await supabase.auth.getUser(token);
     if (u?.user) {
-      const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
+      const userId = u.user.id;
+      const { data: p } = await supabase.from("profiles").select("org_id, papel").eq("id", userId).maybeSingle();
+      if (slug) {
+        const { data: org } = await supabase.from("organizations").select("id").eq("slug", slug).maybeSingle();
+        if (org?.id) {
+          if (p?.papel === "super_admin") return org.id as string;
+          const { data: mem } = await supabase.from("memberships")
+            .select("org_id").eq("user_id", userId).eq("org_id", org.id).eq("status", "ativo").maybeSingle();
+          if (mem) return org.id as string;
+        }
+      }
       if (p?.org_id) return p.org_id as string;
     }
   }
@@ -520,7 +535,7 @@ async function buildVarsList(supabase: any, n: any): Promise<Record<string, stri
 }
 
 Deno.serve(async (req) => {
-  console.log("uazapi v11 - logs cidade");
+  console.log("uazapi v21 - resend_log");
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const json = (obj: unknown, status = 200) =>
     new Response(JSON.stringify(obj), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -581,9 +596,42 @@ Deno.serve(async (req) => {
       case "delete_instance": {
         const row = await getInstancia(payload.id);
         if (!row) return json({ error: "Instância não encontrada" }, 404);
-        try { await uazFetch(UAZAPI.del(), row.instance_token, undefined, "DELETE", ADMIN); } catch (_) { /* segue e remove do banco */ }
+        // Remove PRIMEIRO na UAZAPI. Só apaga do banco se a UAZAPI confirmar a
+        // remoção (ou se a instância já não existir lá — 404). Em qualquer outra
+        // falha, mantém a linha para o usuário tentar de novo e NÃO criar órfã na
+        // UAZAPI (que continua consumindo licença).
+        if (row.instance_token) {
+          try {
+            await uazFetch(UAZAPI.del(), row.instance_token, undefined, "DELETE", ADMIN);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (!/404|not[ _]?found|não encontrad/i.test(msg)) {
+              return json({ error: `Falha ao remover na UAZAPI: ${msg}. Tente novamente.` }, 502);
+            }
+            // 404 = já não existe na UAZAPI; segue e limpa o banco.
+          }
+        }
         await supabase.from("whatsapp_instancias").delete().eq("id", row.id);
         return json({ ok: true });
+      }
+      case "resend_log": {
+        // Reenvia um log que falhou. Em caso de sucesso, marca o MESMO log como
+        // "enviado" e limpa o erro (fica verde no histórico). created_at é
+        // preservado para não reordenar o histórico.
+        if (!orgId) return json({ error: "Organização não identificada" }, 401);
+        const { data: log } = await supabase.from("notificacao_logs").select("*").eq("id", payload.id).eq("org_id", orgId).maybeSingle();
+        if (!log) return json({ error: "Log não encontrado" }, 404);
+        const token = await getOrgToken(supabase, orgId);
+        if (!token) return json({ error: "Conecte um WhatsApp antes de reenviar." }, 400);
+        try {
+          await enviarTexto(token, log.destinatario, log.mensagem);
+          await supabase.from("notificacao_logs").update({ status: "enviado", erro: null }).eq("id", log.id);
+          return json({ ok: true });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await supabase.from("notificacao_logs").update({ erro: msg }).eq("id", log.id);
+          return json({ error: msg }, 502);
+        }
       }
       case "groups": {
         const token = await getOrgToken(supabase, orgId);
@@ -617,12 +665,12 @@ Deno.serve(async (req) => {
           for (const dest of ds) {
             try {
               await enviarTexto(token, dest, msg);
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
               enviados++;
             } catch (e) {
               // Um número/cidade que falha não pode abortar o restante do lote.
               erros.push(`${(vars as any).cidade || ""} → ${dest}: ${e instanceof Error ? e.message : e}`);
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: (vars as any).cidade || null });
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: (vars as any).cidade || null });
             }
           }
           await enviarSheets(n, vars);
@@ -649,10 +697,10 @@ Deno.serve(async (req) => {
           for (const dest of destinatariosDe(n)) {
             try {
               await enviarTexto(tokenVenda, dest, msg);
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: v.cidade || null });
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "enviado", cidade: v.cidade || null });
               enviados++;
             } catch (e) {
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: v.cidade || null });
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: v.cidade || null });
             }
           }
           await enviarSheets(n, vendaVars);
@@ -678,10 +726,10 @@ Deno.serve(async (req) => {
           for (const dest of destinatariosDe(n)) {
             try {
               await enviarTexto(tokenLead, dest, msg);
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: l.cidade || null });
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "enviado", cidade: l.cidade || null });
               enviados++;
             } catch (e) {
-              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: l.cidade || null });
+              await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: l.cidade || null });
             }
           }
           await enviarSheets(n, leadVars);
@@ -726,10 +774,10 @@ Deno.serve(async (req) => {
             for (const dest of dests) {
               try {
                 await enviarTexto(tokenN, dest, msg);
-                await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
+                await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "enviado", cidade: (vars as any).cidade || null });
                 enviados++;
               } catch (e) {
-                await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: (vars as any).cidade || null });
+                await supabase.from("notificacao_logs").insert({ notificacao_id: n.id, org_id: n.org_id, destinatario: dest, mensagem: msg, status: "erro", erro: String(e), cidade: (vars as any).cidade || null });
               }
             }
             await enviarSheets(n, vars);
