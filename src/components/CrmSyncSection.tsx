@@ -40,6 +40,8 @@ export function CrmSyncSection() {
   const [syncing, setSyncing] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const [dias, setDias] = useState("7");
+  const [origem, setOrigem] = useState<"crm" | "meta">("crm");
+  const [temMeta, setTemMeta] = useState(false);
   const [integ, setInteg] = useState<Integracao | null>(null);
   const [crm, setCrm] = useState<string>("rd_station");
   const [ativo, setAtivo] = useState(true);
@@ -56,6 +58,10 @@ export function CrmSyncSection() {
       setAtivo(row.ativo);
       setClintToken((row.credenciais as any)?.api_token ?? "");
     }
+    // Mostra a opção "Meta Lead Ads" no popup só quando a org tem página Meta ativa.
+    const { count } = await supabase.from("meta_lead_paginas")
+      .select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("ativo", true);
+    setTemMeta((count ?? 0) > 0);
     setLoading(false);
   }, [orgId]);
 
@@ -78,13 +84,16 @@ export function CrmSyncSection() {
   const sincronizar = async () => {
     if (!orgId) return;
     const d = Math.max(1, Math.min(365, parseInt(dias, 10) || 7));
+    const fn = origem === "meta" ? "meta-leads-sync" : "crm-sync";
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("crm-sync", { body: { org_id: orgId, dias: d } });
+      const { data, error } = await supabase.functions.invoke(fn, { body: { org_id: orgId, dias: d } });
       if (error) throw new Error(error.message);
       const r = (data as any)?.resultados?.[0];
       if (r?.erro) throw new Error(r.erro);
-      toast.success(`Sincronizado (${d} dias): ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      const extra = r?.atualizados ? ` · ${r.atualizados} atualizado(s)` : "";
+      toast.success(`Sincronizado (${d} dias): ${r?.inseridos ?? 0} novo(s)${extra} · ${r?.total ?? 0} no total.`);
+      if (Array.isArray(r?.avisos) && r.avisos.length) toast.warning(r.avisos.join(" · "));
       setSyncOpen(false);
       await carregar();
     } catch (e) { toast.error("Falha na sincronização: " + (e as Error).message); }
@@ -174,15 +183,31 @@ export function CrmSyncSection() {
                         Buscar e recuperar leads de quantos dias para trás?
                       </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-2">
-                      <Label htmlFor="sync-dias" className="text-sm">Dias para trás</Label>
-                      <Input id="sync-dias" type="number" min={1} max={365} value={dias}
-                        onChange={(e) => setDias(e.target.value)} className="max-w-[120px]" />
-                      <p className="text-xs text-muted-foreground">
-                        {crm === "clint"
-                          ? "Puxa do CRM os negócios criados nesse período e insere os que faltarem."
-                          : "Reprocessa os eventos do webhook que falharam nesse período."}
-                      </p>
+                    <div className="space-y-4">
+                      {temMeta && (
+                        <div className="space-y-2">
+                          <Label className="text-sm">Origem</Label>
+                          <Select value={origem} onValueChange={(v) => setOrigem(v as "crm" | "meta")}>
+                            <SelectTrigger className="max-w-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="crm">CRM do cliente</SelectItem>
+                              <SelectItem value="meta">Meta Lead Ads</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        <Label htmlFor="sync-dias" className="text-sm">Dias para trás</Label>
+                        <Input id="sync-dias" type="number" min={1} max={365} value={dias}
+                          onChange={(e) => setDias(e.target.value)} className="max-w-[120px]" />
+                        <p className="text-xs text-muted-foreground">
+                          {origem === "meta"
+                            ? "Puxa do Meta Lead Ads os leads desse período, insere os que faltarem e completa os rastreios (campanha/conjunto/criativo)."
+                            : crm === "clint"
+                              ? "Puxa do CRM os negócios criados nesse período e insere os que faltarem."
+                              : "Reprocessa os eventos do webhook que falharam nesse período."}
+                        </p>
+                      </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={syncing}>Cancelar</Button>

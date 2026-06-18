@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
         const orgId = pagina.org_id as string;
 
         // Busca os dados completos do lead.
-        const r = await fetch(`${GRAPH}/${leadgenId}?fields=field_data,created_time,campaign_name,ad_name,form_id&access_token=${pagina.page_token}`);
+        const r = await fetch(`${GRAPH}/${leadgenId}?fields=field_data,created_time,campaign_name,adset_name,ad_name,form_id&access_token=${pagina.page_token}`);
         const lead = await r.json();
         if (lead.error) { console.error("[meta-leads] graph error:", lead.error?.message); continue; }
 
@@ -104,7 +104,10 @@ Deno.serve(async (req) => {
           whatsapp: m.whatsapp ? String(m.whatsapp) : (m.telefone ? String(m.telefone) : null),
           cidade: m.cidade ? String(m.cidade) : null,
           utm_source: "Facebook Lead Ads",
-          utm_medium: "lead_ads",
+          utm_medium: lead.adset_name ?? null,
+          utm_campaign: lead.campaign_name ?? null,
+          utm_content: lead.ad_name ?? null,
+          utm_term: "lead_ads",
           campaign_name: lead.campaign_name ?? null,
           ad_name: lead.ad_name ?? null,
           data_lead: lead.created_time || v.created_time || new Date().toISOString(),

@@ -57,9 +57,14 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
     vars: ["investimento", "leads", "cpl", "mql", "cpl_mql", "taxa_mql", "data"],
   },
   sync_concluido: {
-    label: "Relatório de sincronização (Clint)",
-    desc: "Dispara automaticamente ao final da sincronização diária do Clint (08h)",
-    vars: ["data", "periodo", "clint", "ja_tinha", "inseridos", "total", "detalhes"],
+    label: "Relatório de sincronização (CRM)",
+    desc: "Dispara automaticamente ao final da sincronização diária do CRM (08h)",
+    vars: ["data", "periodo", "crm", "recebidos", "ja_tinha", "inseridos", "total", "detalhes"],
+  },
+  sync_meta_concluido: {
+    label: "Relatório de sincronização (Meta Lead Ads)",
+    desc: "Dispara automaticamente ao final da sincronização diária do Meta Lead Ads (08h)",
+    vars: ["data", "periodo", "crm", "recebidos", "ja_tinha", "inseridos", "atualizados", "total", "detalhes"],
   },
   manual: {
     label: "Manual / sob demanda",

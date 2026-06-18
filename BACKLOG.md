@@ -65,3 +65,22 @@
 - Quando entrar o **primeiro lead real** do Meta, conferir campo a campo (nome, sobrenome,
   email, telefone, UF, capacidade de investimento) se caíram nas colunas certas. Ajustar
   `mapMetaFields` se algum formulário tiver nomes de campo diferentes.
+
+---
+
+## Meta Lead Ads — rodar sincronização histórica após liberar `pages_manage_ads`
+
+**Status:** aguardando permissão do Meta (≈24h após a 1ª solicitação, feita em 2026-06-18).
+
+**Contexto:**
+- A edge function `meta-leads-sync` (pull) já está no ar e o cron diário `meta-leads-sync-diario`
+  (8h BRT) também. O smoke test retorna o aviso `Requires pages_manage_ads` porque o token da
+  página ainda não tem essa permissão para **listar formulários**. `leads_retrieval` já está ok.
+
+**O que fazer quando liberar:**
+1. Reconectar a página do Meta concedendo `pages_manage_ads` (+ `leads_retrieval`).
+2. Rodar a sincronização histórica da Crepfy: `POST /functions/v1/meta-leads-sync`
+   body `{"org_id":"58a4b4c2-1298-4535-ad21-2dac93fcd718","dias":18}`.
+3. Validar em `leads`: faltantes inseridos e existentes sem rastreio enriquecidos
+   (`utm_campaign/utm_content/utm_medium`). Conferir CAC por criativo.
+4. Avisar o João para validarmos juntos.
