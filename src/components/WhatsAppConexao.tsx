@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,26 @@ export function WhatsAppConexao() {
   }, [call]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Mantém os ids atuais para o polling não depender do estado (evita recriar o intervalo).
+  const idsRef = useRef<string[]>([]);
+  useEffect(() => { idsRef.current = insts.map((i) => i.id); }, [insts]);
+
+  // Sincroniza o status REAL (servidor uazapi) periodicamente, para refletir
+  // automaticamente quando uma instância cai/desconecta — sem precisar clicar em Atualizar.
+  useEffect(() => {
+    const iv = setInterval(async () => {
+      if (document.hidden) return; // não consome enquanto a aba está em segundo plano
+      for (const id of idsRef.current) {
+        try {
+          const d = await call("status_instance", { id });
+          const status = d.connected ? "connected" : (d.status || "desconectado");
+          setInsts((prev) => prev.map((i) => (i.id === id ? { ...i, status, numero: d.numero ?? i.numero } : i)));
+        } catch { /* ignore */ }
+      }
+    }, 20000);
+    return () => clearInterval(iv);
+  }, [call]);
 
   const pollStatus = useCallback((id: string) => {
     let t = 0;
