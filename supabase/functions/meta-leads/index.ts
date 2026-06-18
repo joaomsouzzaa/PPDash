@@ -15,23 +15,26 @@ const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").t
 
 // Mapeia os campos do formulário do Meta (field_data) para colunas/custom do lead.
 function mapMetaFields(fd: { name: string; values: string[] }[]) {
-  const get = (...keys: string[]) => {
-    for (const f of fd) { const n = norm(f.name); if (keys.some((k) => n === k || n.includes(k))) return (f.values || [])[0] ?? null; }
-    return null;
-  };
-  const firstName = get("first_name", "primeiro nome");
-  const lastName = get("last_name", "sobrenome");
-  const fullName = get("full_name", "nome completo") || [firstName, lastName].filter(Boolean).join(" ") || null;
+  const byName: Record<string, string> = {};
+  for (const f of fd) { const v = (f.values || [])[0]; if (v != null) byName[norm(f.name)] = v; }
+  // Igualdade exata (campos padrão do Meta: first_name, last_name, email, phone_number, city, state...).
+  const exact = (...keys: string[]) => { for (const k of keys) if (byName[k] != null) return byName[k]; return null; };
+  // "Contém" (perguntas personalizadas) — usar só onde não há risco de colisão.
+  const incl = (...subs: string[]) => { for (const [n, v] of Object.entries(byName)) if (subs.some((s) => n.includes(s))) return v; return null; };
+
+  const firstName = exact("first_name");
+  const lastName = exact("last_name");
+  const fullName = exact("full_name") || [firstName, lastName].filter(Boolean).join(" ") || null;
   const custom: Record<string, unknown> = {};
-  const sobrenome = lastName; if (sobrenome) custom.sobrenome = sobrenome;
-  const uf = get("state", "estado", "uf"); if (uf) custom.uf = uf;
-  const cap = get("capacidade", "investimento"); if (cap) custom.capacidade_investimento = cap;
+  if (lastName) custom.sobrenome = lastName;
+  const uf = exact("state", "uf", "estado"); if (uf) custom.uf = uf;
+  const cap = incl("capacidade", "investimento"); if (cap) custom.capacidade_investimento = cap;
   return {
     nome: fullName || firstName || null,
-    email: get("email", "e-mail"),
-    telefone: get("phone_number", "telefone", "celular", "whatsapp"),
-    whatsapp: get("whatsapp"),
-    cidade: get("city", "cidade"),
+    email: exact("email") || incl("e-mail", "email"),
+    telefone: exact("phone_number", "telefone", "celular") || incl("whatsapp", "telefone", "celular"),
+    whatsapp: exact("phone_number") || incl("whatsapp"),
+    cidade: exact("city", "cidade"),
     custom,
   };
 }
