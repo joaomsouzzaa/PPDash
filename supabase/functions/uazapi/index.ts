@@ -616,10 +616,13 @@ Deno.serve(async (req) => {
             await uazFetch(UAZAPI.del(), row.instance_token, undefined, "DELETE", ADMIN);
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            if (!/404|not[ _]?found|não encontrad/i.test(msg)) {
+            // 404 = já não existe na UAZAPI. "Invalid token"/401 = o token desta
+            // instância não é mais reconhecido pelo servidor (instância já removida
+            // ou recriada lá fora) — não dá para gerenciá-la via API de qualquer
+            // forma, então liberamos a limpeza local para não prender a linha.
+            if (!/404|not[ _]?found|não encontrad|invalid[ _]?token|401|unauthorized/i.test(msg)) {
               return json({ error: `Falha ao remover na UAZAPI: ${msg}. Tente novamente.` }, 502);
             }
-            // 404 = já não existe na UAZAPI; segue e limpa o banco.
           }
         }
         await supabase.from("whatsapp_instancias").delete().eq("id", row.id);
