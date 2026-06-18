@@ -573,7 +573,10 @@ Deno.serve(async (req) => {
         const { count } = await supabase.from("whatsapp_instancias").select("*", { count: "exact", head: true }).eq("org_id", orgId);
         if (count !== null && count >= limite) return json({ error: `Limite do seu plano atingido (${limite} conexões de WhatsApp).` }, 400);
         const nome = String(payload.nome || "WhatsApp").slice(0, 40);
-        const data = await uazFetch(UAZAPI.init(), ADMIN, { name: `${orgId.slice(0, 8)}_${Date.now().toString(36)}` });
+        const slug = nome.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+          .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || "whatsapp";
+        const uazName = `${slug}-${Date.now().toString(36)}`;
+        const data = await uazFetch(UAZAPI.init(), ADMIN, { name: uazName });
         const inst = data.instance || data;
         const { data: row } = await supabase.from("whatsapp_instancias")
           .insert({ org_id: orgId, nome, instance_token: inst.token, status: inst.status || "desconectado" })
