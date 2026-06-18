@@ -95,56 +95,49 @@ type LeadRow = {
 type CampoLead = { id: string; chave: string; label: string; ordem: number };
 
 
+// Limites de DIA em horário do Brasil (America/Sao_Paulo, UTC-3) — IDÊNTICOS aos do
+// dashboard (useLeadsData.getDateRange) para as duas telas baterem. Meia-noite BRT = 03:00Z.
 function getDateRange(dateRange: string, startDate?: Date, endDate?: Date) {
+  const brtStart = (d: Date) =>
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 3, 0, 0)).toISOString();
+  const brtEnd = (d: Date) =>
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1, 3, 0, 0) - 1).toISOString();
+
   if (startDate && endDate) {
-    return {
-      start: startDate.toISOString(),
-      end: new Date(endDate.getTime() + 86400000 - 1).toISOString(),
-    };
+    return { start: brtStart(startDate), end: brtEnd(endDate) };
   }
 
   const now = new Date();
-  let start: Date;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diasAtras = (n: number) => { const d = new Date(today); d.setDate(d.getDate() - n); return d; };
 
   switch (dateRange) {
     case "today":
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      break;
+      return { start: brtStart(today), end: brtEnd(today) };
     case "yesterday": {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-      return {
-        start: start.toISOString(),
-        end: new Date(start.getTime() + 86400000 - 1).toISOString(),
-      };
+      const y = diasAtras(1);
+      return { start: brtStart(y), end: brtEnd(y) };
     }
     case "7d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      break;
+      return { start: brtStart(diasAtras(7)), end: brtEnd(today) };
     case "14d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 14);
-      break;
+      return { start: brtStart(diasAtras(14)), end: brtEnd(today) };
     case "30d":
-      start = new Date(now);
-      start.setDate(start.getDate() - 30);
-      break;
-    case "this_month":
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      break;
+      return { start: brtStart(diasAtras(30)), end: brtEnd(today) };
+    case "this_month": {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start: brtStart(s), end: brtEnd(today) };
+    }
     case "last_month": {
-      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-      return { start: start.toISOString(), end: endOfMonth.toISOString() };
+      const s = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const e = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { start: brtStart(s), end: brtEnd(e) };
     }
     case "lifetime":
-      return { start: "2000-01-01T00:00:00Z", end: now.toISOString() };
+      return { start: "2000-01-01T00:00:00Z", end: brtEnd(today) };
     default:
-      start = new Date(now);
-      start.setDate(start.getDate() - 30);
+      return { start: brtStart(diasAtras(30)), end: brtEnd(today) };
   }
-
-  return { start: start.toISOString(), end: now.toISOString() };
 }
 
 // Tipo de controle de cada campo padrão no modal de edição (default = texto).

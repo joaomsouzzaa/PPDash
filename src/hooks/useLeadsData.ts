@@ -4,14 +4,14 @@ import type { Filters } from "@/lib/mockData";
 import { useProdutos } from "@/hooks/useProdutos";
 
 export function getDateRange(filters: Filters): { start: string; end: string } {
-  // data_lead é gravado como DATA em meia-noite UTC (00:00Z) para parte dos leads.
-  // O filtro precisa usar limites de DIA EM UTC; senão o fuso local (BR, -3h)
-  // converte a meia-noite local para 03:00Z e empurra os leads de 00:00Z para o
-  // dia anterior (era isso que sumia com os MQL do dia correto).
+  // Limites de DIA em horário do Brasil (America/Sao_Paulo, UTC-3) — devem ser
+  // IDÊNTICOS aos da tela de Leads (LeadsInsideSales.getDateRange) para as duas
+  // telas baterem. Meia-noite BRT = 03:00Z; fim do dia = 03:00Z do dia seguinte - 1ms.
+  // (Leads gravados como data pura 00:00Z foram normalizados para meio-dia.)
   const utcStart = (d: Date) =>
-    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 3, 0, 0)).toISOString();
   const utcEnd = (d: Date) =>
-    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1) - 1).toISOString();
+    new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1, 3, 0, 0) - 1).toISOString();
 
   if (filters.startDate && filters.endDate) {
     return { start: utcStart(filters.startDate), end: utcEnd(filters.endDate) };
