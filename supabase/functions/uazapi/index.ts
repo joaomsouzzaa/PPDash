@@ -19,6 +19,7 @@ const UAZAPI = {
   init: () => `${BASE}/instance/init`,
   del: () => `${BASE}/instance`,
   connect: () => `${BASE}/instance/connect`,
+  disconnect: () => `${BASE}/instance/disconnect`,
   status: () => `${BASE}/instance/status`,
   groups: () => `${BASE}/group/list`,
   sendText: () => `${BASE}/send/text`,
@@ -576,7 +577,7 @@ Deno.serve(async (req) => {
         const slug = nome.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
           .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || "whatsapp";
         const uazName = `${slug}-${Date.now().toString(36)}`;
-        const data = await uazFetch(UAZAPI.init(), ADMIN, { name: uazName });
+        const data = await uazFetch(UAZAPI.init(), ADMIN, { name: uazName, systemName: nome });
         const inst = data.instance || data;
         const { data: row } = await supabase.from("whatsapp_instancias")
           .insert({ org_id: orgId, nome, instance_token: inst.token, status: inst.status || "desconectado" })
@@ -592,6 +593,13 @@ Deno.serve(async (req) => {
         const status = inst.status || (data.connected ? "connected" : "connecting");
         await supabase.from("whatsapp_instancias").update({ status }).eq("id", row.id);
         return json({ qrcode, status });
+      }
+      case "disconnect_instance": {
+        const row = await getInstancia(payload.id);
+        if (!row) return json({ error: "Instância não encontrada" }, 404);
+        await uazFetch(UAZAPI.disconnect(), row.instance_token, {});
+        await supabase.from("whatsapp_instancias").update({ status: "desconectado", numero: null }).eq("id", row.id);
+        return json({ ok: true });
       }
       case "status_instance": {
         const row = await getInstancia(payload.id);

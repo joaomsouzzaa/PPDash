@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Smartphone, Plus, QrCode, Trash2, RefreshCw, Loader2, Wifi, WifiOff } from "lucide-react";
+import { Smartphone, Plus, QrCode, Trash2, RefreshCw, Loader2, Wifi, WifiOff, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 interface Inst { id: string; nome: string; numero: string | null; status: string; }
@@ -78,6 +78,14 @@ export function WhatsAppConexao() {
     setBusyId(null);
   };
 
+  const desconectar = async (id: string) => {
+    if (!confirm("Desconectar este WhatsApp? A conexão é mantida e você pode reconectar com o QR Code.")) return;
+    setBusyId(id);
+    try { await call("disconnect_instance", { id }); setQr((q) => (q?.id === id ? null : q)); toast.success("WhatsApp desconectado"); await carregar(); }
+    catch (e: any) { toast.error(e.message); }
+    setBusyId(null);
+  };
+
   const excluir = async (id: string) => {
     if (!confirm("Excluir esta conexão de WhatsApp? A instância será removida.")) return;
     setBusyId(id);
@@ -140,6 +148,11 @@ export function WhatsAppConexao() {
                   <Button size="icon" variant="ghost" className="h-8 w-8" disabled={busyId === i.id} onClick={() => atualizar(i.id)} title="Atualizar status">
                     <RefreshCw className="h-4 w-4" />
                   </Button>
+                  {on && (
+                    <Button size="icon" variant="ghost" className="h-8 w-8" disabled={busyId === i.id} onClick={() => desconectar(i.id)} title="Desconectar">
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" disabled={busyId === i.id} onClick={() => excluir(i.id)} title="Excluir">
                     <Trash2 className="h-4 w-4" />
                   </Button>
