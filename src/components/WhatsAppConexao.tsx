@@ -31,14 +31,30 @@ export function WhatsAppConexao() {
     return data;
   }, []);
 
+  // Consulta o status REAL (servidor uazapi) de cada instância e atualiza a badge.
+  // Usado no carregamento e no polling — reflete quedas/desconexões sem clicar em Atualizar.
+  const sincronizarStatus = useCallback(async (ids: string[]) => {
+    for (const id of ids) {
+      try {
+        const d = await call("status_instance", { id });
+        const status = d.connected ? "connected" : (d.status || "desconectado");
+        setInsts((prev) => prev.map((i) => (i.id === id ? { ...i, status, numero: d.numero ?? i.numero } : i)));
+      } catch { /* ignore */ }
+    }
+  }, [call]);
+
   const carregar = useCallback(async () => {
     try {
       const d = await call("list_instances");
-      setInsts(d.instancias || []);
+      const lista = d.instancias || [];
+      setInsts(lista);
       setLimite(d.limite || 0);
+      // Sincroniza o status real logo após carregar (sem bloquear a renderização),
+      // para o F5 já refletir a realidade em vez do valor salvo no banco.
+      sincronizarStatus(lista.map((i: Inst) => i.id));
     } catch { /* ignore */ }
     setLoading(false);
-  }, [call]);
+  }, [call, sincronizarStatus]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -46,21 +62,14 @@ export function WhatsAppConexao() {
   const idsRef = useRef<string[]>([]);
   useEffect(() => { idsRef.current = insts.map((i) => i.id); }, [insts]);
 
-  // Sincroniza o status REAL (servidor uazapi) periodicamente, para refletir
-  // automaticamente quando uma instância cai/desconecta — sem precisar clicar em Atualizar.
+  // Re-sincroniza periodicamente enquanto a aba está visível.
   useEffect(() => {
-    const iv = setInterval(async () => {
+    const iv = setInterval(() => {
       if (document.hidden) return; // não consome enquanto a aba está em segundo plano
-      for (const id of idsRef.current) {
-        try {
-          const d = await call("status_instance", { id });
-          const status = d.connected ? "connected" : (d.status || "desconectado");
-          setInsts((prev) => prev.map((i) => (i.id === id ? { ...i, status, numero: d.numero ?? i.numero } : i)));
-        } catch { /* ignore */ }
-      }
+      sincronizarStatus(idsRef.current);
     }, 20000);
     return () => clearInterval(iv);
-  }, [call]);
+  }, [sincronizarStatus]);
 
   const pollStatus = useCallback((id: string) => {
     let t = 0;
