@@ -14,7 +14,7 @@ import type { Filters } from "@/lib/mockData";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchAdAccounts, fetchAccountInsights, fetchDailyMetrics, fetchBreakdown,
-  hydrateMetaTokenFromServer, isTokenExpired, type BreakdownRow,
+  hydrateMetaTokenFromServer, isTokenExpired, getSelectedAccount, type BreakdownRow,
 } from "@/lib/meta-ads";
 import {
   DollarSign, Eye, Layers, MousePointerClick, Target, TrendingUp, BarChart3, Link2, CreditCard,
@@ -116,7 +116,7 @@ export default function Performance() {
   const init = (() => { const e = new Date(); const s = new Date(e.getFullYear(), e.getMonth(), 1); return { s, e }; })();
   const [filters, setFilters] = useState<Filters>({
     dateRange: "this_month", startDate: init.s, endDate: init.e,
-    adAccount: localStorage.getItem("selected_ad_account") || "all",
+    adAccount: getSelectedAccount(),
     city: localStorage.getItem("selected_city") || "all", produtos: [], canalId: "",
   });
   // Persiste a cidade (todas as páginas mantêm a última selecionada, inclusive no F5).

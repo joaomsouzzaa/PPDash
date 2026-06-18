@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   fetchAdAccounts, fetchCampaignBreakdown, fetchAdSetBreakdown, fetchAdBreakdown,
-  hydrateMetaTokenFromServer, isTokenExpired, type CampaignRow,
+  hydrateMetaTokenFromServer, isTokenExpired, getSelectedAccount, type CampaignRow,
 } from "@/lib/meta-ads";
 import { BarChart3, Trophy, AlertTriangle, Bookmark, TrendingUp, Image as ImageIcon, Lightbulb, Sparkles, ShoppingCart, Target, Loader2, Users, UserPlus } from "lucide-react";
 
@@ -39,7 +39,7 @@ export default function Campanhas() {
   const init = (() => { const e = new Date(); const s = new Date(e.getFullYear(), e.getMonth(), 1); return { s, e }; })();
   const [filters, setFilters] = useState<Filters>({
     dateRange: "this_month", startDate: init.s, endDate: init.e,
-    adAccount: localStorage.getItem("selected_ad_account") || "all",
+    adAccount: getSelectedAccount(),
     city: localStorage.getItem("selected_city") || "all", produtos: [], canalId: "",
   });
   // Persiste a cidade (todas as páginas mantêm a última selecionada, inclusive no F5).

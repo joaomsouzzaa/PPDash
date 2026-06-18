@@ -29,7 +29,7 @@ import { DashboardFilters } from "@/components/DashboardFilters";
 import { SalesChart } from "@/components/SalesChart";
 import { PaymentMethodChart } from "@/components/PaymentMethodChart";
 import { fmt, type Filters } from "@/lib/mockData";
-import { fetchAdAccounts, fetchAdSpend, fetchCampaignDailyBudget, fetchDailySpendBreakdown, warmBreakdownsForCities, warmSpendForCities, syncMetaTokenToServer } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchAdSpend, fetchCampaignDailyBudget, fetchDailySpendBreakdown, warmBreakdownsForCities, warmSpendForCities, syncMetaTokenToServer, getSelectedAccount, setSelectedAccount } from "@/lib/meta-ads";
 import { useVendasData } from "@/hooks/useVendasData";
 import { useCidades } from "@/hooks/useCidades";
 import { getHiddenCidades } from "@/components/EditCidadeDialog";
@@ -37,7 +37,7 @@ import { differenceInDays } from "date-fns";
 
 const Index = () => {
   const [filters, setFilters] = useState<Filters>(() => {
-    const savedAccount = localStorage.getItem("selected_ad_account");
+    const savedAccount = getSelectedAccount();
     // Data SEMPRE inicia no padrão (90 dias). A cidade RESTAURA a última selecionada (selected_city).
     const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 89);
     return {
@@ -53,7 +53,7 @@ const Index = () => {
 
   const handleFiltersChange = (newFilters: Filters) => {
     if (newFilters.adAccount !== filters.adAccount) {
-      localStorage.setItem("selected_ad_account", newFilters.adAccount);
+      setSelectedAccount(newFilters.adAccount);
     }
     localStorage.setItem("dashboard11_date_range", newFilters.dateRange);
     if (newFilters.startDate) {

@@ -33,7 +33,7 @@ import { LeadsRanking } from "@/components/LeadsRanking";
 import { BrazilHeatMap } from "@/components/BrazilHeatMap";
 import { InvestimentoLeadsDia } from "@/components/InvestimentoLeadsDia";
 import { fmt, type Filters } from "@/lib/mockData";
-import { fetchAdAccounts, fetchAdSpend } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchAdSpend, getSelectedAccount, setSelectedAccount } from "@/lib/meta-ads";
 import { rateioInvestimentoManual, somaManualRateada } from "@/lib/investimento";
 import { fetchGoogleAdSpend, fetchGoogleTotalSpend } from "@/lib/google-ads";
 import { useCidades } from "@/hooks/useCidades";
@@ -42,7 +42,7 @@ import { useProdutos } from "@/hooks/useProdutos";
 
 const InsideSales = () => {
   const [filters, setFilters] = useState<Filters>(() => {
-    const savedAccount = localStorage.getItem("selected_ad_account");
+    const savedAccount = getSelectedAccount();
     const savedCity = localStorage.getItem("selected_city");
     const savedDateRange = localStorage.getItem("is_date_range");
     const savedStartDate = localStorage.getItem("is_start_date");
@@ -64,7 +64,7 @@ const InsideSales = () => {
 
   const handleFiltersChange = (newFilters: Filters) => {
     if (newFilters.adAccount !== filters.adAccount) {
-      localStorage.setItem("selected_ad_account", newFilters.adAccount);
+      setSelectedAccount(newFilters.adAccount);
     }
     localStorage.setItem("selected_city", newFilters.city);
     localStorage.setItem("is_date_range", newFilters.dateRange);

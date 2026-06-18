@@ -1,5 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getTenantSlug } from "@/lib/tenant";
 import { toast } from "sonner";
+
+// A seleção de contas de anúncio é POR CLIENTE (org). Como vários clientes podem ser
+// acessados na mesma origem (?org=slug), o localStorage precisa ser namespaceado pelo slug,
+// senão a seleção de um cliente vaza para o outro. A fonte da verdade é meta_config (por org).
+const lsOrg = (base: string) => `${base}__${getTenantSlug()}`;
+
+/** Conta de anúncio selecionada no filtro do dashboard (por org). "all" ou act_id. */
+export function getSelectedAccount(): string {
+  return localStorage.getItem(lsOrg("selected_ad_account")) || "all";
+}
+export function setSelectedAccount(v: string): void {
+  localStorage.setItem(lsOrg("selected_ad_account"), v);
+}
 
 export interface AdAccount {
   id: string;
@@ -15,7 +29,7 @@ export async function syncMetaTokenToServer(): Promise<void> {
   try {
     const token = localStorage.getItem("meta_access_token");
     if (!token) return;
-    const acc = localStorage.getItem("selected_ad_account");
+    const acc = getSelectedAccount();
     // conta específica selecionada; se "all"/nenhuma, usa a 1ª conta disponível
     let account_id: string | null = acc && acc !== "all" ? acc : null;
     if (!account_id) {
@@ -44,21 +58,30 @@ export async function syncMetaTokenToServer(): Promise<void> {
 // valer em qualquer dispositivo (não só onde foi conectado). Retorna true se hidratou.
 export async function hydrateMetaTokenFromServer(): Promise<boolean> {
   try {
-    // Já tem token válido localmente? Não precisa.
-    if (localStorage.getItem("meta_access_token") && isTokenValid()) return false;
+    // SEMPRE lê a config da org atual (RLS isola por org), mesmo com token válido local —
+    // assim a SELEÇÃO de contas é sempre a do cliente que está sendo acessado agora.
     const { data } = await supabase
       .from("meta_config").select("access_token,account_id,token_expires_at,user_name,contas").maybeSingle();
-    if (!data?.access_token) return false;
-    // Token do banco expirado? Não hidrata (precisa reconectar de verdade).
-    if (data.token_expires_at && Date.now() >= Number(data.token_expires_at)) return false;
-    localStorage.setItem("meta_access_token", data.access_token);
-    localStorage.setItem("meta_connected", "true");
-    if (data.token_expires_at) localStorage.setItem("meta_token_expires_at", String(data.token_expires_at));
-    if (data.account_id) localStorage.setItem("selected_ad_account", data.account_id);
-    if (data.user_name) localStorage.setItem("meta_user_name", data.user_name);
-    if (Array.isArray(data.contas)) localStorage.setItem("meta_contas", JSON.stringify(data.contas));
-    localStorage.removeItem("meta_token_expired");
-    return true;
+    if (!data) return false;
+
+    // Seleção por org (namespaceada): aplica sempre.
+    localStorage.setItem(lsOrg("meta_contas"), JSON.stringify(Array.isArray(data.contas) ? data.contas : []));
+    if (data.account_id) localStorage.setItem(lsOrg("selected_ad_account"), data.account_id);
+    clearAdAccountsCache();
+
+    // Token é da conta do Facebook (pode ser o mesmo entre orgs) — só hidrata se não houver
+    // um válido localmente e o do banco não estiver expirado.
+    const jaTemValido = localStorage.getItem("meta_access_token") && isTokenValid();
+    const expirado = data.token_expires_at && Date.now() >= Number(data.token_expires_at);
+    if (data.access_token && !jaTemValido && !expirado) {
+      localStorage.setItem("meta_access_token", data.access_token);
+      localStorage.setItem("meta_connected", "true");
+      if (data.token_expires_at) localStorage.setItem("meta_token_expires_at", String(data.token_expires_at));
+      if (data.user_name) localStorage.setItem("meta_user_name", data.user_name);
+      localStorage.removeItem("meta_token_expired");
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -218,13 +241,14 @@ export async function fetchTodasAdAccounts(): Promise<AdAccount[]> {
 
 // Contas escolhidas pelo cliente (filtro do dashboard). Vazio = todas.
 export function getContasSelecionadas(): string[] {
-  try { return JSON.parse(localStorage.getItem("meta_contas") || "[]"); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(lsOrg("meta_contas")) || "[]"); } catch { return []; }
 }
 
 export async function setContasSelecionadas(ids: string[]): Promise<void> {
-  localStorage.setItem("meta_contas", JSON.stringify(ids));
+  localStorage.setItem(lsOrg("meta_contas"), JSON.stringify(ids));
   clearAdAccountsCache();
   try {
+    // 1 linha por org (unique em org_id). org_id é preenchido pelo trigger set_org_id.
     const { data: existing } = await supabase.from("meta_config").select("id").maybeSingle();
     if (existing?.id) await supabase.from("meta_config").update({ contas: ids }).eq("id", existing.id);
     else await supabase.from("meta_config").insert({ contas: ids });
