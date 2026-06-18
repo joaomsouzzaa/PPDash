@@ -91,6 +91,7 @@ const emptyForm = {
   destinatarios: [{ tipo: "grupo", valor: "", nome: "" }] as Dest[],
   mensagem: "",
   cidade_slug: null as string | null,
+  origem_lead: "ambos" as string,
   canais: [] as string[],
   horario: "09:00" as string | null,
   disparo_dia_evento: false,
@@ -226,7 +227,7 @@ export default function Notificacoes() {
     setForm({
       nome: n.nome, gatilho: n.gatilho, ativo: n.ativo,
       destinatarios: dests, mensagem: n.mensagem,
-      cidade_slug: n.cidade_slug, canais: Array.isArray((n as any).canais) ? (n as any).canais : [], horario: n.horario || "09:00",
+      cidade_slug: n.cidade_slug, origem_lead: (n as any).origem_lead || "ambos", canais: Array.isArray((n as any).canais) ? (n as any).canais : [], horario: n.horario || "09:00",
       disparo_dia_evento: (n as any).disparo_dia_evento || false,
       horario_evento: (n as any).horario_evento || "12:00",
       sheets_ativo: (n as any).sheets_ativo || false,
@@ -255,6 +256,7 @@ export default function Notificacoes() {
     const payload = {
       nome: form.nome, gatilho: form.gatilho, ativo: form.ativo,
       mensagem: form.mensagem, cidade_slug: form.cidade_slug, horario: form.horario,
+      origem_lead: form.gatilho === "novo_lead" ? form.origem_lead : null,
       canais: form.gatilho === "diario_performance" ? form.canais : null,
       disparo_dia_evento: form.disparo_dia_evento,
       horario_evento: form.horario_evento,
@@ -618,6 +620,20 @@ export default function Notificacoes() {
                     {cidades.map((c) => <SelectItem key={c.id} value={c.slug}>{c.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            {form.gatilho === "novo_lead" && (
+              <div className="space-y-1">
+                <Label>Origem do lead</Label>
+                <Select value={form.origem_lead} onValueChange={(v) => setForm({ ...form, origem_lead: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ambos">Todas as origens</SelectItem>
+                    <SelectItem value="crm">Apenas CRM (webhook/sincronização)</SelectItem>
+                    <SelectItem value="meta">Apenas Meta (Formulários do Meta)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Dispara esta notificação só para leads da origem escolhida.</p>
               </div>
             )}
             {form.gatilho === "diario_performance" && (

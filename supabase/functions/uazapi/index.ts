@@ -722,8 +722,11 @@ Deno.serve(async (req) => {
         const { data: notifs } = await supabase.from("notificacoes").select("*").eq("ativo", true).eq("gatilho", "novo_lead").eq("org_id", l.org_id);
         const tokenLead = await getOrgToken(supabase, l.org_id);
         const norm = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s-]/g, "");
+        // Origem do lead p/ filtro da notificação: meta = Lead Ads do Meta; crm = webhook/sync de CRM.
+        const origemLead = l.crm_origem === "meta_leads" ? "meta" : "crm";
         let enviados = 0;
         for (const n of notifs || []) {
+          if (n.origem_lead && n.origem_lead !== "ambos" && n.origem_lead !== origemLead) continue;
           if (n.cidade_slug) {
             const parts = n.cidade_slug.split(",").map((p: string) => norm(p)).filter(Boolean);
             const match = parts.some((s) => norm(l.cidade || "").includes(s));

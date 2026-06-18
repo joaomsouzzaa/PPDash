@@ -661,6 +661,36 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_lead_paginas: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          org_id: string | null
+          page_id: string
+          page_name: string | null
+          page_token: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          page_id: string
+          page_name?: string | null
+          page_token?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          page_id?: string
+          page_name?: string | null
+          page_token?: string | null
+        }
+        Relationships: []
+      }
       notificacao_logs: {
         Row: {
           cidade: string | null
@@ -715,6 +745,7 @@ export type Database = {
           mensagem: string
           nome: string
           org_id: string | null
+          origem_lead: string | null
           sheets_aba: string | null
           sheets_ativo: boolean
           sheets_mapa: Json
@@ -738,6 +769,7 @@ export type Database = {
           mensagem: string
           nome: string
           org_id?: string | null
+          origem_lead?: string | null
           sheets_aba?: string | null
           sheets_ativo?: boolean
           sheets_mapa?: Json
@@ -761,6 +793,7 @@ export type Database = {
           mensagem?: string
           nome?: string
           org_id?: string | null
+          origem_lead?: string | null
           sheets_aba?: string | null
           sheets_ativo?: boolean
           sheets_mapa?: Json

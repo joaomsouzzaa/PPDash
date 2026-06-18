@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
 import { CrmSyncSection } from "@/components/CrmSyncSection";
 import { MetaContasSelecao } from "@/components/MetaContasSelecao";
+import { MetaLeadsPaginas } from "@/components/MetaLeadsPaginas";
 import { toast as sonner } from "sonner";
 import {
   Collapsible,
@@ -401,6 +402,13 @@ const Integracoes = () => {
                       <div className="border-t pt-4">
                         <h4 className="text-sm font-medium mb-2">Contas de anúncio exibidas no dashboard</h4>
                         <MetaContasSelecao />
+                      </div>
+                    )}
+
+                    {metaConnected && !tokenExpired && (
+                      <div className="border-t pt-4">
+                        <h4 className="text-sm font-medium mb-2">Captação de leads nativos (Formulários do Meta)</h4>
+                        <MetaLeadsPaginas />
                       </div>
                     )}
                   </CardContent>
