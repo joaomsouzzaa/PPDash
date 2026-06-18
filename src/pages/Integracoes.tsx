@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { MapeamentoLeads } from "@/components/MapeamentoLeads";
@@ -44,6 +45,23 @@ function useWebhookToken() {
       .then(({ data }: any) => setToken(data?.webhook_token ?? null));
   }, [profile?.org_id]);
   return token;
+}
+
+/** Lê/atualiza o flag de ativação do webhook de leads do CRM da org logada. */
+function useWebhookLeadsAtivo() {
+  const { profile } = useAuth();
+  const orgId = profile?.org_id ?? null;
+  const [ativo, setAtivo] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!orgId) return;
+    supabase
+      .from("organizations")
+      .select("webhook_leads_ativo")
+      .eq("id", orgId)
+      .maybeSingle()
+      .then(({ data }: any) => setAtivo(data?.webhook_leads_ativo !== false));
+  }, [orgId]);
+  return { orgId, ativo, setAtivo };
 }
 
 const WebhookSection = () => {
@@ -93,7 +111,9 @@ const WebhookSection = () => {
 const CrmWebhookSection = () => {
   const [copied, setCopied] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const token = useWebhookToken();
+  const { orgId, ativo, setAtivo } = useWebhookLeadsAtivo();
   const url = token ? `${SB_URL}/functions/v1/webhook-leads?token=${token}` : "Gerando sua URL exclusiva…";
 
   const handleCopy = async () => {
@@ -101,6 +121,24 @@ const CrmWebhookSection = () => {
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const toggleAtivo = async (valor: boolean) => {
+    if (!orgId) return;
+    setSalvando(true);
+    const anterior = ativo;
+    setAtivo(valor);
+    const { error } = await supabase
+      .from("organizations")
+      .update({ webhook_leads_ativo: valor } as any)
+      .eq("id", orgId);
+    setSalvando(false);
+    if (error) {
+      setAtivo(anterior);
+      sonner.error("Não foi possível alterar: " + error.message);
+    } else {
+      sonner.success(valor ? "Recebimento de leads do CRM ativado." : "Recebimento de leads do CRM desativado.");
+    }
   };
 
   return (
@@ -131,6 +169,23 @@ const CrmWebhookSection = () => {
           Cole a URL acima no webhook (POST) do seu CRM. Depois, no <strong>mapeamento</strong> abaixo, diga
           qual variável do CRM preenche cada campo.
         </p>
+
+        <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
+          <div>
+            <Label htmlFor="webhook-leads-ativo" className="text-sm font-medium">Receber leads do CRM</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {ativo === false
+                ? "Desligado: a URL continua existindo, mas os leads enviados são ignorados."
+                : "Ligado: os leads enviados a esta URL entram automaticamente."}
+            </p>
+          </div>
+          <Switch
+            id="webhook-leads-ativo"
+            checked={ativo ?? true}
+            disabled={ativo === null || salvando}
+            onCheckedChange={toggleAtivo}
+          />
+        </div>
 
         <div className="border-t pt-3">
           <Button variant="outline" size="sm" onClick={() => setMapOpen(true)}>

@@ -815,6 +815,7 @@ export type Database = {
           plano_id: string | null
           slug: string | null
           status: string
+          webhook_leads_ativo: boolean
           webhook_token: string | null
         }
         Insert: {
@@ -829,6 +830,7 @@ export type Database = {
           plano_id?: string | null
           slug?: string | null
           status?: string
+          webhook_leads_ativo?: boolean
           webhook_token?: string | null
         }
         Update: {
@@ -843,6 +845,7 @@ export type Database = {
           plano_id?: string | null
           slug?: string | null
           status?: string
+          webhook_leads_ativo?: boolean
           webhook_token?: string | null
         }
         Relationships: [

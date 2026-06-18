@@ -34,13 +34,17 @@ Deno.serve(async (req) => {
 
   // Resolve a organização pelo token de webhook (multi-tenant).
   let orgId: string | null = null;
+  let webhookLeadsAtivo = true;
   if (providedKey) {
     const { data: org } = await supabase
       .from("organizations")
-      .select("id, status")
+      .select("id, status, webhook_leads_ativo")
       .eq("webhook_token", providedKey)
       .maybeSingle();
-    if (org && org.status === "ativo") orgId = org.id as string;
+    if (org && org.status === "ativo") {
+      orgId = org.id as string;
+      webhookLeadsAtivo = (org as any).webhook_leads_ativo !== false;
+    }
   }
   if (!orgId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -57,6 +61,15 @@ Deno.serve(async (req) => {
   try {
     const payload = await req.json();
     const crmOrigem = payload && (payload as any).leads ? "rd_station" : "webhook";
+
+    // Webhook de leads desligado pela org: ignora sem gravar (200 para a RD/Clint não reenviar).
+    if (!webhookLeadsAtivo) {
+      await logEvento({ crm: crmOrigem, payload, status: "ignorado" });
+      return new Response(JSON.stringify({ ignored: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Mapeamento da org: campo da app  <-  chave do CRM (explícito).
     const { data: mapRows } = await supabase.from("lead_mapeamento").select("app_field, crm_key").eq("org_id", orgId);
