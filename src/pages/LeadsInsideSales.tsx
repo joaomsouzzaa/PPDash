@@ -267,24 +267,52 @@ const LeadsInsideSales = () => {
   const [sincronizando, setSincronizando] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncDias, setSyncDias] = useState("7");
+  const [syncSel, setSyncSel] = useState<{ crm: boolean; meta: boolean }>({ crm: true, meta: true });
+
+  // Fontes de sincronização disponíveis para a org ativa (RLS escopa pelo x-org-slug):
+  // CRM = alguma integração ativa (Clint/RD); Meta = alguma página de Lead Ads ativa.
+  const { data: fontesSync } = useQuery({
+    queryKey: ["fontes-sync"],
+    enabled: syncOpen,
+    queryFn: async () => {
+      const [{ data: integ }, { data: pags }] = await Promise.all([
+        supabase.from("integracoes").select("crm").eq("ativo", true),
+        supabase.from("meta_lead_paginas").select("id").eq("ativo", true),
+      ]);
+      return { crm: (integ?.length ?? 0) > 0, meta: (pags?.length ?? 0) > 0 };
+    },
+  });
 
   const sincronizarAgora = useCallback(async () => {
     const d = Math.max(1, Math.min(365, parseInt(syncDias, 10) || 7));
+    const alvos: { fn: string; label: string }[] = [];
+    if (fontesSync?.crm && syncSel.crm) alvos.push({ fn: "crm-sync", label: "CRM" });
+    if (fontesSync?.meta && syncSel.meta) alvos.push({ fn: "meta-leads-sync", label: "Meta Lead Ads" });
+    if (!alvos.length) { toast.error("Selecione ao menos uma fonte para sincronizar."); return; }
     setSincronizando(true);
     try {
-      const { data, error } = await supabase.functions.invoke("crm-sync", { body: { dias: d } });
-      if (error) throw new Error(error.message);
-      const r = (data as any)?.resultados?.[0];
-      if (r?.erro) throw new Error(r.erro);
-      toast.success(`Sincronizado (${d} dias): ${r?.inseridos ?? 0} novo(s) · ${r?.total ?? 0} no total.`);
+      const res = await Promise.allSettled(
+        alvos.map((a) => supabase.functions.invoke(a.fn, { body: { dias: d } })),
+      );
+      let inseridos = 0;
+      const erros: string[] = [];
+      res.forEach((r, i) => {
+        if (r.status === "rejected") { erros.push(`${alvos[i].label}: ${(r.reason as Error)?.message || "falha"}`); return; }
+        const { data, error } = r.value as { data: any; error: any };
+        if (error) { erros.push(`${alvos[i].label}: ${error.message}`); return; }
+        for (const x of (data?.resultados ?? [])) {
+          if (x?.erro) { erros.push(`${alvos[i].label}: ${x.erro}`); continue; }
+          inseridos += x?.inseridos ?? 0;
+        }
+      });
+      if (erros.length < alvos.length) toast.success(`Sincronizado (${d} dias): ${inseridos} novo(s).`);
+      if (erros.length) toast.error("Falha na sincronização — " + erros.join(" · "));
       setSyncOpen(false);
       await refetchLeads();
-    } catch (e) {
-      toast.error("Falha na sincronização: " + (e as Error).message);
     } finally {
       setSincronizando(false);
     }
-  }, [refetchLeads, syncDias]);
+  }, [refetchLeads, syncDias, syncSel, fontesSync]);
 
   // Ordem das colunas definida no gerenciador (organizations.lead_ordem).
   const { data: ordemRow, refetch: refetchOrdem } = useQuery({
@@ -600,15 +628,40 @@ const LeadsInsideSales = () => {
                 <DialogTitle>Sincronizar agora</DialogTitle>
                 <DialogDescription>Buscar e recuperar leads de quantos dias para trás?</DialogDescription>
               </DialogHeader>
-              <div className="space-y-2">
-                <Label htmlFor="leads-sync-dias" className="text-sm">Dias para trás</Label>
-                <Input id="leads-sync-dias" type="number" min={1} max={365} value={syncDias}
-                  onChange={(e) => setSyncDias(e.target.value)} className="max-w-[120px]" />
-                <p className="text-xs text-muted-foreground">Recupera os leads que falharam ao entrar nesse período e atualiza a partir do CRM configurado.</p>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="leads-sync-dias" className="text-sm">Dias para trás</Label>
+                  <Input id="leads-sync-dias" type="number" min={1} max={365} value={syncDias}
+                    onChange={(e) => setSyncDias(e.target.value)} className="max-w-[120px]" />
+                  <p className="text-xs text-muted-foreground">Recupera os leads que falharam ao entrar nesse período e atualiza a partir das fontes selecionadas.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">O que sincronizar</Label>
+                  {!fontesSync ? (
+                    <p className="text-xs text-muted-foreground">Carregando fontes…</p>
+                  ) : (!fontesSync.crm && !fontesSync.meta) ? (
+                    <p className="text-xs text-muted-foreground">Nenhuma fonte configurada nas Integrações.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {fontesSync.crm && (
+                        <label className="flex items-center gap-2 text-sm">
+                          <Checkbox checked={syncSel.crm} onCheckedChange={(v) => setSyncSel((s) => ({ ...s, crm: v === true }))} />
+                          CRM (Clint / RD Station)
+                        </label>
+                      )}
+                      {fontesSync.meta && (
+                        <label className="flex items-center gap-2 text-sm">
+                          <Checkbox checked={syncSel.meta} onCheckedChange={(v) => setSyncSel((s) => ({ ...s, meta: v === true }))} />
+                          Meta Lead Ads (formulários nativos)
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={sincronizando}>Cancelar</Button>
-                <Button onClick={sincronizarAgora} disabled={sincronizando}>
+                <Button onClick={sincronizarAgora} disabled={sincronizando || (!fontesSync?.crm && !fontesSync?.meta)}>
                   {sincronizando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Sincronizar
                 </Button>
               </DialogFooter>

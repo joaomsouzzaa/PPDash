@@ -58,12 +58,12 @@ const GATILHOS: Record<string, { label: string; desc: string; vars: string[] }> 
   },
   sync_concluido: {
     label: "Relatório de sincronização (CRM)",
-    desc: "Dispara automaticamente ao final da sincronização diária do CRM (08h)",
+    desc: "Dispara automaticamente ao final da sincronização diária do CRM (horário configurável)",
     vars: ["data", "periodo", "crm", "recebidos", "ja_tinha", "inseridos", "total", "detalhes"],
   },
   sync_meta_concluido: {
     label: "Relatório de sincronização (Meta Lead Ads)",
-    desc: "Dispara automaticamente ao final da sincronização diária do Meta Lead Ads (08h)",
+    desc: "Dispara automaticamente ao final da sincronização diária do Meta Lead Ads (horário configurável)",
     vars: ["data", "periodo", "crm", "recebidos", "ja_tinha", "inseridos", "atualizados", "total", "detalhes"],
   },
   manual: {
@@ -162,10 +162,16 @@ export default function Notificacoes() {
   const { data: orgCfg } = useQuery({
     queryKey: ["notif-org-cfg"],
     queryFn: async () => {
-      const { data } = await supabase.from("organizations").select("id, notif_gatilhos").order("created_at").limit(1).maybeSingle();
-      return data as { id: string; notif_gatilhos: string[] | null } | null;
+      const { data } = await supabase.from("organizations").select("id, notif_gatilhos, sync_horario").order("created_at").limit(1).maybeSingle();
+      return data as { id: string; notif_gatilhos: string[] | null; sync_horario: number | null } | null;
     },
   });
+  const salvarSyncHorario = async (h: number) => {
+    if (!orgCfg?.id) return;
+    const hora = Math.max(0, Math.min(23, Math.trunc(h)));
+    await supabase.from("organizations").update({ sync_horario: hora }).eq("id", orgCfg.id);
+    queryClient.invalidateQueries({ queryKey: ["notif-org-cfg"] });
+  };
   const gatilhosAtivos: string[] = Array.isArray(orgCfg?.notif_gatilhos) ? orgCfg!.notif_gatilhos : Object.keys(GATILHOS);
   const [configOpen, setConfigOpen] = useState(false);
   const toggleGatilho = async (k: string) => {
@@ -893,6 +899,15 @@ export default function Notificacoes() {
       <Dialog open={configOpen} onOpenChange={setConfigOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Tipos de notificação</DialogTitle></DialogHeader>
+          <div className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Horário da sincronização diária</p>
+              <p className="text-xs text-muted-foreground">Hora (BRT) em que a sincronização do CRM e do Meta roda e dispara os relatórios.</p>
+            </div>
+            <Input type="number" min={0} max={23} className="w-20"
+              defaultValue={orgCfg?.sync_horario ?? 8}
+              onBlur={(e) => salvarSyncHorario(parseInt(e.target.value, 10) || 0)} />
+          </div>
           <p className="text-sm text-muted-foreground">Ative/desative os tipos que aparecem ao criar uma notificação.</p>
           <div className="space-y-2 pt-1">
             {Object.entries(GATILHOS).map(([k, g]) => (

@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -225,7 +225,7 @@ export type Database = {
           id: string
           nome: string
           ordem: number
-          org_id: string | null
+          org_id: string
           utm_contents: Json | null
         }
         Insert: {
@@ -235,7 +235,7 @@ export type Database = {
           id?: string
           nome: string
           ordem?: number
-          org_id?: string | null
+          org_id?: string
           utm_contents?: Json | null
         }
         Update: {
@@ -245,7 +245,7 @@ export type Database = {
           id?: string
           nome?: string
           ordem?: number
-          org_id?: string | null
+          org_id?: string
           utm_contents?: Json | null
         }
         Relationships: []
@@ -815,6 +815,7 @@ export type Database = {
           plano_id: string | null
           slug: string | null
           status: string
+          sync_horario: number
           webhook_leads_ativo: boolean
           webhook_token: string | null
         }
@@ -830,6 +831,7 @@ export type Database = {
           plano_id?: string | null
           slug?: string | null
           status?: string
+          sync_horario?: number
           webhook_leads_ativo?: boolean
           webhook_token?: string | null
         }
@@ -845,6 +847,7 @@ export type Database = {
           plano_id?: string | null
           slug?: string | null
           status?: string
+          sync_horario?: number
           webhook_leads_ativo?: boolean
           webhook_token?: string | null
         }
@@ -1717,4 +1720,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

@@ -755,46 +755,55 @@ export async function fetchActiveAdNames(accountIds: string[]): Promise<string[]
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
-// Gasto por nome de anúncio (ad_name -> spend) no período. Usado no CAC por criativo.
+// Métricas (gasto/impressões/cliques) por anúncio. impressions/clicks alimentam o CTR.
+export interface AdMetric { spend: number; impressions: number; clicks: number; }
+
+// Gasto/impressões/cliques por nome de anúncio no período. Usado no CAC por criativo.
 export async function fetchAdSpendByName(
   accountIds: string[], startDate?: Date, endDate?: Date, dateRange = "30d"
-): Promise<Record<string, number>> {
+): Promise<Record<string, AdMetric>> {
   const time_range = rangeParam(startDate, endDate, dateRange);
-  const out: Record<string, number> = {};
+  const out: Record<string, AdMetric> = {};
   await Promise.all(accountIds.map(async (id) => {
     try {
-      const res = await graphApiFetch<{ data: Array<{ ad_name?: string; spend?: string }> }>(`/${id}/insights`, {
-        level: "ad", time_range, limit: "500", fields: "ad_name,spend",
+      const res = await graphApiFetch<{ data: Array<{ ad_name?: string; spend?: string; impressions?: string; clicks?: string }> }>(`/${id}/insights`, {
+        level: "ad", time_range, limit: "500", fields: "ad_name,spend,impressions,clicks",
       });
       for (const r of res.data || []) {
         const n = (r.ad_name || "").trim();
         if (!n) continue;
-        out[n] = (out[n] || 0) + (parseFloat(r.spend || "0") || 0);
+        const m = (out[n] ||= { spend: 0, impressions: 0, clicks: 0 });
+        m.spend += parseFloat(r.spend || "0") || 0;
+        m.impressions += parseInt(r.impressions || "0") || 0;
+        m.clicks += parseInt(r.clicks || "0") || 0;
       }
     } catch { /* ignora conta sem dados */ }
   }));
   return out;
 }
 
-// Gasto diário por anúncio: { ad_name: { "YYYY-MM-DD": spend } }. Usado no CAC semanal por criativo.
+// Métricas diárias por anúncio: { ad_name: { "YYYY-MM-DD": {spend,impressions,clicks} } }. Usado no CAC semanal por criativo.
 export async function fetchDailyAdSpendByName(
   accountIds: string[], dateRange: string, startDate?: Date, endDate?: Date
-): Promise<Record<string, Record<string, number>>> {
+): Promise<Record<string, Record<string, AdMetric>>> {
   const timeRange = clampTimeRange(startDate && endDate
     ? { since: startDate.toISOString().split("T")[0], until: endDate.toISOString().split("T")[0] }
     : buildTimeRange(dateRange));
   const param = JSON.stringify(timeRange);
-  const out: Record<string, Record<string, number>> = {};
+  const out: Record<string, Record<string, AdMetric>> = {};
   await Promise.all(accountIds.map(async (id) => {
     try {
       const rows = await graphApiFetchAll(`/${id}/insights`, {
-        level: "ad", fields: "ad_name,spend", time_range: param, time_increment: "1", limit: "500",
+        level: "ad", fields: "ad_name,spend,impressions,clicks", time_range: param, time_increment: "1", limit: "500",
       });
-      for (const r of rows as Array<{ ad_name?: string; spend?: string; date_start?: string }>) {
+      for (const r of rows as Array<{ ad_name?: string; spend?: string; impressions?: string; clicks?: string; date_start?: string }>) {
         const n = (r.ad_name || "").trim();
         const d = r.date_start;
         if (!n || !d) continue;
-        (out[n] ||= {})[d] = (out[n][d] || 0) + (parseFloat(r.spend || "0") || 0);
+        const m = ((out[n] ||= {})[d] ||= { spend: 0, impressions: 0, clicks: 0 });
+        m.spend += parseFloat(r.spend || "0") || 0;
+        m.impressions += parseInt(r.impressions || "0") || 0;
+        m.clicks += parseInt(r.clicks || "0") || 0;
       }
     } catch { /* ignora */ }
   }));

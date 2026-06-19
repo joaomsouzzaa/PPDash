@@ -12,15 +12,18 @@ import { Plus, Pencil, Trash2, Loader2, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 import { fmt, type Filters } from "@/lib/mockData";
 import { getDateRange } from "@/hooks/useLeadsData";
-import { fetchAdAccounts, fetchActiveAdNames, fetchAdSpendByName } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchActiveAdNames, fetchAdSpendByName, type AdMetric } from "@/lib/meta-ads";
 import { useCriativos, type Criativo } from "@/hooks/useCriativos";
+import { getOrgId } from "@/lib/org";
 import { useDistinctUtmContent } from "@/hooks/useDistinctUtmContent";
 import { MultiSelectCombobox } from "@/components/MultiSelectCombobox";
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+// Chave de matching de anúncio: normaliza e ignora colchetes (o nome no Meta pode vir sem eles).
+const normKey = (s: string) => norm(s).replace(/[\[\]]/g, "").trim();
 
 interface LinhaCac {
-  id: string; nome: string; investimento: number; leads: number; cpl: number;
+  id: string; nome: string; investimento: number; ctr: number; leads: number; cpl: number;
   mql: number; mqlPct: number; custoMql: number; vendas: number; cac: number; faturamento: number; roas: number;
 }
 
@@ -49,7 +52,7 @@ export function CacCriativos({ filters }: { filters: Filters }) {
     const payload = { nome: form.nome.trim(), utm_contents: form.utm, ad_names: form.ads, ativo: form.ativo };
     const q = id
       ? supabase.from("criativos").update(payload).eq("id", id)
-      : supabase.from("criativos").insert({ ...payload, ordem: criativos.length });
+      : supabase.from("criativos").insert({ ...payload, ordem: criativos.length, org_id: await getOrgId() });
     const { error } = await q;
     if (error) { toast.error("Erro ao salvar criativo"); return; }
     toast.success(id ? "Criativo atualizado" : "Criativo cadastrado");
@@ -78,11 +81,17 @@ export function CacCriativos({ filters }: { filters: Filters }) {
       const ativos = criativos.filter((c) => c.ativo);
       if (ativos.length === 0) return [];
 
-      let spendByName: Record<string, number> = {};
+      let spendByName: Record<string, AdMetric> = {};
       try {
         const accs = await fetchAdAccounts();
         spendByName = await fetchAdSpendByName(accs.map((a) => a.id), filters.startDate, filters.endDate, filters.dateRange);
       } catch { /* meta off */ }
+      // Índice por chave normalizada para casar mesmo com diferença de caixa/colchetes.
+      const spendByKey: Record<string, AdMetric> = {};
+      for (const [nome, m] of Object.entries(spendByName)) {
+        const dst = (spendByKey[normKey(nome)] ||= { spend: 0, impressions: 0, clicks: 0 });
+        dst.spend += m.spend; dst.impressions += m.impressions; dst.clicks += m.clicks;
+      }
 
       const { data: leads } = await supabase
         .from("leads")
@@ -101,14 +110,21 @@ export function CacCriativos({ filters }: { filters: Filters }) {
       return ativos.map((c) => {
         const uset = (c.utm_contents || []).map(norm).filter(Boolean);
         const ls = (leads || []).filter((l: any) => l.utm_content && uset.includes(norm(l.utm_content)));
-        const investimento = (c.ad_names || []).reduce((s, n) => s + (spendByName[n] || 0), 0);
+        const adm = (c.ad_names || []).reduce((s, n) => {
+          const m = spendByKey[normKey(n)];
+          if (m) { s.spend += m.spend; s.impressions += m.impressions; s.clicks += m.clicks; }
+          return s;
+        }, { spend: 0, impressions: 0, clicks: 0 });
+        const investimento = adm.spend;
         const leadsN = ls.length;
         const mqlN = ls.filter(isMql).length;
         const vendaLs = ls.filter((l: any) => l.is_venda_realizada === "Sim");
         const vendasN = vendaLs.length;
         const faturamento = vendaLs.reduce((s, l: any) => s + (Number(l.faturamento_venda) || 0), 0);
         return {
-          id: c.id, nome: c.nome, investimento, leads: leadsN,
+          id: c.id, nome: c.nome, investimento,
+          ctr: adm.impressions ? (adm.clicks / adm.impressions) * 100 : 0,
+          leads: leadsN,
           cpl: leadsN ? investimento / leadsN : 0,
           mql: mqlN, mqlPct: leadsN ? (mqlN / leadsN) * 100 : 0,
           custoMql: mqlN ? investimento / mqlN : 0,
@@ -157,6 +173,7 @@ export function CacCriativos({ filters }: { filters: Filters }) {
               <TableRow>
                 <TableHead>Criativo</TableHead>
                 <TableHead className="text-right">Investimento</TableHead>
+                <TableHead className="text-right">CTR</TableHead>
                 <TableHead className="text-right">Leads</TableHead>
                 <TableHead className="text-right">CPL</TableHead>
                 <TableHead className="text-right">MQL</TableHead>
@@ -176,6 +193,7 @@ export function CacCriativos({ filters }: { filters: Filters }) {
                   <TableRow key={c.id} className={!c.ativo ? "opacity-40" : ""}>
                     <TableCell className="font-medium">{c.nome}</TableCell>
                     <TableCell className="text-right">{l ? fmt(l.investimento) : "—"}</TableCell>
+                    <TableCell className="text-right">{l ? `${l.ctr.toFixed(2)}%` : "—"}</TableCell>
                     <TableCell className="text-right">{l ? num(l.leads) : "—"}</TableCell>
                     <TableCell className="text-right">{l ? fmt(l.cpl) : "—"}</TableCell>
                     <TableCell className="text-right">{l ? num(l.mql) : "—"}</TableCell>

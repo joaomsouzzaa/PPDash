@@ -5,10 +5,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CalendarRange, Loader2 } from "lucide-react";
 import { fmt, type Filters } from "@/lib/mockData";
 import { getDateRange } from "@/hooks/useLeadsData";
-import { fetchAdAccounts, fetchDailyAdSpendByName } from "@/lib/meta-ads";
+import { fetchAdAccounts, fetchDailyAdSpendByName, type AdMetric } from "@/lib/meta-ads";
 import { useCriativos } from "@/hooks/useCriativos";
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+// Chave de matching de anúncio: normaliza e ignora colchetes (o nome no Meta pode vir sem eles).
+const normKey = (s: string) => norm(s).replace(/[\[\]]/g, "").trim();
 function segunda(d: Date): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
@@ -17,7 +19,7 @@ function segunda(d: Date): Date {
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const ddmm = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 
-interface Linha { key: string; label: string; investimento: number; leads: number; cpl: number; mql: number; mqlPct: number; custoMql: number; vendas: number; cac: number; faturamento: number; roas: number }
+interface Linha { key: string; label: string; investimento: number; ctr: number; leads: number; cpl: number; mql: number; mqlPct: number; custoMql: number; vendas: number; cac: number; faturamento: number; roas: number }
 
 export function CacSemanalPorCriativo({ filters }: { filters: Filters }) {
   const { data: criativos = [] } = useCriativos();
@@ -38,11 +40,21 @@ export function CacSemanalPorCriativo({ filters }: { filters: Filters }) {
       }
       const idxSemana = (d: Date) => ymd(segunda(d));
 
-      let spendByAd: Record<string, Record<string, number>> = {};
+      let spendByAd: Record<string, Record<string, AdMetric>> = {};
       try {
         const accs = await fetchAdAccounts();
         spendByAd = await fetchDailyAdSpendByName(accs.map((a) => a.id), filters.dateRange, filters.startDate, filters.endDate);
       } catch { /* meta off */ }
+      // Índice por chave normalizada para casar mesmo com diferença de caixa/colchetes.
+      const spendByKey: Record<string, Record<string, AdMetric>> = {};
+      for (const [nome, daily] of Object.entries(spendByAd)) {
+        const k = normKey(nome);
+        const dst = (spendByKey[k] ||= {});
+        for (const [dateStr, m] of Object.entries(daily)) {
+          const cur = (dst[dateStr] ||= { spend: 0, impressions: 0, clicks: 0 });
+          cur.spend += m.spend; cur.impressions += m.impressions; cur.clicks += m.clicks;
+        }
+      }
 
       const { data: leads } = await supabase
         .from("leads")
@@ -71,20 +83,24 @@ export function CacSemanalPorCriativo({ filters }: { filters: Filters }) {
           if (isMql(l)) a.mql++;
           if ((l as any).is_venda_realizada === "Sim") { a.vendas++; a.faturamento += Number((l as any).faturamento_venda) || 0; }
         }
-        // investimento semanal = soma do gasto diário dos ad_names do criativo.
-        const invSem: Record<string, number> = {};
+        // investimento/impressões/cliques semanais = soma do diário dos ad_names do criativo.
+        const invSem: Record<string, AdMetric> = {};
         for (const adn of c.ad_names || []) {
-          const daily = spendByAd[adn] || {};
-          for (const [dateStr, sp] of Object.entries(daily)) {
+          const daily = spendByKey[normKey(adn)] || {};
+          for (const [dateStr, m] of Object.entries(daily)) {
             const k = idxSemana(new Date(dateStr + "T12:00:00"));
-            invSem[k] = (invSem[k] || 0) + sp;
+            const cur = (invSem[k] ||= { spend: 0, impressions: 0, clicks: 0 });
+            cur.spend += m.spend; cur.impressions += m.impressions; cur.clicks += m.clicks;
           }
         }
         porCriativo[c.id] = semanas.map((s) => {
           const a = agg[s.key] || { leads: 0, mql: 0, vendas: 0, faturamento: 0 };
-          const investimento = invSem[s.key] || 0;
+          const m = invSem[s.key] || { spend: 0, impressions: 0, clicks: 0 };
+          const investimento = m.spend;
           return {
-            key: s.key, label: s.label, investimento, leads: a.leads,
+            key: s.key, label: s.label, investimento,
+            ctr: m.impressions ? (m.clicks / m.impressions) * 100 : 0,
+            leads: a.leads,
             cpl: a.leads ? investimento / a.leads : 0,
             mql: a.mql, mqlPct: a.leads ? (a.mql / a.leads) * 100 : 0,
             custoMql: a.mql ? investimento / a.mql : 0,
@@ -119,6 +135,7 @@ export function CacSemanalPorCriativo({ filters }: { filters: Filters }) {
                   <TableRow>
                     <TableHead>Semana</TableHead>
                     <TableHead className="text-right">Investimento</TableHead>
+                    <TableHead className="text-right">CTR</TableHead>
                     <TableHead className="text-right">Leads</TableHead>
                     <TableHead className="text-right">CPL</TableHead>
                     <TableHead className="text-right">MQL</TableHead>
@@ -135,6 +152,7 @@ export function CacSemanalPorCriativo({ filters }: { filters: Filters }) {
                     <TableRow key={l.key}>
                       <TableCell className="font-medium whitespace-nowrap">{l.label}</TableCell>
                       <TableCell className="text-right">{fmt(l.investimento)}</TableCell>
+                      <TableCell className="text-right">{l.ctr.toFixed(2)}%</TableCell>
                       <TableCell className="text-right">{num(l.leads)}</TableCell>
                       <TableCell className="text-right">{fmt(l.cpl)}</TableCell>
                       <TableCell className="text-right">{num(l.mql)}</TableCell>
