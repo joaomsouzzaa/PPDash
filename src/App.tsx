@@ -25,6 +25,7 @@ import Chat from "./pages/Chat";
 import Workflow from "./pages/Workflow";
 import Designer from "./pages/Designer";
 import ScrapingConteudos from "./pages/ScrapingConteudos";
+import MetaAds from "./pages/MetaAds";
 import Modulos from "./pages/Modulos";
 import Performance from "./pages/Performance";
 import Campanhas from "./pages/Campanhas";
@@ -87,6 +88,7 @@ const App = () => (
             <Route path="/workflow" element={<Priv modulo="growth.workflow"><Workflow /></Priv>} />
             <Route path="/designer" element={<Priv modulo="growth.designer"><Designer /></Priv>} />
             <Route path="/scraping-conteudos" element={<Priv modulo="growth.scraping"><ScrapingConteudos /></Priv>} />
+            <Route path="/meta-ads" element={<Priv modulo="growth.metaads"><MetaAds /></Priv>} />
 
             {/* Configurações (apenas autenticação) */}
             <Route path="/integracoes" element={<Priv><Integracoes /></Priv>} />

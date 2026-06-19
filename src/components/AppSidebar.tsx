@@ -23,6 +23,7 @@ import {
   LayoutGrid,
   Shield,
   Instagram,
+  Megaphone,
 } from "lucide-react";
 import { useItensOcultos } from "@/hooks/useModulos";
 import { MODULOS_CATALOGO } from "@/lib/modulos";
@@ -58,6 +59,7 @@ const ICONS: Record<string, any> = {
   "growth.workflow": KanbanSquare,
   "growth.designer": Palette,
   "growth.scraping": Instagram,
+  "growth.metaads": Megaphone,
 };
 
 export function AppSidebar() {

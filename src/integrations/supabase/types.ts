@@ -628,6 +628,75 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_ads_drive_config: {
+        Row: {
+          org_id: string
+          pasta_criativos_id: string | null
+          pasta_criativos_nome: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          org_id: string
+          pasta_criativos_id?: string | null
+          pasta_criativos_nome?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          org_id?: string
+          pasta_criativos_id?: string | null
+          pasta_criativos_nome?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      meta_campanhas: {
+        Row: {
+          account_id: string
+          created_at: string | null
+          daily_budget: number | null
+          estrutura: Json
+          id: string
+          last_synced_at: string | null
+          lifetime_budget: number | null
+          meta_campaign_id: string
+          nome: string | null
+          objetivo: string | null
+          org_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string | null
+          daily_budget?: number | null
+          estrutura?: Json
+          id?: string
+          last_synced_at?: string | null
+          lifetime_budget?: number | null
+          meta_campaign_id: string
+          nome?: string | null
+          objetivo?: string | null
+          org_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string | null
+          daily_budget?: number | null
+          estrutura?: Json
+          id?: string
+          last_synced_at?: string | null
+          lifetime_budget?: number | null
+          meta_campaign_id?: string
+          nome?: string | null
+          objetivo?: string | null
+          org_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       meta_config: {
         Row: {
           access_token: string | null

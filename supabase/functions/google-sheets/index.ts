@@ -165,6 +165,59 @@ Deno.serve(async (req) => {
       return json({ tabs, title: j.properties?.title });
     }
 
+    if (action === "list_drive_folders") {
+      const token = await getAccessToken(supabase, orgId);
+      const files: any[] = [];
+      let pageToken = "";
+      do {
+        const u = "https://www.googleapis.com/drive/v3/files?q=" +
+          encodeURIComponent("mimeType='application/vnd.google-apps.folder' and trashed=false") +
+          "&orderBy=modifiedTime desc&pageSize=1000&fields=nextPageToken,files(id,name)" +
+          "&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives" +
+          (pageToken ? `&pageToken=${pageToken}` : "");
+        const j = await gapi(token, u);
+        files.push(...(j.files || []));
+        pageToken = j.nextPageToken || "";
+      } while (pageToken && files.length < 5000);
+      return json({ folders: files });
+    }
+
+    if (action === "list_drive_files") {
+      if (!body.folder_id) throw new Error("folder_id é obrigatório");
+      const token = await getAccessToken(supabase, orgId);
+      const files: any[] = [];
+      let pageToken = "";
+      do {
+        const q = `'${body.folder_id}' in parents and trashed=false and (mimeType contains 'image/' or mimeType contains 'video/')`;
+        const u = "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+          "&orderBy=name&pageSize=1000&fields=nextPageToken,files(id,name,mimeType,thumbnailLink,size)" +
+          "&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives" +
+          (pageToken ? `&pageToken=${pageToken}` : "");
+        const j = await gapi(token, u);
+        files.push(...(j.files || []));
+        pageToken = j.nextPageToken || "";
+      } while (pageToken && files.length < 5000);
+      return json({ files });
+    }
+
+    if (action === "download_drive_file") {
+      // Retorna o arquivo do Drive em base64 (usado server-to-server por meta-ads-manager).
+      if (!body.file_id) throw new Error("file_id é obrigatório");
+      const token = await getAccessToken(supabase, orgId);
+      const r = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${body.file_id}?alt=media&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!r.ok) throw new Error(`Falha ao baixar arquivo do Drive (${r.status})`);
+      const mime = r.headers.get("content-type") || "application/octet-stream";
+      const buf = new Uint8Array(await r.arrayBuffer());
+      // base64 em chunks p/ não estourar a pilha em arquivos grandes
+      let bin = "";
+      const CH = 0x8000;
+      for (let i = 0; i < buf.length; i += CH) bin += String.fromCharCode(...buf.subarray(i, i + CH));
+      return json({ base64: btoa(bin), mime });
+    }
+
     if (action === "list_headers") {
       const token = await getAccessToken(supabase, orgId);
       const range = `${body.aba}!1:1`;

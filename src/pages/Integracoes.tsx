@@ -28,6 +28,8 @@ import {
   logoutFromFacebook,
 } from "@/lib/facebook-sdk";
 import { exchangeForLongLivedToken, isTokenExpired, clearTokenExpired, clearAdAccountsCache, clearRateLimitFlag, hydrateMetaTokenFromServer } from "@/lib/meta-ads";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { listDriveFolders, getDriveConfig, saveDriveConfig, type DriveFolder } from "@/lib/meta-ads-manager";
 
 const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -578,12 +580,54 @@ const GoogleSheetsSection = () => {
                   )}
                 </div>
                 {connected && <p className="text-xs text-muted-foreground">Conectado. Configure a planilha em cada notificação (Notificações → editar).</p>}
+                {connected && <DrivePastaCriativos />}
               </>
             )}
           </CardContent>
         </CollapsibleContent>
       </Card>
     </Collapsible>
+  );
+};
+
+// Pasta default do Drive com os criativos (usada pela página Meta Ads).
+const DrivePastaCriativos = () => {
+  const [folders, setFolders] = useState<DriveFolder[]>([]);
+  const [folderId, setFolderId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    listDriveFolders().then(setFolders).catch(() => { /* sem permissão ainda */ });
+    getDriveConfig().then((c) => { if (c?.pasta_criativos_id) setFolderId(c.pasta_criativos_id); }).catch(() => {});
+  }, []);
+
+  const salvar = async (id: string) => {
+    setFolderId(id);
+    const nome = folders.find((f) => f.id === id)?.name || "";
+    setLoading(true);
+    try {
+      await saveDriveConfig(id, nome);
+      sonner.success("Pasta de criativos salva");
+    } catch (e: any) {
+      sonner.error(e?.message || "Falha ao salvar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border-t pt-3 mt-3 space-y-2">
+      <p className="text-xs font-medium">Pasta de criativos (Meta Ads)</p>
+      <p className="text-xs text-muted-foreground">
+        Defina a pasta do Drive onde estão os criativos. A página Meta Ads usa essa pasta como padrão ao subir campanhas.
+      </p>
+      <Select value={folderId} onValueChange={salvar} disabled={loading}>
+        <SelectTrigger className="max-w-md"><SelectValue placeholder={folders.length ? "Selecione a pasta" : "Nenhuma pasta encontrada"} /></SelectTrigger>
+        <SelectContent>
+          {folders.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
   );
 };
 
