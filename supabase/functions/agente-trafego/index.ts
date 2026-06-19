@@ -19,16 +19,18 @@ function svc() {
   return createClient(SUPABASE_URL, SERVICE_KEY);
 }
 
-async function getKey(supabase: any, orgId: string | null): Promise<{ key: string; provider: string }> {
-  // Preferência: Anthropic (tool-use). Cai para a env ANTHROPIC_API_KEY.
-  let key: string | undefined;
-  if (orgId) {
-    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", "anthropic").eq("org_id", orgId).maybeSingle();
-    key = data?.api_key ?? undefined;
-  }
-  if (!key) key = Deno.env.get("ANTHROPIC_API_KEY") ?? undefined;
-  if (!key) throw new Error('Configure a API key da Anthropic em Agentes → Configurar modelos para usar o Agente de Tráfego.');
-  return { key, provider: "anthropic" };
+// Escolhe o provider com tool-use disponível: Anthropic se houver, senão OpenAI.
+async function getKey(supabase: any, orgId: string | null): Promise<{ key: string; provider: "anthropic" | "openai" }> {
+  const fromCfg = async (p: string): Promise<string | undefined> => {
+    if (!orgId) return undefined;
+    const { data } = await supabase.from("ai_config").select("api_key").eq("provider", p).eq("org_id", orgId).maybeSingle();
+    return data?.api_key ?? undefined;
+  };
+  let key = await fromCfg("anthropic"); if (key) return { key, provider: "anthropic" };
+  key = Deno.env.get("ANTHROPIC_API_KEY") ?? undefined; if (key) return { key, provider: "anthropic" };
+  key = await fromCfg("openai"); if (key) return { key, provider: "openai" };
+  key = Deno.env.get("OPENAI_API_KEY") ?? undefined; if (key) return { key, provider: "openai" };
+  throw new Error("Configure a API key da Anthropic ou OpenAI em Agentes → Configurar modelos para usar o Agente de Tráfego.");
 }
 
 // Chama uma edge function irmã (Drive ou meta-ads-manager) server-to-server.
@@ -181,51 +183,62 @@ Deno.serve(async (req) => {
 
     const { messages, model } = await req.json();
     if (!Array.isArray(messages)) return json({ error: "Parâmetros inválidos" }, 400);
-    const { key } = await getKey(supabase, orgId);
-    const mdl = model || "claude-opus-4-8";
+    const { key, provider } = await getKey(supabase, orgId);
+    const mdl = model || (provider === "anthropic" ? "claude-opus-4-8" : "gpt-4o");
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
-        // Histórico no formato Anthropic (content pode ser string ou blocos).
-        const convo: Msg[] = messages.map((m: any) => ({ role: m.role, content: m.content }));
+        const exec = async (name: string, input: any) => {
+          send({ type: "step", step: { autor: "Agente de Tráfego", conteudo: `🔧 ${name}` } });
+          try { return JSON.stringify(await runTool(name, input || {}, orgId!)).slice(0, 12000); }
+          catch (e) { return JSON.stringify({ error: e instanceof Error ? e.message : "erro" }); }
+        };
         try {
-          for (let round = 0; round < 10; round++) {
-            const r = await fetch("https://api.anthropic.com/v1/messages", {
-              method: "POST",
-              headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-              body: JSON.stringify({ model: mdl, max_tokens: 4096, system: SYSTEM, tools: TOOLS, messages: convo }),
-            });
-            const j = await r.json();
-            if (!r.ok) throw new Error(j?.error?.message || "Erro Anthropic");
-
-            const blocks = j.content || [];
-            const textOut = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
-            const toolUses = blocks.filter((b: any) => b.type === "tool_use");
-
-            if (toolUses.length === 0) {
-              send({ type: "done", reply: textOut });
-              break;
+          if (provider === "anthropic") {
+            const convo: Msg[] = messages.map((m: any) => ({ role: m.role, content: m.content }));
+            for (let round = 0; round < 10; round++) {
+              const r = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+                body: JSON.stringify({ model: mdl, max_tokens: 4096, system: SYSTEM, tools: TOOLS, messages: convo }),
+              });
+              const j = await r.json();
+              if (!r.ok) throw new Error(j?.error?.message || "Erro Anthropic");
+              const blocks = j.content || [];
+              const textOut = blocks.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+              const toolUses = blocks.filter((b: any) => b.type === "tool_use");
+              if (toolUses.length === 0) { send({ type: "done", reply: textOut }); break; }
+              if (textOut.trim()) send({ type: "step", step: { autor: "Agente de Tráfego", conteudo: textOut } });
+              convo.push({ role: "assistant", content: blocks });
+              const results: any[] = [];
+              for (const tu of toolUses) results.push({ type: "tool_result", tool_use_id: tu.id, content: await exec(tu.name, tu.input) });
+              convo.push({ role: "user", content: results });
             }
-
-            // Mostra o que o agente está fazendo e a fala parcial.
-            if (textOut.trim()) send({ type: "step", step: { autor: "Agente de Tráfego", conteudo: textOut } });
-            convo.push({ role: "assistant", content: blocks });
-
-            const results: any[] = [];
-            for (const tu of toolUses) {
-              send({ type: "step", step: { autor: "Agente de Tráfego", conteudo: `🔧 ${tu.name}` } });
-              let content: string;
-              try {
-                const out = await runTool(tu.name, tu.input || {}, orgId!);
-                content = JSON.stringify(out).slice(0, 12000);
-              } catch (e) {
-                content = JSON.stringify({ error: e instanceof Error ? e.message : "erro" });
+          } else {
+            // OpenAI (function-calling)
+            const oaiTools = TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
+            const msgs: any[] = [{ role: "system", content: SYSTEM }, ...messages.map((m: any) => ({ role: m.role, content: m.content }))];
+            for (let round = 0; round < 10; round++) {
+              const r = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+                body: JSON.stringify({ model: mdl, messages: msgs, tools: oaiTools }),
+              });
+              const j = await r.json();
+              if (!r.ok) throw new Error(j?.error?.message || "Erro OpenAI");
+              const msg = j.choices?.[0]?.message;
+              const calls = msg?.tool_calls || [];
+              if (calls.length === 0) { send({ type: "done", reply: msg?.content || "(sem resposta)" }); break; }
+              if (msg?.content?.trim()) send({ type: "step", step: { autor: "Agente de Tráfego", conteudo: msg.content } });
+              msgs.push(msg);
+              for (const c of calls) {
+                let input: any = {}; try { input = JSON.parse(c.function.arguments || "{}"); } catch { /* args inválidos */ }
+                const content = await exec(c.function.name, input);
+                msgs.push({ role: "tool", tool_call_id: c.id, content });
               }
-              results.push({ type: "tool_result", tool_use_id: tu.id, content });
             }
-            convo.push({ role: "user", content: results });
           }
         } catch (e) {
           send({ type: "error", error: e instanceof Error ? e.message : "Erro interno" });
