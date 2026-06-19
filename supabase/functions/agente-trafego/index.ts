@@ -57,6 +57,7 @@ também quando o CEO te delega uma tarefa.
 # Princípios (siga à risca)
 - Fale em português, direto e prático, como um gestor de tráfego experiente.
 - Trabalhe SEMPRE com dados reais: use as ferramentas para ler o gerenciador e o Drive. NUNCA invente IDs, nomes de campanha/conjunto ou nomes de arquivo.
+- RESPEITE o filtro pedido: se o usuário pedir "apenas ativas/ativos", chame meta_listar_campanhas com somente_ativos=true e NÃO mostre itens pausados. Se pedir pausados ou todos, ajuste de acordo. Sempre liste exatamente o que foi pedido.
 - Antes de QUALQUER ação que escreve no Meta (criar/duplicar/editar), mostre um RESUMO do que será feito e peça confirmação explícita ("posso subir?"). Só execute após o "sim".
 - Padrão de segurança: tudo sobe **PAUSADO** (status_inicial="PAUSED"). Só suba ativo se o usuário pedir claramente.
 - A conta de anúncio usada é a conta padrão da organização (já configurada). Não peça account_id.
@@ -95,7 +96,7 @@ Quando tudo estiver definido e confirmado, chame a ferramenta correta e, ao fina
 const TOOLS = [
   { name: "drive_listar_pastas", description: "Lista as pastas do Google Drive conectado, para encontrar onde estão os criativos.", input_schema: { type: "object", properties: {}, required: [] } },
   { name: "drive_listar_criativos", description: "Lista imagens e vídeos dentro de uma pasta do Drive.", input_schema: { type: "object", properties: { folder_id: { type: "string" } }, required: ["folder_id"] } },
-  { name: "meta_listar_campanhas", description: "Lista as campanhas atuais da conta (espelho do gerenciador).", input_schema: { type: "object", properties: {}, required: [] } },
+  { name: "meta_listar_campanhas", description: "Lista campanhas/conjuntos/anúncios da conta (espelho do gerenciador). Use somente_ativos=true quando o usuário pedir apenas o que está ATIVO.", input_schema: { type: "object", properties: { somente_ativos: { type: "boolean", description: "true = retorna só itens com status ACTIVE" } }, required: [] } },
   { name: "meta_listar_campanhas_base", description: "Lista campanhas existentes que podem servir de base para duplicação.", input_schema: { type: "object", properties: {}, required: [] } },
   { name: "meta_duplicar_campanha", description: "Duplica uma campanha existente como base para uma nova (cópia profunda).", input_schema: { type: "object", properties: { source_campaign_id: { type: "string" }, novo_nome: { type: "string" }, status_inicial: { type: "string", enum: ["PAUSED", "ACTIVE"] } }, required: ["source_campaign_id"] } },
   {
@@ -162,7 +163,7 @@ async function runTool(name: string, input: any, orgId: string): Promise<any> {
     case "drive_listar_criativos":
       return await callFn("google-sheets", { action: "list_drive_files", folder_id: input.folder_id, org_id: orgId });
     case "meta_listar_campanhas":
-      return await callFn("meta-ads-manager", { action: "list_campaigns", org_id: orgId });
+      return await callFn("meta-ads-manager", { action: "list_campaigns", org_id: orgId, somente_ativos: !!input.somente_ativos });
     case "meta_listar_campanhas_base":
       return await callFn("meta-ads-manager", { action: "list_source_campaigns", org_id: orgId });
     case "meta_duplicar_campanha":

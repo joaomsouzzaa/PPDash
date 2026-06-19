@@ -91,7 +91,8 @@ async function graphAll(token: string, path: string, params: Record<string, any>
 const num = (v: any) => (v == null || v === "" ? null : parseFloat(v) / 100); // budgets vêm em centavos
 
 // Lê toda a estrutura da conta e grava o snapshot em meta_campanhas.
-async function listCampaigns(supabase: any, orgId: string, token: string, account: string) {
+// opts.somente_ativos = true filtra o retorno para apenas ACTIVE (em todos os níveis).
+async function listCampaigns(supabase: any, orgId: string, token: string, account: string, opts: { somente_ativos?: boolean } = {}) {
   const acc = actId(account);
   const [campaigns, adsets, ads] = await Promise.all([
     graphAll(token, `/${acc}/campaigns`, { fields: "id,name,objective,status,daily_budget,lifetime_budget,effective_status" }),
@@ -129,6 +130,15 @@ async function listCampaigns(supabase: any, orgId: string, token: string, accoun
       status: c.status, daily_budget: c.daily_budget, lifetime_budget: c.lifetime_budget,
       estrutura: { adsets: c.adsets }, last_synced_at: now, updated_at: now,
     }, { onConflict: "org_id,meta_campaign_id" });
+  }
+
+  if (opts.somente_ativos) {
+    return tree
+      .filter((c) => c.status === "ACTIVE")
+      .map((c) => ({
+        ...c,
+        adsets: c.adsets.filter((s) => s.status === "ACTIVE").map((s) => ({ ...s, ads: s.ads.filter((a) => a.status === "ACTIVE") })),
+      }));
   }
   return tree;
 }
@@ -359,7 +369,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list_campaigns") {
-      return json({ campaigns: await listCampaigns(supabase, orgId, token, account) });
+      return json({ campaigns: await listCampaigns(supabase, orgId, token, account, { somente_ativos: !!body.somente_ativos }) });
     }
     if (action === "list_source_campaigns") {
       const acc = actId(account);
