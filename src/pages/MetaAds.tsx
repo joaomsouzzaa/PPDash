@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, RefreshCw, Megaphone, Send, Bot, Copy, FolderOpen, Plus, ChevronRight, ChevronDown, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
 import {
   listCampaigns, listSourceCampaigns, duplicateCampaign, createCampaign, updateEntity,
@@ -638,7 +639,17 @@ function AgenteTrafego() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agenteId, setAgenteId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Usa o MESMO "Agente de Tráfego" configurado na página Agentes (slug "trafego" ou nome).
+  useEffect(() => {
+    supabase.from("agentes").select("id,nome,slug").eq("ativo", true).then(({ data }) => {
+      const a = (data || []).find((x: any) => (x.slug || "").toLowerCase() === "trafego"
+        || (x.nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes("trafego"));
+      if (a) setAgenteId(a.id);
+    });
+  }, []);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages, loading]);
 
@@ -652,12 +663,12 @@ function AgenteTrafego() {
     try {
       const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
       const SB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-      const { data: sess } = await import("@/integrations/supabase/client").then((m) => m.supabase.auth.getSession());
+      const { data: sess } = await supabase.auth.getSession();
       const jwt = sess.session?.access_token || SB_KEY;
       const resp = await fetch(`${SB_URL}/functions/v1/agente-trafego`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({ messages: novaLista }),
+        body: JSON.stringify({ messages: novaLista, agente_id: agenteId }),
       });
       if (!resp.ok || !resp.body) {
         let msg = `Erro ${resp.status}`;

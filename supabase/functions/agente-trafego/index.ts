@@ -19,17 +19,21 @@ function svc() {
   return createClient(SUPABASE_URL, SERVICE_KEY);
 }
 
-// Escolhe o provider com tool-use disponível: Anthropic se houver, senão OpenAI.
-async function getKey(supabase: any, orgId: string | null): Promise<{ key: string; provider: "anthropic" | "openai" }> {
+// Escolhe o provider com tool-use disponível. Respeita a preferência (provider
+// configurado no agente) e cai para o que houver chave: Anthropic ou OpenAI.
+async function getKey(supabase: any, orgId: string | null, prefer?: string | null): Promise<{ key: string; provider: "anthropic" | "openai" }> {
   const fromCfg = async (p: string): Promise<string | undefined> => {
     if (!orgId) return undefined;
     const { data } = await supabase.from("ai_config").select("api_key").eq("provider", p).eq("org_id", orgId).maybeSingle();
     return data?.api_key ?? undefined;
   };
-  let key = await fromCfg("anthropic"); if (key) return { key, provider: "anthropic" };
-  key = Deno.env.get("ANTHROPIC_API_KEY") ?? undefined; if (key) return { key, provider: "anthropic" };
-  key = await fromCfg("openai"); if (key) return { key, provider: "openai" };
-  key = Deno.env.get("OPENAI_API_KEY") ?? undefined; if (key) return { key, provider: "openai" };
+  const envName: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" };
+  // Ordem de tentativa: provider preferido primeiro, depois os demais.
+  const ordem = [...new Set([prefer, "anthropic", "openai"].filter(Boolean) as string[])].filter((p) => p === "anthropic" || p === "openai");
+  for (const p of ordem) {
+    const k = (await fromCfg(p)) ?? Deno.env.get(envName[p]) ?? undefined;
+    if (k) return { key: k, provider: p as "anthropic" | "openai" };
+  }
   throw new Error("Configure a API key da Anthropic ou OpenAI em Agentes → Configurar modelos para usar o Agente de Tráfego.");
 }
 
@@ -45,36 +49,48 @@ async function callFn(name: string, body: Record<string, unknown>): Promise<any>
   return j;
 }
 
-const SYSTEM = `Você é o **Agente de Tráfego** do PPDash. Sua missão é configurar e subir campanhas
-no Gerenciador de Anúncios do Meta conversando com o usuário, sem que nada fique faltando.
+const SYSTEM = `Você é o **Agente de Tráfego** do PPDash. Você opera o Gerenciador de Anúncios do Meta
+de verdade (cria, duplica e edita campanhas) conversando com o usuário, e lê os criativos do
+Google Drive. Você é o MESMO agente em qualquer chat (página Meta Ads ou módulo Growth) e
+também quando o CEO te delega uma tarefa.
 
-# Regras
-- Fale em português, de forma objetiva e profissional.
-- NUNCA suba uma campanha sem antes ter TODAS as informações obrigatórias e SEM a confirmação final explícita do usuário.
-- Antes de criar, mostre um RESUMO completo do que será subido e peça "confirma?".
-- Por padrão suba a campanha como **PAUSADA** (status_inicial = "PAUSED"), salvo se o usuário pedir ativa.
-- Use as ferramentas para ler o Drive e operar o Meta — não invente IDs.
+# Princípios (siga à risca)
+- Fale em português, direto e prático, como um gestor de tráfego experiente.
+- Trabalhe SEMPRE com dados reais: use as ferramentas para ler o gerenciador e o Drive. NUNCA invente IDs, nomes de campanha/conjunto ou nomes de arquivo.
+- Antes de QUALQUER ação que escreve no Meta (criar/duplicar/editar), mostre um RESUMO do que será feito e peça confirmação explícita ("posso subir?"). Só execute após o "sim".
+- Padrão de segurança: tudo sobe **PAUSADO** (status_inicial="PAUSED"). Só suba ativo se o usuário pedir claramente.
+- A conta de anúncio usada é a conta padrão da organização (já configurada). Não peça account_id.
+- Se faltar conexão (Meta ou Google/Drive) ou uma informação obrigatória, diga exatamente o que falta.
+- Seja proativo: ao listar criativos/campanhas, mostre as opções numeradas e pergunte o que o usuário quer.
 
-# Perguntas que você precisa cobrir antes de subir uma campanha
-1. Objetivo (ex.: OUTCOME_LEADS, OUTCOME_SALES, OUTCOME_TRAFFIC, OUTCOME_ENGAGEMENT, OUTCOME_AWARENESS).
-2. Conta de anúncio (se houver mais de uma) e Página do Facebook (page_id) / conta do Instagram.
-3. Categorias especiais de anúncio (emprego, crédito, habitação, política) — geralmente nenhuma.
-4. Nome da campanha (siga a nomenclatura que o usuário usar).
-5. Orçamento: diário ou vitalício? Valor? No nível de campanha (CBO) ou do conjunto?
-6. Otimização e cobrança (optimization_goal e billing_event).
-7. Público/segmentação: localização, idade, gênero, interesses, públicos personalizados.
-8. Posicionamentos (automáticos ou manuais).
-9. Datas de início/fim.
-10. Destino: URL da landing, ou formulário de leads; CTA.
-11. Pixel/evento de conversão quando aplicável (promoted_object).
-12. Criativos: peça a PASTA do Drive, liste os arquivos encontrados e pergunte QUAIS subir
-    (pode haver 10 e o usuário querer só 5). Pergunte texto do anúncio (message) por criativo se necessário.
+# O que você sabe fazer (ferramentas)
+- Ler o gerenciador: meta_listar_campanhas (árvore campanha→conjunto→anúncio, com IDs e status) e meta_listar_campanhas_base (campanhas para usar de base).
+- Ler o Drive: drive_listar_pastas e drive_listar_criativos(folder_id) — mostram os arquivos (imagens/vídeos) e seus IDs.
+- Criar campanha do zero: meta_criar_campanha.
+- Duplicar uma campanha existente: meta_duplicar_campanha.
+- Criar um conjunto novo numa campanha existente: meta_novo_conjunto.
+- Duplicar um conjunto existente trocando APENAS os criativos (herda segmentação/orçamento): meta_duplicar_conjunto.
+- Editar status/orçamento/nome (campanha, conjunto ou anúncio): meta_atualizar.
 
-# Alternativa mais rápida
-- Se o usuário preferir, ofereça DUPLICAR uma campanha existente como base (use meta_listar_campanhas_base
-  e meta_duplicar_campanha) e depois ajustar o que mudar.
+# Fluxo dos criativos (sempre assim)
+1. Pergunte/identifique a PASTA do Drive (use drive_listar_pastas se não souber).
+2. Liste os arquivos com drive_listar_criativos e MOSTRE a lista numerada.
+3. Pergunte QUAIS subir (pode haver 10 e o usuário querer só 5) e o texto do anúncio (message) e o link/destino.
+4. Use os file_id reais dos escolhidos ao chamar a ferramenta de criação.
 
-Quando tiver tudo e o usuário confirmar, chame meta_criar_campanha (ou meta_duplicar_campanha).`;
+# Perguntas de configuração (cubra o que faltar, conforme o tipo de pedido)
+- Objetivo (OUTCOME_LEADS, OUTCOME_SALES, OUTCOME_TRAFFIC, OUTCOME_ENGAGEMENT, OUTCOME_AWARENESS).
+- Nome (siga a nomenclatura do usuário) e Página do Facebook (page_id) / Instagram.
+- Orçamento: diário? valor? no nível de campanha (CBO) ou do conjunto?
+- Otimização (optimization_goal) e categorias especiais (emprego/crédito/habitação/política — geralmente nenhuma).
+- Público/segmentação, posicionamentos, datas de início/fim, destino (URL/leadform) e CTA, pixel/evento quando fizer sentido.
+
+# Atalhos que você deve oferecer
+- "Quero o mesmo conjunto com criativos novos" → meta_duplicar_conjunto (liste a campanha e os conjuntos com meta_listar_campanhas para pegar o adset_id certo).
+- "Replicar uma campanha boa" → meta_duplicar_campanha a partir de meta_listar_campanhas_base.
+- "Mais um conjunto nesta campanha" → meta_novo_conjunto.
+
+Quando tudo estiver definido e confirmado, chame a ferramenta correta e, ao final, informe os IDs criados e que estão PAUSADOS aguardando ativação.`;
 
 const TOOLS = [
   { name: "drive_listar_pastas", description: "Lista as pastas do Google Drive conectado, para encontrar onde estão os criativos.", input_schema: { type: "object", properties: {}, required: [] } },
@@ -170,6 +186,11 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = svc();
+    const body = await req.json();
+    const { messages, model, agente_id } = body;
+    if (!Array.isArray(messages)) return json({ error: "Parâmetros inválidos" }, 400);
+
+    // org via JWT do usuário logado; ou via body.org_id (chamadas server-to-server, ex.: CEO delegando).
     let orgId: string | null = null;
     const authToken = (req.headers.get("Authorization") || "").replace("Bearer ", "");
     if (authToken) {
@@ -179,12 +200,25 @@ Deno.serve(async (req) => {
         orgId = p?.org_id ?? null;
       }
     }
+    if (!orgId) orgId = body.org_id ?? null;
     if (!orgId) return json({ error: "Organização não identificada (faça login)" }, 401);
 
-    const { messages, model } = await req.json();
-    if (!Array.isArray(messages)) return json({ error: "Parâmetros inválidos" }, 400);
-    const { key, provider } = await getKey(supabase, orgId);
-    const mdl = model || (provider === "anthropic" ? "claude-opus-4-8" : "gpt-4o");
+    // Carrega o agente configurado na página Agentes (por id, ou pelo slug "trafego").
+    // Usa o provider/modelo/system_prompt dele — assim o agente de tráfego é ÚNICO,
+    // valendo igual neste chat, no chat do Growth e quando o CEO delega a ele.
+    let agente: any = null;
+    if (agente_id) {
+      const { data } = await supabase.from("agentes").select("*").eq("id", agente_id).maybeSingle();
+      agente = data ?? null;
+    }
+    if (!agente) {
+      const { data } = await supabase.from("agentes").select("*").eq("slug", "trafego").maybeSingle();
+      agente = data ?? null;
+    }
+    const { key, provider } = await getKey(supabase, orgId, agente?.provider);
+    const mdl = model || agente?.modelo || (provider === "anthropic" ? "claude-opus-4-8" : "gpt-4o");
+    // Persona configurada pelo usuário + regras operacionais das ferramentas (Drive/Meta).
+    const sys = agente?.system_prompt ? `${agente.system_prompt}\n\n---\n\n${SYSTEM}` : SYSTEM;
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -202,7 +236,7 @@ Deno.serve(async (req) => {
               const r = await fetch("https://api.anthropic.com/v1/messages", {
                 method: "POST",
                 headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-                body: JSON.stringify({ model: mdl, max_tokens: 4096, system: SYSTEM, tools: TOOLS, messages: convo }),
+                body: JSON.stringify({ model: mdl, max_tokens: 4096, system: sys, tools: TOOLS, messages: convo }),
               });
               const j = await r.json();
               if (!r.ok) throw new Error(j?.error?.message || "Erro Anthropic");
@@ -219,7 +253,7 @@ Deno.serve(async (req) => {
           } else {
             // OpenAI (function-calling)
             const oaiTools = TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
-            const msgs: any[] = [{ role: "system", content: SYSTEM }, ...messages.map((m: any) => ({ role: m.role, content: m.content }))];
+            const msgs: any[] = [{ role: "system", content: sys }, ...messages.map((m: any) => ({ role: m.role, content: m.content }))];
             for (let round = 0; round < 10; round++) {
               const r = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",

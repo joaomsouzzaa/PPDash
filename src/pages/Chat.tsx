@@ -10,7 +10,11 @@ import { useSpeechToText } from "@/hooks/use-speech-to-text";
 import { BaseConhecimentoDialog } from "@/components/BaseConhecimentoDialog";
 import { toast } from "sonner";
 
-type Agente = { id: string; nome: string; provider: string; modelo: string | null; ativo: boolean };
+type Agente = { id: string; nome: string; provider: string; modelo: string | null; ativo: boolean; slug: string | null };
+
+// É o agente de tráfego? (slug "trafego" ou nome contendo "trafego/tráfego")
+const ehTrafego = (a?: Agente | null) =>
+  !!a && ((a.slug || "").toLowerCase() === "trafego" || (a.nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes("trafego"));
 type Conversa = { id: string; titulo: string | null; agente_id: string | null; updated_at: string };
 type Mensagem = { id?: string; role: "user" | "assistant"; conteudo: string };
 
@@ -33,7 +37,7 @@ export default function Chat() {
   );
 
   const carregarAgentes = useCallback(async () => {
-    const { data } = await supabase.from("agentes").select("id,nome,provider,modelo,ativo").eq("ativo", true).order("created_at");
+    const { data } = await supabase.from("agentes").select("id,nome,provider,modelo,ativo,slug").eq("ativo", true).order("created_at");
     setAgentes(data || []);
     if (data?.length && !agenteId) setAgenteId(data[0].id);
   }, [agenteId]);
@@ -91,9 +95,14 @@ export default function Chat() {
       // Chama o agente via STREAM (NDJSON): cada passo do time chega em tempo real.
       const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
       const SB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-      const resp = await fetch(`${SB_URL}/functions/v1/agente-chat`, {
+      // Agente de tráfego usa a função com ferramentas (Drive/Meta) e exige o JWT do usuário (resolve a org).
+      const trafego = ehTrafego(agenteAtual);
+      const fn = trafego ? "agente-trafego" : "agente-chat";
+      const { data: sess } = await supabase.auth.getSession();
+      const jwt = trafego ? (sess.session?.access_token || SB_KEY) : SB_KEY;
+      const resp = await fetch(`${SB_URL}/functions/v1/${fn}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+        headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({ agente_id: agenteId, messages: novaLista.map((m) => ({ role: m.role, content: m.conteudo })) }),
       });
       if (!resp.ok || !resp.body) {

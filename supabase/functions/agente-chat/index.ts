@@ -119,6 +119,34 @@ async function colunaDoAgente(supabase: any, child: any): Promise<{ atual: any; 
 
 type Step = { autor: string; conteudo: string };
 
+// É o agente de tráfego? (slug "trafego" ou nome contendo "trafego")
+function isTrafego(a: any): boolean {
+  return (a?.slug && norm(a.slug) === "trafego") || norm(a?.nome || "").includes("trafego");
+}
+
+// Executa o agente de tráfego COM ferramentas (Drive/Meta), chamando a edge
+// function agente-trafego. Lê o stream NDJSON e devolve a resposta final.
+async function runTrafego(child: any, tarefa: string, orgId: string | null): Promise<string> {
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const r = await fetch(`${url}/functions/v1/agente-trafego`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: svcKey, Authorization: `Bearer ${svcKey}` },
+    body: JSON.stringify({ agente_id: child.id, org_id: orgId, messages: [{ role: "user", content: tarefa }] }),
+  });
+  const text = await r.text();
+  let reply = "";
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const o = JSON.parse(line);
+      if (o.type === "done") reply = o.reply || reply;
+      else if (o.type === "error") reply = `(erro do agente de tráfego: ${o.error})`;
+    } catch { /* linha parcial */ }
+  }
+  return reply || "(sem resposta)";
+}
+
 // Executa um agente com capacidade de DELEGAR aos seus filhos ativos (hierarquia).
 // onStep é chamado em tempo real a cada passo (delegação, ação, resposta).
 async function runAgente(supabase: any, agente: any, messages: Msg[], onStep: ((s: Step) => void) | undefined, orgId: string | null): Promise<{ text: string; trace: string[] }> {
@@ -205,8 +233,13 @@ normal (sem JSON), consolidando o trabalho da equipe.`;
 
     let childResp = "";
     try {
-      const childKey = await getKey(supabase, child.provider, orgId);
-      childResp = await callModel(child, childKey, [{ role: "user", content: deleg.tarefa }], kb);
+      if (isTrafego(child)) {
+        // Agente de tráfego executa de fato (Drive/Meta) via agente-trafego.
+        childResp = await runTrafego(child, deleg.tarefa, orgId);
+      } else {
+        const childKey = await getKey(supabase, child.provider, orgId);
+        childResp = await callModel(child, childKey, [{ role: "user", content: deleg.tarefa }], kb);
+      }
     } catch (e) {
       childResp = `(falha ao executar ${child.nome}: ${e instanceof Error ? e.message : "erro"})`;
     }
