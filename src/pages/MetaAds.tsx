@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, Megaphone, Send, Bot, Copy, FolderOpen, Plus } from "lucide-react";
+import { Loader2, RefreshCw, Megaphone, Send, Bot, Copy, FolderOpen, Plus, ChevronRight, ChevronDown, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
 import {
@@ -81,11 +81,13 @@ export default function MetaAds() {
   );
 }
 
-// ============================= Aba 1: Gerenciador (espelho editável) =============================
+// ============================= Aba 1: Gerenciador (espelho hierárquico) =============================
 function Gerenciador({ accountId }: { accountId: string }) {
   const [campaigns, setCampaigns] = useState<CampaignTree[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string>("");
+  const [openC, setOpenC] = useState<Set<string>>(new Set());
+  const [openS, setOpenS] = useState<Set<string>>(new Set());
 
   const sync = useCallback(async () => {
     if (!accountId) return;
@@ -101,13 +103,31 @@ function Gerenciador({ accountId }: { accountId: string }) {
 
   useEffect(() => { sync(); }, [sync]);
 
-  const toggleStatus = async (c: CampaignTree) => {
-    const novo = c.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
-    setSaving(c.id);
+  const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
+    const n = new Set(set); n.has(id) ? n.delete(id) : n.add(id); setter(n);
+  };
+
+  // Atualiza um nó da árvore imutavelmente (campanha/conjunto/anúncio).
+  const patchTree = (level: "campaign" | "adset" | "ad", id: string, patch: any) => {
+    setCampaigns((prev) => prev.map((c) => {
+      if (level === "campaign") return c.id === id ? { ...c, ...patch } : c;
+      return {
+        ...c,
+        adsets: c.adsets.map((s) => {
+          if (level === "adset") return s.id === id ? { ...s, ...patch } : s;
+          return { ...s, ads: s.ads.map((a) => (a.id === id ? { ...a, ...patch } : a)) };
+        }),
+      };
+    }));
+  };
+
+  const toggleStatus = async (level: "campaign" | "adset" | "ad", id: string, atual: string) => {
+    const novo = atual === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    setSaving(id);
     try {
-      await updateEntity({ entity_id: c.id, nivel: "campaign", status: novo });
-      setCampaigns((prev) => prev.map((x) => (x.id === c.id ? { ...x, status: novo } : x)));
-      toast.success(`Campanha ${novo === "ACTIVE" ? "ativada" : "pausada"}`);
+      await updateEntity({ entity_id: id, nivel: level, status: novo });
+      patchTree(level, id, { status: novo, effective_status: novo });
+      toast.success(novo === "ACTIVE" ? "Ativado" : "Pausado");
     } catch (e: any) {
       toast.error(e?.message || "Falha ao atualizar");
     } finally {
@@ -115,12 +135,12 @@ function Gerenciador({ accountId }: { accountId: string }) {
     }
   };
 
-  const saveBudget = async (c: CampaignTree, valor: number) => {
-    setSaving(c.id);
+  const saveBudget = async (level: "campaign" | "adset", id: string, valor: number) => {
+    setSaving(id);
     try {
-      await updateEntity({ entity_id: c.id, nivel: "campaign", daily_budget: valor });
-      setCampaigns((prev) => prev.map((x) => (x.id === c.id ? { ...x, daily_budget: valor } : x)));
-      toast.success("Orçamento atualizado no Gerenciador");
+      await updateEntity({ entity_id: id, nivel: level, daily_budget: valor });
+      patchTree(level, id, { daily_budget: valor });
+      toast.success("Orçamento atualizado no Meta");
     } catch (e: any) {
       toast.error(e?.message || "Falha ao atualizar orçamento");
     } finally {
@@ -128,10 +148,18 @@ function Gerenciador({ accountId }: { accountId: string }) {
     }
   };
 
+  const BudgetInput = ({ value, onSave, disabled }: { value?: number | null; onSave: (v: number) => void; disabled?: boolean }) => (
+    <Input
+      type="number" step="0.01" defaultValue={value ?? ""} disabled={disabled}
+      className="h-7 w-28 text-xs"
+      onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v !== value) onSave(v); }}
+    />
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Espelho do Gerenciador de Anúncios. Alterações aqui refletem no Meta.</p>
+        <p className="text-sm text-muted-foreground">Espelho do Gerenciador de Anúncios. Expanda campanha → conjunto → anúncio. Alterações refletem no Meta.</p>
         <Button variant="outline" size="sm" onClick={sync} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           <span className="ml-2">Sincronizar agora</span>
@@ -140,43 +168,79 @@ function Gerenciador({ accountId }: { accountId: string }) {
 
       {campaigns.length === 0 && !loading ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nenhuma campanha encontrada nesta conta.</CardContent></Card>
-      ) : campaigns.map((c) => (
-        <Card key={c.id}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <CardTitle className="text-base truncate">{c.name}</CardTitle>
-                <Badge variant="secondary" className="shrink-0">{c.objetivo || "—"}</Badge>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">{c.status === "ACTIVE" ? "Ativa" : "Pausada"}</span>
-                  <Switch checked={c.status === "ACTIVE"} disabled={saving === c.id} onCheckedChange={() => toggleStatus(c)} />
+      ) : (
+        <Card>
+          {/* Cabeçalho de colunas */}
+          <div className="grid grid-cols-[1fr_90px_140px] gap-2 px-3 py-2 border-b text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            <span>Campanha / Conjunto / Anúncio</span>
+            <span className="text-center">Status</span>
+            <span>Orçamento diário</span>
+          </div>
+          <div className="divide-y">
+            {campaigns.map((c) => {
+              const cOpen = openC.has(c.id);
+              return (
+                <div key={c.id}>
+                  {/* Nível CAMPANHA */}
+                  <div className="grid grid-cols-[1fr_90px_140px] gap-2 px-3 py-2 items-center hover:bg-accent/40">
+                    <button className="flex items-center gap-2 min-w-0 text-left" onClick={() => toggle(openC, setOpenC, c.id)}>
+                      {c.adsets.length ? (cOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />) : <span className="w-4 shrink-0" />}
+                      <span className="font-medium text-sm truncate">{c.name}</span>
+                      <Badge variant="outline" className="shrink-0 text-[10px]">{c.objetivo || "—"}</Badge>
+                    </button>
+                    <div className="flex justify-center">
+                      <Switch checked={(c.status) === "ACTIVE"} disabled={saving === c.id} onCheckedChange={() => toggleStatus("campaign", c.id, c.status)} />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {c.daily_budget != null ? <BudgetInput value={c.daily_budget} disabled={saving === c.id} onSave={(v) => saveBudget("campaign", c.id, v)} />
+                        : <span className="text-[11px] text-muted-foreground">no conjunto</span>}
+                    </div>
+                  </div>
+
+                  {/* Nível CONJUNTO */}
+                  {cOpen && c.adsets.map((s) => {
+                    const sOpen = openS.has(s.id);
+                    return (
+                      <div key={s.id}>
+                        <div className="grid grid-cols-[1fr_90px_140px] gap-2 px-3 py-2 items-center bg-muted/30 hover:bg-accent/40">
+                          <button className="flex items-center gap-2 min-w-0 text-left pl-6" onClick={() => toggle(openS, setOpenS, s.id)}>
+                            {s.ads.length ? (sOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />) : <span className="w-4 shrink-0" />}
+                            <span className="text-sm truncate">{s.name}</span>
+                            {s.optimization_goal && <Badge variant="outline" className="shrink-0 text-[10px]">{s.optimization_goal}</Badge>}
+                          </button>
+                          <div className="flex justify-center">
+                            <Switch checked={s.status === "ACTIVE"} disabled={saving === s.id} onCheckedChange={() => toggleStatus("adset", s.id, s.status)} />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {s.daily_budget != null ? <BudgetInput value={s.daily_budget} disabled={saving === s.id} onSave={(v) => saveBudget("adset", s.id, v)} />
+                              : <span className="text-[11px] text-muted-foreground">no CBO</span>}
+                          </div>
+                        </div>
+
+                        {/* Nível ANÚNCIO */}
+                        {sOpen && s.ads.map((a) => (
+                          <div key={a.id} className="grid grid-cols-[1fr_90px_140px] gap-2 px-3 py-1.5 items-center hover:bg-accent/40">
+                            <div className="flex items-center gap-2 min-w-0 pl-14">
+                              {a.thumbnail ? <img src={a.thumbnail} alt="" className="h-8 w-8 rounded object-cover shrink-0" /> : <div className="h-8 w-8 rounded bg-muted flex items-center justify-center shrink-0"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>}
+                              <span className="text-xs truncate">{a.name}</span>
+                            </div>
+                            <div className="flex justify-center">
+                              <Switch checked={a.status === "ACTIVE"} disabled={saving === a.id} onCheckedChange={() => toggleStatus("ad", a.id, a.status)} />
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">—</span>
+                          </div>
+                        ))}
+                        {sOpen && s.ads.length === 0 && <div className="px-3 py-2 pl-14 text-[11px] text-muted-foreground">Sem anúncios.</div>}
+                      </div>
+                    );
+                  })}
+                  {cOpen && c.adsets.length === 0 && <div className="px-3 py-2 pl-12 text-[11px] text-muted-foreground">Sem conjuntos.</div>}
                 </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-end gap-2 mb-3">
-              <div className="w-44">
-                <Label className="text-xs">Orçamento diário (R$)</Label>
-                <Input
-                  type="number" step="0.01" defaultValue={c.daily_budget ?? ""}
-                  disabled={c.daily_budget == null}
-                  onBlur={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (!isNaN(v) && v !== c.daily_budget) saveBudget(c, v);
-                  }}
-                />
-              </div>
-              {c.daily_budget == null && <span className="text-xs text-muted-foreground pb-2">Orçamento no nível do conjunto (CBO desligado)</span>}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {c.adsets.length} conjunto(s) · {c.adsets.reduce((s, a) => s + a.ads.length, 0)} anúncio(s)
-            </div>
-          </CardContent>
+              );
+            })}
+          </div>
         </Card>
-      ))}
+      )}
     </div>
   );
 }
