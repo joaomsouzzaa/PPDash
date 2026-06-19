@@ -191,12 +191,21 @@ async function createCampaign(supabase: any, orgId: string, token: string, accou
   }, "POST");
   const campaignId = camp.id;
 
-  // 2. Conjunto de anúncios
+  // 2. Conjunto de anúncios + criativos/anúncios
   if (!adset) return { ok: true, campaign_id: campaignId };
+  const { adsetId, adIds } = await createAdSetWithAds(supabase, orgId, token, acc, campaignId, { ...adset, nome: adset.nome || `${nome} - Conjunto 1` }, creatives, status_inicial);
+  return { ok: true, campaign_id: campaignId, adset_id: adsetId, ad_ids: adIds };
+}
+
+// Cria um conjunto de anúncios numa campanha + os anúncios a partir dos criativos do Drive.
+async function createAdSetWithAds(
+  supabase: any, orgId: string, token: string, acc: string, campaignId: string,
+  adset: any, creatives: any[], statusInicial: string,
+): Promise<{ adsetId: string; adIds: string[] }> {
   const adsetParams: Record<string, any> = {
-    name: adset.nome || `${nome} - Conjunto 1`,
+    name: adset.nome || "Conjunto 1",
     campaign_id: campaignId,
-    status: status_inicial,
+    status: statusInicial,
     billing_event: adset.billing_event || "IMPRESSIONS",
     optimization_goal: adset.optimization_goal || "LINK_CLICKS",
     targeting: adset.targeting || { geo_locations: { countries: ["BR"] } },
@@ -208,18 +217,67 @@ async function createCampaign(supabase: any, orgId: string, token: string, accou
   if (adset.promoted_object) adsetParams.promoted_object = adset.promoted_object;
   const adsetRes = await graph(token, `/${acc}/adsets`, adsetParams, "POST");
   const adsetId = adsetRes.id;
+  const adIds = await createAdsFromCreatives(supabase, orgId, token, acc, adsetId, creatives, statusInicial);
+  return { adsetId, adIds };
+}
 
-  // 3. Criativos (a partir do Drive) + anúncios
+// Cria os anúncios (1 por criativo) dentro de um conjunto.
+async function createAdsFromCreatives(
+  supabase: any, orgId: string, token: string, acc: string, adsetId: string,
+  creatives: any[], statusInicial: string,
+): Promise<string[]> {
   const adIds: string[] = [];
   for (const cr of creatives) {
     const creativeId = await createCreativeFromDrive(supabase, orgId, token, acc, cr);
     const adRes = await graph(token, `/${acc}/ads`, {
       name: cr.ad_name || cr.file_name || "Anúncio",
-      adset_id: adsetId, creative: { creative_id: creativeId }, status: status_inicial,
+      adset_id: adsetId, creative: { creative_id: creativeId }, status: statusInicial,
     }, "POST");
     adIds.push(adRes.id);
   }
-  return { ok: true, campaign_id: campaignId, adset_id: adsetId, ad_ids: adIds };
+  return adIds;
+}
+
+// Cria um NOVO conjunto numa campanha existente.
+async function createAdSet(supabase: any, orgId: string, token: string, account: string, body: any) {
+  const acc = actId(account);
+  const { campaign_id, adset = {}, creatives = [], status_inicial = "PAUSED" } = body;
+  if (!campaign_id) throw new Error("campaign_id é obrigatório");
+  const { adsetId, adIds } = await createAdSetWithAds(supabase, orgId, token, acc, campaign_id, adset, creatives, status_inicial);
+  return { ok: true, adset_id: adsetId, ad_ids: adIds };
+}
+
+// Descobre o page_id do criativo de um anúncio existente do conjunto de origem.
+async function pageIdFromAdset(token: string, adsetId: string): Promise<string | null> {
+  try {
+    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec{page_id,instagram_actor_id}}", limit: 1 });
+    return r.data?.[0]?.creative?.object_story_spec?.page_id || null;
+  } catch { return null; }
+}
+
+// Duplica um conjunto existente (herda segmentação/orçamento) trocando os criativos.
+// Copia o conjunto SEM os anúncios (deep_copy:false) e cria novos anúncios com os criativos do Drive.
+async function duplicateAdSet(supabase: any, orgId: string, token: string, account: string, body: any) {
+  const acc = actId(account);
+  const { source_adset_id, target_campaign_id, novo_nome, status_inicial = "PAUSED", creatives = [], page_id } = body;
+  if (!source_adset_id) throw new Error("source_adset_id é obrigatório");
+
+  const copyParams: Record<string, any> = {
+    deep_copy: false, // só a config do conjunto, sem os anúncios antigos
+    status_option: status_inicial === "ACTIVE" ? "INHERITED_FROM_SOURCE" : "PAUSED",
+  };
+  if (target_campaign_id) copyParams.campaign_id = target_campaign_id;
+  const res = await graph(token, `/${source_adset_id}/copies`, copyParams, "POST");
+  const newAdsetId = res.copied_adset_id || res.copied_ad_set_id || res.id;
+  if (novo_nome && newAdsetId) { try { await graph(token, `/${newAdsetId}`, { name: novo_nome }, "POST"); } catch { /* nome opcional */ } }
+
+  let adIds: string[] = [];
+  if (creatives.length) {
+    const pg = page_id || await pageIdFromAdset(token, source_adset_id);
+    const crs = creatives.map((c: any) => ({ ...c, page_id: c.page_id || pg }));
+    adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
+  }
+  return { ok: true, adset_id: newAdsetId, ad_ids: adIds };
 }
 
 // Baixa um criativo do Drive (via google-sheets), faz upload ao Meta e cria o adcreative.
@@ -313,6 +371,12 @@ Deno.serve(async (req) => {
     }
     if (action === "create_campaign") {
       return json(await createCampaign(supabase, orgId, token, account, body));
+    }
+    if (action === "create_adset") {
+      return json(await createAdSet(supabase, orgId, token, account, body));
+    }
+    if (action === "duplicate_adset") {
+      return json(await duplicateAdSet(supabase, orgId, token, account, body));
     }
     if (action === "update_entity") {
       return json(await updateEntity(supabase, orgId, token, body));

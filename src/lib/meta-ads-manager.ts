@@ -42,6 +42,14 @@ export async function updateEntity(args: { entity_id: string; nivel?: "campaign"
   return invoke<{ ok: boolean }>("meta-ads-manager", { action: "update_entity", ...args });
 }
 
+export async function createAdSet(payload: Record<string, unknown>) {
+  return invoke<{ ok: boolean; adset_id: string; ad_ids?: string[] }>("meta-ads-manager", { action: "create_adset", ...payload });
+}
+
+export async function duplicateAdSet(payload: Record<string, unknown>) {
+  return invoke<{ ok: boolean; adset_id: string; ad_ids?: string[] }>("meta-ads-manager", { action: "duplicate_adset", ...payload });
+}
+
 // ---- Drive (reaproveita a conexão Google da org) ----
 export async function listDriveFolders(): Promise<DriveFolder[]> {
   const d = await invoke<{ folders: DriveFolder[] }>("google-sheets", { action: "list_drive_folders" });

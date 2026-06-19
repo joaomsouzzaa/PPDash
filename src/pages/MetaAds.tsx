@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
 import {
   listCampaigns, listSourceCampaigns, duplicateCampaign, createCampaign, updateEntity,
-  listDriveFolders, listDriveFiles, getDriveConfig,
+  createAdSet, duplicateAdSet, listDriveFolders, listDriveFiles, getDriveConfig,
   type CampaignTree, type SourceCampaign, type DriveFolder, type DriveFile,
 } from "@/lib/meta-ads-manager";
 
@@ -246,20 +246,93 @@ function Gerenciador({ accountId }: { accountId: string }) {
 }
 
 // ============================= Aba 2: Wizard (nova/duplicar) =============================
-function Wizard({ accountId }: { accountId: string }) {
-  const [modo, setModo] = useState<"duplicar" | "zero">("duplicar");
+// Seletor de criativos do Drive reutilizável: escolhe a pasta e marca os arquivos.
+// Notifica o pai com os DriveFile selecionados.
+function CreativePicker({ onChange }: { onChange: (files: DriveFile[]) => void }) {
+  const [folders, setFolders] = useState<DriveFolder[]>([]);
+  const [folderId, setFolderId] = useState("");
+  const [files, setFiles] = useState<DriveFile[]>([]);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    listDriveFolders().then(setFolders).catch(() => { /* drive não conectado */ });
+    getDriveConfig().then((c) => { if (c?.pasta_criativos_id) setFolderId(c.pasta_criativos_id); }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!folderId) return;
+    setLoading(true);
+    listDriveFiles(folderId).then((f) => { setFiles(f); setSel(new Set()); })
+      .catch((e) => toast.error(e?.message)).finally(() => setLoading(false));
+  }, [folderId]);
+
+  useEffect(() => { onChange(files.filter((f) => sel.has(f.id))); }, [sel, files]);
+
+  const toggle = (id: string) => setSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
-    <div className="space-y-4 max-w-3xl">
-      <div className="flex gap-2">
-        <Button variant={modo === "duplicar" ? "default" : "outline"} size="sm" onClick={() => setModo("duplicar")}>
-          <Copy className="h-4 w-4 mr-2" /> Duplicar existente
-        </Button>
-        <Button variant={modo === "zero" ? "default" : "outline"} size="sm" onClick={() => setModo("zero")}>
-          <Plus className="h-4 w-4 mr-2" /> Criar do zero
-        </Button>
+    <div className="border-t pt-3">
+      <div className="flex items-center gap-2 mb-2">
+        <FolderOpen className="h-4 w-4 text-muted-foreground" />
+        <Label className="text-xs">Pasta de criativos no Drive</Label>
       </div>
-      {modo === "duplicar" ? <WizardDuplicar accountId={accountId} /> : <WizardZero accountId={accountId} />}
+      <Select value={folderId} onValueChange={setFolderId}>
+        <SelectTrigger><SelectValue placeholder={folders.length ? "Selecione a pasta" : "Conecte o Google em Integrações"} /></SelectTrigger>
+        <SelectContent>{folders.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+      </Select>
+      {loading ? (
+        <div className="py-4 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Carregando criativos...</div>
+      ) : files.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs text-muted-foreground mb-2">{files.length} criativo(s) na pasta — marque quais subir ({sel.size} selecionado(s)):</p>
+          <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto">
+            {files.map((f) => (
+              <label key={f.id} className={`border rounded-lg p-2 cursor-pointer flex flex-col gap-1 ${sel.has(f.id) ? "border-primary bg-primary/5" : "border-border"}`}>
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={sel.has(f.id)} onCheckedChange={() => toggle(f.id)} />
+                  <span className="text-xs truncate flex-1">{f.name}</span>
+                </div>
+                {f.thumbnailLink && <img src={f.thumbnailLink} alt={f.name} className="w-full h-20 object-cover rounded" />}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Converte DriveFiles selecionados em payload de criativos.
+const toCreatives = (files: DriveFile[], pageId: string, message: string, link: string) =>
+  files.map((f) => ({
+    file_id: f.id, file_name: f.name, mime: f.mimeType, ad_name: f.name,
+    page_id: pageId || undefined, message, link: link || undefined,
+    call_to_action: link ? "LEARN_MORE" : undefined,
+  }));
+
+type WizardModo = "duplicar" | "zero" | "novo-conjunto" | "dup-conjunto";
+function Wizard({ accountId }: { accountId: string }) {
+  const [modo, setModo] = useState<WizardModo>("duplicar");
+  const botoes: { k: WizardModo; label: string; icon: any }[] = [
+    { k: "duplicar", label: "Duplicar campanha", icon: Copy },
+    { k: "zero", label: "Criar do zero", icon: Plus },
+    { k: "novo-conjunto", label: "Novo conjunto", icon: Plus },
+    { k: "dup-conjunto", label: "Duplicar conjunto (trocar criativos)", icon: Copy },
+  ];
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <div className="flex gap-2 flex-wrap">
+        {botoes.map((b) => (
+          <Button key={b.k} variant={modo === b.k ? "default" : "outline"} size="sm" onClick={() => setModo(b.k)}>
+            <b.icon className="h-4 w-4 mr-2" /> {b.label}
+          </Button>
+        ))}
+      </div>
+      {modo === "duplicar" && <WizardDuplicar accountId={accountId} />}
+      {modo === "zero" && <WizardZero accountId={accountId} />}
+      {modo === "novo-conjunto" && <WizardNovoConjunto accountId={accountId} />}
+      {modo === "dup-conjunto" && <WizardDuplicarConjunto accountId={accountId} />}
     </div>
   );
 }
@@ -330,46 +403,19 @@ function WizardZero({ accountId }: { accountId: string }) {
   const [message, setMessage] = useState("");
   const [ativa, setAtiva] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Drive
-  const [folders, setFolders] = useState<DriveFolder[]>([]);
-  const [folderId, setFolderId] = useState("");
-  const [files, setFiles] = useState<DriveFile[]>([]);
-  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
-  const [loadingDrive, setLoadingDrive] = useState(false);
-
-  useEffect(() => {
-    listDriveFolders().then(setFolders).catch(() => { /* drive não conectado */ });
-    getDriveConfig().then((c) => { if (c?.pasta_criativos_id) setFolderId(c.pasta_criativos_id); }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!folderId) return;
-    setLoadingDrive(true);
-    listDriveFiles(folderId).then((f) => { setFiles(f); setSelecionados(new Set()); })
-      .catch((e) => toast.error(e?.message)).finally(() => setLoadingDrive(false));
-  }, [folderId]);
-
-  const toggle = (id: string) => setSelecionados((prev) => {
-    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
-  });
+  const [creativeFiles, setCreativeFiles] = useState<DriveFile[]>([]);
 
   const criar = async () => {
     if (!nome || !objetivo) { toast.error("Preencha nome e objetivo"); return; }
     if (!pageId) { toast.error("Informe o page_id da Página do Facebook"); return; }
-    if (selecionados.size === 0) { toast.error("Selecione ao menos um criativo"); return; }
+    if (creativeFiles.length === 0) { toast.error("Selecione ao menos um criativo"); return; }
     setSaving(true);
     try {
-      const creatives = files.filter((f) => selecionados.has(f.id)).map((f) => ({
-        file_id: f.id, file_name: f.name, mime: f.mimeType, ad_name: f.name,
-        page_id: pageId, message, link: link || undefined,
-        call_to_action: link ? "LEARN_MORE" : undefined,
-      }));
       const r = await createCampaign({
         account_id: accountId, nome, objetivo, status_inicial: ativa ? "ACTIVE" : "PAUSED",
         daily_budget: budget ? Number(budget) : undefined,
         adset: { nome: `${nome} - Conjunto 1`, daily_budget: budget ? Number(budget) : undefined },
-        creatives,
+        creatives: toCreatives(creativeFiles, pageId, message, link),
       });
       toast.success(`Campanha criada (id ${r.campaign_id}) com ${r.ad_ids?.length || 0} anúncio(s).`);
     } catch (e: any) {
@@ -404,37 +450,7 @@ function WizardZero({ accountId }: { accountId: string }) {
         </div>
         <div><Label className="text-xs">Texto do anúncio</Label><Textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} /></div>
 
-        <div className="border-t pt-3">
-          <div className="flex items-center gap-2 mb-2">
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-            <Label className="text-xs">Pasta de criativos no Drive</Label>
-          </div>
-          <Select value={folderId} onValueChange={setFolderId}>
-            <SelectTrigger><SelectValue placeholder={folders.length ? "Selecione a pasta" : "Conecte o Google em Integrações"} /></SelectTrigger>
-            <SelectContent>
-              {folders.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          {loadingDrive ? (
-            <div className="py-4 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Carregando criativos...</div>
-          ) : files.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs text-muted-foreground mb-2">{files.length} criativo(s) na pasta — marque quais subir ({selecionados.size} selecionado(s)):</p>
-              <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto">
-                {files.map((f) => (
-                  <label key={f.id} className={`border rounded-lg p-2 cursor-pointer flex flex-col gap-1 ${selecionados.has(f.id) ? "border-primary bg-primary/5" : "border-border"}`}>
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={selecionados.has(f.id)} onCheckedChange={() => toggle(f.id)} />
-                      <span className="text-xs truncate flex-1">{f.name}</span>
-                    </div>
-                    {f.thumbnailLink && <img src={f.thumbnailLink} alt={f.name} className="w-full h-20 object-cover rounded" />}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <CreativePicker onChange={setCreativeFiles} />
 
         <div className="flex items-center gap-2">
           <Switch checked={ativa} onCheckedChange={setAtiva} id="ativa-zero" />
@@ -442,6 +458,174 @@ function WizardZero({ accountId }: { accountId: string }) {
         </div>
         <Button onClick={criar} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />} Criar campanha
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Novo conjunto numa campanha existente.
+function WizardNovoConjunto({ accountId }: { accountId: string }) {
+  const [tree, setTree] = useState<CampaignTree[]>([]);
+  const [loadingTree, setLoadingTree] = useState(false);
+  const [campaignId, setCampaignId] = useState("");
+  const [nome, setNome] = useState("");
+  const [budget, setBudget] = useState("");
+  const [otim, setOtim] = useState("LINK_CLICKS");
+  const [pageId, setPageId] = useState("");
+  const [link, setLink] = useState("");
+  const [message, setMessage] = useState("");
+  const [ativa, setAtiva] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [creativeFiles, setCreativeFiles] = useState<DriveFile[]>([]);
+
+  useEffect(() => {
+    if (!accountId) return;
+    setLoadingTree(true);
+    listCampaigns(accountId).then(setTree).catch((e) => toast.error(e?.message)).finally(() => setLoadingTree(false));
+  }, [accountId]);
+
+  const criar = async () => {
+    if (!campaignId) { toast.error("Escolha a campanha"); return; }
+    if (!pageId) { toast.error("Informe o page_id da Página do Facebook"); return; }
+    if (creativeFiles.length === 0) { toast.error("Selecione ao menos um criativo"); return; }
+    setSaving(true);
+    try {
+      const r = await createAdSet({
+        account_id: accountId, campaign_id: campaignId, status_inicial: ativa ? "ACTIVE" : "PAUSED",
+        adset: { nome: nome || "Novo conjunto", daily_budget: budget ? Number(budget) : undefined, optimization_goal: otim },
+        creatives: toCreatives(creativeFiles, pageId, message, link),
+      });
+      toast.success(`Conjunto criado (id ${r.adset_id}) com ${r.ad_ids?.length || 0} anúncio(s).`);
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao criar conjunto");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">Novo conjunto em campanha existente</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="text-xs">Campanha {loadingTree && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}</Label>
+          <Select value={campaignId} onValueChange={setCampaignId}>
+            <SelectTrigger><SelectValue placeholder="Selecione a campanha" /></SelectTrigger>
+            <SelectContent>{tree.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label className="text-xs">Nome do conjunto</Label><Input value={nome} onChange={(e) => setNome(e.target.value)} /></div>
+          <div>
+            <Label className="text-xs">Otimização</Label>
+            <Select value={otim} onValueChange={setOtim}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="LINK_CLICKS">Cliques no link</SelectItem>
+                <SelectItem value="LANDING_PAGE_VIEWS">Visitas à LP</SelectItem>
+                <SelectItem value="LEAD_GENERATION">Leads</SelectItem>
+                <SelectItem value="OFFSITE_CONVERSIONS">Conversões</SelectItem>
+                <SelectItem value="REACH">Alcance</SelectItem>
+                <SelectItem value="IMPRESSIONS">Impressões</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div><Label className="text-xs">Orçamento diário (R$)</Label><Input type="number" step="0.01" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="vazio = usa CBO da campanha" /></div>
+          <div><Label className="text-xs">Page ID (Facebook)</Label><Input value={pageId} onChange={(e) => setPageId(e.target.value)} /></div>
+          <div><Label className="text-xs">Link de destino</Label><Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://..." /></div>
+        </div>
+        <div><Label className="text-xs">Texto do anúncio</Label><Textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} /></div>
+
+        <CreativePicker onChange={setCreativeFiles} />
+
+        <div className="flex items-center gap-2">
+          <Switch checked={ativa} onCheckedChange={setAtiva} id="ativa-nc" />
+          <Label htmlFor="ativa-nc" className="text-sm">Subir já ativo (padrão: pausado)</Label>
+        </div>
+        <Button onClick={criar} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />} Criar conjunto
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Duplica um conjunto existente trocando apenas os criativos (herda segmentação/orçamento).
+function WizardDuplicarConjunto({ accountId }: { accountId: string }) {
+  const [tree, setTree] = useState<CampaignTree[]>([]);
+  const [loadingTree, setLoadingTree] = useState(false);
+  const [campaignId, setCampaignId] = useState("");
+  const [adsetId, setAdsetId] = useState("");
+  const [nome, setNome] = useState("");
+  const [pageId, setPageId] = useState("");
+  const [link, setLink] = useState("");
+  const [message, setMessage] = useState("");
+  const [ativa, setAtiva] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [creativeFiles, setCreativeFiles] = useState<DriveFile[]>([]);
+
+  useEffect(() => {
+    if (!accountId) return;
+    setLoadingTree(true);
+    listCampaigns(accountId).then(setTree).catch((e) => toast.error(e?.message)).finally(() => setLoadingTree(false));
+  }, [accountId]);
+
+  const adsets = tree.find((c) => c.id === campaignId)?.adsets || [];
+
+  const duplicar = async () => {
+    if (!adsetId) { toast.error("Escolha o conjunto base"); return; }
+    if (creativeFiles.length === 0) { toast.error("Selecione ao menos um criativo novo"); return; }
+    setSaving(true);
+    try {
+      const r = await duplicateAdSet({
+        account_id: accountId, source_adset_id: adsetId, target_campaign_id: campaignId || undefined,
+        novo_nome: nome || undefined, status_inicial: ativa ? "ACTIVE" : "PAUSED",
+        page_id: pageId || undefined,
+        creatives: toCreatives(creativeFiles, pageId, message, link),
+      });
+      toast.success(`Conjunto duplicado (id ${r.adset_id}) com ${r.ad_ids?.length || 0} criativo(s) novo(s).`);
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao duplicar conjunto");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">Duplicar conjunto trocando os criativos</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">Herda toda a segmentação e orçamento do conjunto escolhido; só os criativos mudam.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Campanha {loadingTree && <Loader2 className="inline h-3 w-3 animate-spin ml-1" />}</Label>
+            <Select value={campaignId} onValueChange={(v) => { setCampaignId(v); setAdsetId(""); }}>
+              <SelectTrigger><SelectValue placeholder="Selecione a campanha" /></SelectTrigger>
+              <SelectContent>{tree.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Conjunto base</Label>
+            <Select value={adsetId} onValueChange={setAdsetId} disabled={!campaignId}>
+              <SelectTrigger><SelectValue placeholder={campaignId ? "Selecione o conjunto" : "Escolha a campanha"} /></SelectTrigger>
+              <SelectContent>{adsets.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div><Label className="text-xs">Novo nome (opcional)</Label><Input value={nome} onChange={(e) => setNome(e.target.value)} /></div>
+          <div><Label className="text-xs">Page ID (opcional)</Label><Input value={pageId} onChange={(e) => setPageId(e.target.value)} placeholder="vazio = mesma página do conjunto base" /></div>
+          <div><Label className="text-xs">Link de destino</Label><Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://..." /></div>
+        </div>
+        <div><Label className="text-xs">Texto do anúncio</Label><Textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} /></div>
+
+        <CreativePicker onChange={setCreativeFiles} />
+
+        <div className="flex items-center gap-2">
+          <Switch checked={ativa} onCheckedChange={setAtiva} id="ativa-dc" />
+          <Label htmlFor="ativa-dc" className="text-sm">Subir já ativo (padrão: pausado)</Label>
+        </div>
+        <Button onClick={duplicar} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Copy className="h-4 w-4 mr-2" />} Duplicar conjunto
         </Button>
       </CardContent>
     </Card>

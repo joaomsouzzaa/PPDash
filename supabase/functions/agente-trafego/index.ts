@@ -80,6 +80,28 @@ const TOOLS = [
   { name: "meta_listar_campanhas", description: "Lista as campanhas atuais da conta (espelho do gerenciador).", input_schema: { type: "object", properties: {}, required: [] } },
   { name: "meta_listar_campanhas_base", description: "Lista campanhas existentes que podem servir de base para duplicação.", input_schema: { type: "object", properties: {}, required: [] } },
   { name: "meta_duplicar_campanha", description: "Duplica uma campanha existente como base para uma nova (cópia profunda).", input_schema: { type: "object", properties: { source_campaign_id: { type: "string" }, novo_nome: { type: "string" }, status_inicial: { type: "string", enum: ["PAUSED", "ACTIVE"] } }, required: ["source_campaign_id"] } },
+  {
+    name: "meta_novo_conjunto", description: "Cria um NOVO conjunto de anúncios dentro de uma campanha existente, com criativos do Drive.",
+    input_schema: {
+      type: "object",
+      properties: {
+        campaign_id: { type: "string" }, status_inicial: { type: "string", enum: ["PAUSED", "ACTIVE"] },
+        adset: { type: "object", properties: { nome: { type: "string" }, daily_budget: { type: "number" }, optimization_goal: { type: "string" }, billing_event: { type: "string" }, targeting: { type: "object" }, promoted_object: { type: "object" } } },
+        creatives: { type: "array", items: { type: "object", properties: { file_id: { type: "string" }, file_name: { type: "string" }, mime: { type: "string" }, ad_name: { type: "string" }, page_id: { type: "string" }, message: { type: "string" }, link: { type: "string" }, call_to_action: { type: "string" } }, required: ["file_id", "page_id"] } },
+      }, required: ["campaign_id"],
+    },
+  },
+  {
+    name: "meta_duplicar_conjunto", description: "Duplica um conjunto existente (herda segmentação/orçamento) trocando APENAS os criativos. Use quando o usuário quer o mesmo conjunto com criativos novos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        source_adset_id: { type: "string" }, target_campaign_id: { type: "string" }, novo_nome: { type: "string" },
+        status_inicial: { type: "string", enum: ["PAUSED", "ACTIVE"] }, page_id: { type: "string" },
+        creatives: { type: "array", items: { type: "object", properties: { file_id: { type: "string" }, file_name: { type: "string" }, mime: { type: "string" }, ad_name: { type: "string" }, page_id: { type: "string" }, message: { type: "string" }, link: { type: "string" }, call_to_action: { type: "string" } }, required: ["file_id"] } },
+      }, required: ["source_adset_id", "creatives"],
+    },
+  },
   { name: "meta_atualizar", description: "Atualiza status, orçamento ou nome de uma campanha/conjunto/anúncio.", input_schema: { type: "object", properties: { entity_id: { type: "string" }, nivel: { type: "string", enum: ["campaign", "adset", "ad"] }, status: { type: "string", enum: ["ACTIVE", "PAUSED"] }, daily_budget: { type: "number" }, name: { type: "string" } }, required: ["entity_id"] } },
   {
     name: "meta_criar_campanha", description: "Cria uma campanha completa do zero (campanha → conjunto → criativos do Drive → anúncios). Só chame após confirmação do usuário.",
@@ -127,6 +149,10 @@ async function runTool(name: string, input: any, orgId: string): Promise<any> {
       return await callFn("meta-ads-manager", { action: "list_source_campaigns", org_id: orgId });
     case "meta_duplicar_campanha":
       return await callFn("meta-ads-manager", { action: "duplicate_campaign", org_id: orgId, ...input });
+    case "meta_novo_conjunto":
+      return await callFn("meta-ads-manager", { action: "create_adset", org_id: orgId, ...input });
+    case "meta_duplicar_conjunto":
+      return await callFn("meta-ads-manager", { action: "duplicate_adset", org_id: orgId, ...input });
     case "meta_atualizar":
       return await callFn("meta-ads-manager", { action: "update_entity", org_id: orgId, ...input });
     case "meta_criar_campanha":
