@@ -55,20 +55,31 @@
 
 ---
 
-## Integração Meta — validar mapeamento de campos com lead real
+## ~~Integração Meta — validar mapeamento de campos com lead real~~ ✅ CONCLUÍDO (2026-06-18)
 
-**Status:** pendente de um lead real (teste foi com dados dummy do Meta).
+**Status:** validado com leads reais. 5 leads da Crepfy entraram em 18/06 e o `mapMetaFields`
+(`supabase/functions/meta-leads/index.ts`) jogou tudo nas colunas certas — nome, email,
+telefone/whatsapp, cidade (bug "Cidade pegando Capacidade" confirmado resolvido), e
+`custom` com uf/sobrenome/capacidade_investimento.
 
-- O mapeamento dos campos do formulário Crepfy está implementado em
-  `supabase/functions/meta-leads/index.ts` (`mapMetaFields`). Bug do "Cidade pegando
-  Capacidade" já corrigido (v2).
-- Quando entrar o **primeiro lead real** do Meta, conferir campo a campo (nome, sobrenome,
-  email, telefone, UF, capacidade de investimento) se caíram nas colunas certas. Ajustar
-  `mapMetaFields` se algum formulário tiver nomes de campo diferentes.
+- Ajuste extra aplicado: `normalizarUf()` converte estado por extenso → sigla (o Meta mandava
+  ora "MG", ora "Minas Gerais"). A coluna `custom.uf` agora sai padronizada em 2 letras.
+- Pendência cosmética (opcional, não bloqueia): `capacidade_investimento` ainda guarda o slug
+  cru do Meta (`entre_r$_80_mil_e_r$_120_mil...`); mapear pra rótulo limpo se for exibido.
 
 ---
 
-## Meta Lead Ads — rodar sincronização histórica após liberar `pages_manage_ads`
+## ~~Meta Lead Ads — rodar sincronização histórica após liberar `pages_manage_ads`~~ ✅ CONCLUÍDO (2026-06-19)
+
+**Status:** permissão liberada e sync histórica rodada. `POST /functions/v1/meta-leads-sync`
+`{"org_id":"58a4b4c2-1298-4535-ad21-2dac93fcd718","dias":18}` retornou 251 recebidos / 139
+inseridos / 112 já tinham / 1 atualizado / 0 avisos (sem mais o aviso `Requires pages_manage_ads`).
+Validação: 250 leads (19d), todos com utm_source=Meta; utm_campaign 249, utm_medium 249,
+utm_content 228. Top criativo `[Vd-Teste]` com 114 leads. Falta cruzar spend por ad p/ CAC.
+
+---
+
+## (histórico) Status original do item acima
 
 **Status:** aguardando permissão do Meta (≈24h após a 1ª solicitação, feita em 2026-06-18).
 

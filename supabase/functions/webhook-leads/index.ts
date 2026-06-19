@@ -326,7 +326,12 @@ function parseDateValue(value: unknown): string | null {
     const [, day, month, year] = ddmmyyyy;
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T12:00:00Z`;
   }
-  // Already ISO or other parseable format
+  // Data ISO só-data (YYYY-MM-DD, sem hora): ancorar ao meio-dia UTC para não
+  // deslocar o dia em BRT (UTC-3). new Date("YYYY-MM-DD") seria meia-noite UTC =
+  // 21h do dia anterior em BRT, jogando o lead para o dia errado no dashboard.
+  const isoDateOnly = s.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (isoDateOnly) return `${s}T12:00:00Z`;
+  // Já é ISO com hora ou outro formato parseável.
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d.toISOString();
 }

@@ -13,6 +13,26 @@ function svc() {
 }
 const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
+// Estados por extenso -> sigla. O Meta manda `state` ora como sigla, ora por extenso.
+const UF_POR_NOME: Record<string, string> = {
+  acre: "AC", alagoas: "AL", amapa: "AP", amazonas: "AM", bahia: "BA", ceara: "CE",
+  "distrito federal": "DF", "espirito santo": "ES", goias: "GO", maranhao: "MA",
+  "mato grosso": "MT", "mato grosso do sul": "MS", "minas gerais": "MG", para: "PA",
+  paraiba: "PB", parana: "PR", pernambuco: "PE", piaui: "PI", "rio de janeiro": "RJ",
+  "rio grande do norte": "RN", "rio grande do sul": "RS", rondonia: "RO", roraima: "RR",
+  "santa catarina": "SC", "sao paulo": "SP", sergipe: "SE", tocantins: "TO",
+};
+const SIGLAS_UF = new Set(Object.values(UF_POR_NOME));
+// Normaliza um valor de UF para a sigla de 2 letras (ou retorna o original se não reconhecer).
+function normalizarUf(v: string | null): string | null {
+  if (!v) return v;
+  const t = v.trim();
+  const up = t.toUpperCase();
+  if (up.length === 2 && SIGLAS_UF.has(up)) return up;
+  const k = norm(t);
+  return UF_POR_NOME[k] ?? t;
+}
+
 // Mapeia os campos do formulário do Meta (field_data) para colunas/custom do lead.
 function mapMetaFields(fd: { name: string; values: string[] }[]) {
   const byName: Record<string, string> = {};
@@ -27,7 +47,7 @@ function mapMetaFields(fd: { name: string; values: string[] }[]) {
   const fullName = exact("full_name") || [firstName, lastName].filter(Boolean).join(" ") || null;
   const custom: Record<string, unknown> = {};
   if (lastName) custom.sobrenome = lastName;
-  const uf = exact("state", "uf", "estado"); if (uf) custom.uf = uf;
+  const uf = normalizarUf(exact("state", "uf", "estado")); if (uf) custom.uf = uf;
   const cap = incl("capacidade", "investimento"); if (cap) custom.capacidade_investimento = cap;
   return {
     nome: fullName || firstName || null,
