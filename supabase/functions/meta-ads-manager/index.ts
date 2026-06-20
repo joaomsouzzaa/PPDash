@@ -293,25 +293,30 @@ async function pageIdFromAdset(token: string, adsetId: string): Promise<string |
 // Copia o conjunto SEM os anúncios (deep_copy:false) e cria novos anúncios com os criativos do Drive.
 async function duplicateAdSet(supabase: any, orgId: string, token: string, account: string, body: any) {
   const acc = actId(account);
-  const { source_adset_id, target_campaign_id, novo_nome, status_inicial = "PAUSED", creatives = [], page_id } = body;
+  const { source_adset_id, target_campaign_id, novo_nome, status_inicial = "PAUSED", page_id } = body;
   if (!source_adset_id) throw new Error("source_adset_id é obrigatório");
+  const creatives = Array.isArray(body.creatives) ? body.creatives : [];
+  const trocarCriativos = creatives.length > 0;
 
   const copyParams: Record<string, any> = {
-    deep_copy: false, // só a config do conjunto, sem os anúncios antigos
+    // Sem criativos novos: cópia COMPLETA (mantém os anúncios atuais).
+    // Com criativos novos: copia só a config (sem anúncios antigos) e adiciona os novos.
+    deep_copy: !trocarCriativos,
     status_option: status_inicial === "ACTIVE" ? "INHERITED_FROM_SOURCE" : "PAUSED",
   };
   if (target_campaign_id) copyParams.campaign_id = target_campaign_id;
   const res = await graph(token, `/${source_adset_id}/copies`, copyParams, "POST");
   const newAdsetId = res.copied_adset_id || res.copied_ad_set_id || res.id;
-  if (novo_nome && newAdsetId) { try { await graph(token, `/${newAdsetId}`, { name: novo_nome }, "POST"); } catch { /* nome opcional */ } }
+  if (!newAdsetId) throw new Error("O Meta não retornou o id do conjunto duplicado.");
+  if (novo_nome) { try { await graph(token, `/${newAdsetId}`, { name: novo_nome }, "POST"); } catch { /* nome opcional */ } }
 
   let adIds: string[] = [];
-  if (creatives.length) {
+  if (trocarCriativos) {
     const pg = page_id || await pageIdFromAdset(token, source_adset_id);
     const crs = creatives.map((c: any) => ({ ...c, page_id: c.page_id || pg }));
     adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
   }
-  return { ok: true, adset_id: newAdsetId, ad_ids: adIds };
+  return { ok: true, adset_id: newAdsetId, ad_ids: adIds, criativos_trocados: trocarCriativos };
 }
 
 // URL pública de download direto do Drive (funciona p/ arquivos grandes em pasta compartilhada).

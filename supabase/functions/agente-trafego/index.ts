@@ -145,14 +145,14 @@ const TOOLS = [
     },
   },
   {
-    name: "meta_duplicar_conjunto", description: "Duplica um conjunto existente (herda segmentação/orçamento) trocando APENAS os criativos. Use quando o usuário quer o mesmo conjunto com criativos novos.",
+    name: "meta_duplicar_conjunto", description: "Duplica um conjunto existente (herda segmentação/orçamento). SEM 'creatives' = cópia completa com os mesmos anúncios. COM 'creatives' = troca os criativos pelos novos do Drive.",
     input_schema: {
       type: "object",
       properties: {
         source_adset_id: { type: "string" }, target_campaign_id: { type: "string" }, novo_nome: { type: "string" },
         status_inicial: { type: "string", enum: ["PAUSED", "ACTIVE"] }, page_id: { type: "string" },
-        creatives: { type: "array", items: { type: "object", properties: { file_id: { type: "string" }, file_name: { type: "string" }, mime: { type: "string" }, ad_name: { type: "string" }, page_id: { type: "string" }, message: { type: "string" }, link: { type: "string" }, call_to_action: { type: "string" } }, required: ["file_id"] } },
-      }, required: ["source_adset_id", "creatives"],
+        creatives: { type: "array", description: "opcional; deixe vazio para copiar com os mesmos anúncios", items: { type: "object", properties: { file_id: { type: "string" }, file_name: { type: "string" }, mime: { type: "string" }, ad_name: { type: "string" }, page_id: { type: "string" }, message: { type: "string" }, link: { type: "string" }, call_to_action: { type: "string" } }, required: ["file_id"] } },
+      }, required: ["source_adset_id"],
     },
   },
   { name: "meta_atualizar", description: "Atualiza status, orçamento ou nome de uma campanha/conjunto/anúncio.", input_schema: { type: "object", properties: { entity_id: { type: "string" }, nivel: { type: "string", enum: ["campaign", "adset", "ad"] }, status: { type: "string", enum: ["ACTIVE", "PAUSED"] }, daily_budget: { type: "number" }, name: { type: "string" } }, required: ["entity_id"] } },
