@@ -337,56 +337,62 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
   const creatives = Array.isArray(body.creatives) ? body.creatives : [];
   const trocarCriativos = creatives.length > 0;
 
-  const copyParams: Record<string, any> = {
-    // Sem criativos novos: cópia COMPLETA (mantém os anúncios atuais).
-    // Com criativos novos: copia só a config (sem anúncios antigos) e adiciona os novos.
-    deep_copy: !trocarCriativos,
-    status_option: status_inicial === "ACTIVE" ? "INHERITED_FROM_SOURCE" : "PAUSED",
+  // SEM trocar criativos: cópia completa (mantém os anúncios atuais) via /copies.
+  if (!trocarCriativos) {
+    const copyParams: Record<string, any> = { deep_copy: true, status_option: status_inicial === "ACTIVE" ? "INHERITED_FROM_SOURCE" : "PAUSED" };
+    if (target_campaign_id) copyParams.campaign_id = target_campaign_id;
+    const res = await graph(token, `/${source_adset_id}/copies`, copyParams, "POST");
+    const newAdsetId = res.copied_adset_id || res.copied_ad_set_id || res.id;
+    if (!newAdsetId) throw new Error("O Meta não retornou o id do conjunto duplicado.");
+    const patch: Record<string, any> = {};
+    if (novo_nome) patch.name = novo_nome;
+    if (body.daily_budget != null) patch.daily_budget = Math.round(Number(body.daily_budget) * 100);
+    if (Object.keys(patch).length) { try { await graph(token, `/${newAdsetId}`, patch, "POST"); } catch { /* opcional */ } }
+    return { ok: true, adset_id: newAdsetId, ad_ids: [], criativos_trocados: false };
+  }
+
+  // TROCAR criativos com VÁRIAS mídias em 1 anúncio exige conjunto de "criativo dinâmico".
+  // Como não dá p/ ligar esse modo num conjunto copiado, recriamos o conjunto já dinâmico,
+  // herdando segmentação/orçamento/otimização/pixel da origem, e criamos 1 anúncio dinâmico.
+  const src = await sourceCreativeDefaults(token, source_adset_id);
+  let pg = page_id || src.page_id;
+  if (!pg) pg = await pageFromAccount(token, acc);
+
+  const sa = await graph(token, `/${source_adset_id}`, { fields: "name,campaign_id,optimization_goal,billing_event,bid_strategy,daily_budget,lifetime_budget,destination_type,promoted_object,attribution_spec,targeting" });
+  const adsetParams: Record<string, any> = {
+    name: novo_nome || sa.name || "Conjunto duplicado",
+    campaign_id: target_campaign_id || sa.campaign_id,
+    is_dynamic_creative: true,
+    status: status_inicial,
+    optimization_goal: sa.optimization_goal,
+    billing_event: sa.billing_event,
+    bid_strategy: sa.bid_strategy,
+    targeting: sa.targeting,
   };
-  if (target_campaign_id) copyParams.campaign_id = target_campaign_id;
-  const res = await graph(token, `/${source_adset_id}/copies`, copyParams, "POST");
-  const newAdsetId = res.copied_adset_id || res.copied_ad_set_id || res.id;
-  if (!newAdsetId) throw new Error("O Meta não retornou o id do conjunto duplicado.");
-  const patch: Record<string, any> = {};
-  if (novo_nome) patch.name = novo_nome;
-  // Orçamento: se não informado, mantém o do conjunto original (herdado pela cópia).
-  if (body.daily_budget != null) patch.daily_budget = Math.round(Number(body.daily_budget) * 100);
-  if (Object.keys(patch).length) { try { await graph(token, `/${newAdsetId}`, patch, "POST"); } catch { /* opcional */ } }
+  if (body.daily_budget != null) adsetParams.daily_budget = Math.round(Number(body.daily_budget) * 100);
+  else if (sa.daily_budget && Number(sa.daily_budget) > 0) adsetParams.daily_budget = Number(sa.daily_budget);
+  else if (sa.lifetime_budget && Number(sa.lifetime_budget) > 0) adsetParams.lifetime_budget = Number(sa.lifetime_budget);
+  if (sa.promoted_object) adsetParams.promoted_object = sa.promoted_object;
+  if (sa.attribution_spec) adsetParams.attribution_spec = sa.attribution_spec;
+  if (sa.destination_type && sa.destination_type !== "UNDEFINED") adsetParams.destination_type = sa.destination_type;
+
+  const newAdsetRes = await graph(token, `/${acc}/adsets`, adsetParams, "POST");
+  const newAdsetId = newAdsetRes.id;
+  if (!newAdsetId) throw new Error("Falha ao criar o conjunto dinâmico.");
 
   let adIds: string[] = [];
-  if (trocarCriativos) {
-    // Herda página/IG/link/CTA/textos do anúncio original e cria UM anúncio flexível
-    // (dinâmico) com TODAS as mídias novas — igual à estrutura do anúncio de origem.
-    const src = await sourceCreativeDefaults(token, source_adset_id);
-    let pg = page_id || src.page_id;
-    if (!pg) pg = await pageFromAccount(token, acc);
-    const baseOpts = {
+  try {
+    adIds = await createDynamicAd(supabase, orgId, token, acc, newAdsetId, creatives, {
       page_id: pg, instagram_user_id: src.instagram_user_id,
       link: body.link || src.link, call_to_action: body.call_to_action || src.call_to_action,
-      message: body.message || src.message, raw: src.raw,
+      message: body.message || src.message, srcFeed: src.raw?.asset_feed_spec,
       name: novo_nome, ad_name: body.ad_name || novo_nome,
-    };
-    try {
-      // Tenta 1 anúncio "Flexível/Advantage+" com todas as mídias (igual à origem).
-      adIds = await createFlexibleAd(supabase, orgId, token, acc, newAdsetId, creatives, baseOpts, status_inicial);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      // Se o Meta exigir conjunto dinâmico, cai para 1 anúncio por mídia.
-      if (/din[aâ]mic/i.test(msg)) {
-        try {
-          const crs = creatives.map((c: any) => ({ ...c, page_id: c.page_id || pg, link: c.link || baseOpts.link, call_to_action: c.call_to_action || src.call_to_action, message: c.message ?? baseOpts.message }));
-          adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
-        } catch (e2) {
-          try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
-          throw e2;
-        }
-      } else {
-        try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
-        throw e;
-      }
-    }
+    }, status_inicial);
+  } catch (e) {
+    try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
+    throw e;
   }
-  return { ok: true, adset_id: newAdsetId, ad_ids: adIds, criativos_trocados: trocarCriativos };
+  return { ok: true, adset_id: newAdsetId, ad_ids: adIds, criativos_trocados: true };
 }
 
 // URL pública de download direto do Drive (funciona p/ arquivos grandes em pasta compartilhada).
@@ -483,43 +489,35 @@ async function createCreativeFromDrive(
   return creative.id;
 }
 
-// Cria UM anúncio "Flexível / Advantage+" com TODAS as mídias num único anúncio,
-// CLONANDO a estrutura do anúncio de origem (asset_feed_spec + degrees_of_freedom_spec,
-// que é o que faz o Meta tratar como Advantage+ e NÃO como criativo dinâmico) e só
-// trocando os vídeos/imagens. Funciona em conjunto normal.
-async function createFlexibleAd(
+// Cria UM anúncio dinâmico (em conjunto is_dynamic_creative=true) com TODAS as mídias
+// num único anúncio, herdando textos/títulos/link/CTA/página da origem.
+async function createDynamicAd(
   supabase: any, orgId: string, token: string, acc: string, adsetId: string,
-  creatives: any[], opts: { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; raw?: any; name?: string; ad_name?: string },
+  creatives: any[], opts: { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; srcFeed?: any; name?: string; ad_name?: string },
   statusInicial: string,
 ): Promise<string[]> {
   if (!opts.page_id) throw new Error("Não encontrei a página do Facebook do anúncio de origem.");
+  const link = opts.link;
+  if (!link) throw new Error("Não encontrei o link de destino no anúncio de origem; informe o link.");
   const media = await Promise.all(creatives.map((c) => uploadDriveMedia(supabase, orgId, token, acc, c)));
   const videos = media.filter((m) => m.is_video).map((m) => ({ video_id: m.video_id, thumbnail_url: m.thumbnail_url }));
   const images = media.filter((m) => !m.is_video).map((m) => ({ hash: m.image_hash }));
 
-  // Clona o asset_feed_spec da origem e troca só as mídias.
-  const feed: any = opts.raw?.asset_feed_spec ? JSON.parse(JSON.stringify(opts.raw.asset_feed_spec)) : {};
-  if (videos.length) feed.videos = videos; else delete feed.videos;
-  if (images.length) feed.images = images; else if (!videos.length) feed.images = [];
-  if (!feed.ad_formats?.length) feed.ad_formats = [videos.length ? "SINGLE_VIDEO" : "SINGLE_IMAGE"];
-  if (!feed.bodies?.length) feed.bodies = [{ text: opts.message || "" }];
-  if (!feed.call_to_action_types?.length) feed.call_to_action_types = [opts.call_to_action || "LEARN_MORE"];
-  // Link: garante website_url + display_url (o Meta exige os dois).
-  if (feed.link_urls?.length) {
-    feed.link_urls = feed.link_urls.map((l: any) => ({ ...l, display_url: l.display_url || l.website_url }));
-  } else if (opts.link) {
-    feed.link_urls = [{ website_url: opts.link, display_url: opts.link }];
-  } else {
-    throw new Error("Não encontrei o link de destino no anúncio de origem; informe o link.");
-  }
+  const feed: any = {
+    ...(videos.length ? { videos } : {}),
+    ...(images.length ? { images } : {}),
+    bodies: (opts.srcFeed?.bodies?.length ? opts.srcFeed.bodies : [{ text: opts.message || "" }]),
+    ad_formats: [videos.length ? "SINGLE_VIDEO" : "SINGLE_IMAGE"],
+    call_to_action_types: [opts.call_to_action || "LEARN_MORE"],
+    link_urls: [{ website_url: link, display_url: link }],
+  };
+  if (opts.srcFeed?.titles?.length) feed.titles = opts.srcFeed.titles;
+  if (opts.srcFeed?.descriptions?.some?.((d: any) => (d?.text || "").trim())) feed.descriptions = opts.srcFeed.descriptions;
 
   const oss: any = { page_id: opts.page_id };
   if (opts.instagram_user_id) oss.instagram_user_id = opts.instagram_user_id;
 
-  const payload: any = { name: opts.name || "Criativo", object_story_spec: oss, asset_feed_spec: feed };
-  if (opts.raw?.degrees_of_freedom_spec) payload.degrees_of_freedom_spec = opts.raw.degrees_of_freedom_spec;
-
-  const creative = await graph(token, `/${acc}/adcreatives`, payload, "POST");
+  const creative = await graph(token, `/${acc}/adcreatives`, { name: opts.name || "Criativo", object_story_spec: oss, asset_feed_spec: feed }, "POST");
   const adRes = await graph(token, `/${acc}/ads`, { name: opts.ad_name || opts.name || "Anúncio", adset_id: adsetId, creative: { creative_id: creative.id }, status: statusInicial }, "POST");
   return [adRes.id as string];
 }
