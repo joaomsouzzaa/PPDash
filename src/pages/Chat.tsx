@@ -126,7 +126,7 @@ export default function Chat() {
           // Leve delay pra a conversa do time parecer natural (não tudo de uma vez).
           await sleep(700);
           teveStep = true;
-          const m: Mensagem = { role: "assistant", conteudo: `**${obj.step.autor}**\n${obj.step.conteudo}` };
+          const m: Mensagem = { role: "assistant", conteudo: `${obj.step.autor}\n${obj.step.conteudo}` };
           novasMsgs.push(m);
           setMessages((prev) => [...prev, m]);
           const next = proximoAtor(obj.step.autor || "");
@@ -134,7 +134,7 @@ export default function Chat() {
         } else if (obj.type === "done") {
           await sleep(500);
           const reply = obj.reply || "(sem resposta)";
-          const m: Mensagem = { role: "assistant", conteudo: teveStep ? `**${agenteAtual?.nome || "CEO"}**\n${reply}` : reply };
+          const m: Mensagem = { role: "assistant", conteudo: teveStep ? `${agenteAtual?.nome || "CEO"}\n${reply}` : reply };
           novasMsgs.push(m);
           setMessages((prev) => [...prev, m]);
         } else if (obj.type === "error") {

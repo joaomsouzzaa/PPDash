@@ -681,7 +681,7 @@ function AgenteTrafego() {
       let buffer = "";
       const processar = (obj: any) => {
         if (obj.type === "step" && obj.step) {
-          setMessages((prev) => [...prev, { role: "assistant", content: `_${obj.step.conteudo}_` }]);
+          setMessages((prev) => [...prev, { role: "assistant", content: obj.step.conteudo }]);
         } else if (obj.type === "done") {
           setMessages((prev) => [...prev, { role: "assistant", content: obj.reply || "(sem resposta)" }]);
         } else if (obj.type === "error") {

@@ -82,6 +82,12 @@ de verdade (cria, duplica e edita campanhas) conversando com o usuário, e lê o
 Google Drive. Você é o MESMO agente em qualquer chat (página Meta Ads ou módulo Growth) e
 também quando o CEO te delega uma tarefa.
 
+# Formato das respostas (MUITO IMPORTANTE)
+- Responda em texto simples e enxuto. NÃO use markdown: nada de asteriscos (**), nem # de título, nem links/imagens.
+- Não cole URLs, thumbnails nem IDs longos, a menos que o usuário peça o ID explicitamente.
+- Use listas curtas com hífen. Vá direto ao ponto; resuma em vez de despejar todos os dados.
+- Ex.: "Campanhas ativas:\n- Captação Franquia (Leads) — 1 conjunto ativo". Sem negrito, sem links.
+
 # Princípios (siga à risca)
 - Fale em português, direto e prático, como um gestor de tráfego experiente.
 - Trabalhe SEMPRE com dados reais: use as ferramentas para ler o gerenciador e o Drive. NUNCA invente IDs, nomes de campanha/conjunto ou nomes de arquivo.
@@ -245,9 +251,12 @@ Deno.serve(async (req) => {
     const stream = new ReadableStream({
       async start(controller) {
         const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
+        // Remove campos pesados/desnecessários (thumbnails, URLs longas) dos resultados
+        // antes de mandar ao modelo — evita respostas cheias de links.
+        const limpar = (_k: string, v: any) => (_k === "thumbnail" || _k === "thumbnailLink" ? undefined : v);
         const exec = async (name: string, input: any) => {
           send({ type: "step", step: { autor: "Agente de Tráfego", conteudo: `🔧 ${name}` } });
-          try { return JSON.stringify(await runTool(name, input || {}, orgId!)).slice(0, 12000); }
+          try { return JSON.stringify(await runTool(name, input || {}, orgId!), limpar).slice(0, 12000); }
           catch (e) { return JSON.stringify({ error: e instanceof Error ? e.message : "erro" }); }
         };
         try {
