@@ -284,20 +284,36 @@ async function createAdSet(supabase: any, orgId: string, token: string, account:
 // Extrai os padrões do criativo de um anúncio existente do conjunto de origem
 // (página, IG, link de destino, CTA, texto) para herdar ao trocar só a mídia.
 async function sourceCreativeDefaults(token: string, adsetId: string): Promise<{ page_id?: string; instagram_actor_id?: string; link?: string; call_to_action?: string; message?: string }> {
-  try {
-    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec}", limit: 1 });
-    const oss = r.data?.[0]?.creative?.object_story_spec;
-    if (!oss) return {};
+  const fromOss = (oss: any) => {
+    if (!oss) return {} as any;
     const d = oss.video_data || oss.link_data || {};
     const cta = d.call_to_action || {};
-    return {
-      page_id: oss.page_id,
-      instagram_actor_id: oss.instagram_actor_id,
-      link: cta?.value?.link || d.link,
-      call_to_action: cta?.type,
-      message: d.message,
-    };
-  } catch { return {}; }
+    return { page_id: oss.page_id, instagram_actor_id: oss.instagram_actor_id, link: cta?.value?.link || d.link, call_to_action: cta?.type, message: d.message };
+  };
+  try {
+    // Olha alguns anúncios do conjunto (não só 1) buscando os campos do criativo.
+    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{id,object_story_spec,object_story_id,effective_object_story_id}", limit: 5 });
+    const ads: any[] = r.data || [];
+    for (const a of ads) {
+      const cr = a.creative;
+      if (!cr) continue;
+      let out = fromOss(cr.object_story_spec);
+      if (out.page_id) return out;
+      // Sem object_story_spec inline: busca o criativo direto.
+      if (cr.id) {
+        try {
+          const c = await graph(token, `/${cr.id}`, { fields: "object_story_spec,object_story_id,effective_object_story_id" });
+          out = fromOss(c.object_story_spec);
+          if (out.page_id) return out;
+          const sid = c.effective_object_story_id || c.object_story_id;
+          if (sid && sid.includes("_")) return { ...out, page_id: sid.split("_")[0] };
+        } catch { /* tenta o próximo anúncio */ }
+      }
+      const sid = cr.effective_object_story_id || cr.object_story_id;
+      if (sid && sid.includes("_")) return { page_id: sid.split("_")[0] };
+    }
+  } catch { /* ignora */ }
+  return {};
 }
 
 // Duplica um conjunto existente (herda segmentação/orçamento) trocando os criativos.
