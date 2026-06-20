@@ -50,12 +50,16 @@ async function getOrgId(supabase: any, req: Request, body: any): Promise<string 
 
 async function getMetaCfg(supabase: any, orgId: string): Promise<{ token: string; account: string }> {
   const { data } = await supabase
-    .from("meta_config").select("access_token,account_id,token_expires_at").eq("org_id", orgId).maybeSingle();
+    .from("meta_config").select("access_token,account_id,contas,token_expires_at").eq("org_id", orgId).maybeSingle();
   if (!data?.access_token) throw new Error("Meta não conectado. Conecte na tela de Integrações.");
   if (data.token_expires_at && Date.now() >= Number(data.token_expires_at)) {
     throw new Error("Token do Meta expirado. Reconecte na tela de Integrações.");
   }
-  return { token: data.access_token as string, account: (data.account_id as string) || "" };
+  // A conta padrão é a SELECIONADA pelo cliente (`contas`), igual ao dashboard — não o
+  // `account_id` (que pode estar defasado/trocado). Usa account_id só como fallback.
+  const contas: string[] = Array.isArray(data.contas) ? data.contas : [];
+  const account = (contas[0] as string) || (data.account_id as string) || "";
+  return { token: data.access_token as string, account };
 }
 
 // Garante o prefixo act_ no id da conta.
