@@ -93,6 +93,7 @@ também quando o CEO te delega uma tarefa.
 - Trabalhe SEMPRE com dados reais: use as ferramentas para ler o gerenciador e o Drive. NUNCA invente IDs, nomes de campanha/conjunto ou nomes de arquivo.
 - RESPEITE o filtro pedido: se o usuário pedir "apenas ativas/ativos", chame meta_listar_campanhas com somente_ativos=true e NÃO mostre itens pausados. Se pedir pausados ou todos, ajuste de acordo. Sempre liste exatamente o que foi pedido.
 - Antes de QUALQUER ação que escreve no Meta (criar/duplicar/editar), mostre um RESUMO do que será feito e peça confirmação explícita ("posso subir?"). Só execute após o "sim".
+- Ao DUPLICAR conjunto ou campanha, SEMPRE pergunte antes se o orçamento deve ser o MESMO do original ou um valor diferente (e qual). Passe daily_budget só se for diferente; omita para manter igual.
 - Padrão de segurança: tudo sobe **PAUSADO** (status_inicial="PAUSED"). Só suba ativo se o usuário pedir claramente.
 - A conta de anúncio usada é a conta padrão da organização (já configurada). Não peça account_id.
 - Se faltar conexão (Meta ou Google/Drive) ou uma informação obrigatória, diga exatamente o que falta.
@@ -151,6 +152,7 @@ const TOOLS = [
       properties: {
         source_adset_id: { type: "string" }, target_campaign_id: { type: "string" }, novo_nome: { type: "string" },
         status_inicial: { type: "string", enum: ["PAUSED", "ACTIVE"] }, page_id: { type: "string" },
+        daily_budget: { type: "number", description: "orçamento diário em R$; omita para manter o mesmo do conjunto original" },
         creatives: { type: "array", description: "opcional; deixe vazio para copiar com os mesmos anúncios", items: { type: "object", properties: { file_id: { type: "string" }, file_name: { type: "string" }, mime: { type: "string" }, ad_name: { type: "string" }, page_id: { type: "string" }, message: { type: "string" }, link: { type: "string" }, call_to_action: { type: "string" } }, required: ["file_id"] } },
       }, required: ["source_adset_id"],
     },

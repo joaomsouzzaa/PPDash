@@ -281,12 +281,23 @@ async function createAdSet(supabase: any, orgId: string, token: string, account:
   return { ok: true, adset_id: adsetId, ad_ids: adIds };
 }
 
-// Descobre o page_id do criativo de um anúncio existente do conjunto de origem.
-async function pageIdFromAdset(token: string, adsetId: string): Promise<string | null> {
+// Extrai os padrões do criativo de um anúncio existente do conjunto de origem
+// (página, IG, link de destino, CTA, texto) para herdar ao trocar só a mídia.
+async function sourceCreativeDefaults(token: string, adsetId: string): Promise<{ page_id?: string; instagram_actor_id?: string; link?: string; call_to_action?: string; message?: string }> {
   try {
-    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec{page_id,instagram_actor_id}}", limit: 1 });
-    return r.data?.[0]?.creative?.object_story_spec?.page_id || null;
-  } catch { return null; }
+    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec}", limit: 1 });
+    const oss = r.data?.[0]?.creative?.object_story_spec;
+    if (!oss) return {};
+    const d = oss.video_data || oss.link_data || {};
+    const cta = d.call_to_action || {};
+    return {
+      page_id: oss.page_id,
+      instagram_actor_id: oss.instagram_actor_id,
+      link: cta?.value?.link || d.link,
+      call_to_action: cta?.type,
+      message: d.message,
+    };
+  } catch { return {}; }
 }
 
 // Duplica um conjunto existente (herda segmentação/orçamento) trocando os criativos.
@@ -308,12 +319,24 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
   const res = await graph(token, `/${source_adset_id}/copies`, copyParams, "POST");
   const newAdsetId = res.copied_adset_id || res.copied_ad_set_id || res.id;
   if (!newAdsetId) throw new Error("O Meta não retornou o id do conjunto duplicado.");
-  if (novo_nome) { try { await graph(token, `/${newAdsetId}`, { name: novo_nome }, "POST"); } catch { /* nome opcional */ } }
+  const patch: Record<string, any> = {};
+  if (novo_nome) patch.name = novo_nome;
+  // Orçamento: se não informado, mantém o do conjunto original (herdado pela cópia).
+  if (body.daily_budget != null) patch.daily_budget = Math.round(Number(body.daily_budget) * 100);
+  if (Object.keys(patch).length) { try { await graph(token, `/${newAdsetId}`, patch, "POST"); } catch { /* opcional */ } }
 
   let adIds: string[] = [];
   if (trocarCriativos) {
-    const pg = page_id || await pageIdFromAdset(token, source_adset_id);
-    const crs = creatives.map((c: any) => ({ ...c, page_id: c.page_id || pg }));
+    // Herda página, link, CTA e texto do anúncio original — só a mídia muda.
+    const src = await sourceCreativeDefaults(token, source_adset_id);
+    const crs = creatives.map((c: any) => ({
+      ...c,
+      page_id: c.page_id || page_id || src.page_id,
+      instagram_actor_id: c.instagram_actor_id || src.instagram_actor_id,
+      link: c.link || src.link,
+      call_to_action: c.call_to_action || src.call_to_action,
+      message: c.message ?? src.message,
+    }));
     adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
   }
   return { ok: true, adset_id: newAdsetId, ad_ids: adIds, criativos_trocados: trocarCriativos };
@@ -353,8 +376,19 @@ async function createCreativeFromDrive(
       if (vs === "error") throw new Error("O Meta falhou ao processar o vídeo baixado do Drive.");
       await new Promise((r) => setTimeout(r, 5000));
     }
+    // O Meta exige um thumbnail (image_url) no video_data — pega o auto-gerado do vídeo.
+    let thumbUrl = "";
+    for (let i = 0; i < 6; i++) {
+      const th = await graph(token, `/${videoId}/thumbnails`, {});
+      const list: any[] = th?.data || [];
+      const pref = list.find((x) => x.is_preferred) || list[0];
+      if (pref?.uri) { thumbUrl = pref.uri; break; }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    if (!thumbUrl) throw new Error("Não consegui obter o thumbnail do vídeo no Meta. Tente novamente em instantes.");
     objectStorySpec.video_data = {
       video_id: videoId,
+      image_url: thumbUrl,
       message: message || "",
       ...(link ? { call_to_action: { type: call_to_action || "LEARN_MORE", value: { link } } } : {}),
     };
