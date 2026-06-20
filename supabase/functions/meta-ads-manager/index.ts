@@ -15,9 +15,29 @@ function svc() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-// Resolve a org: via JWT do usuário logado, ou via body.org_id (chamadas server-side).
+// Resolve a org ATIVA (multi-tenant). Prioridade:
+// 1) header x-org-slug (cliente que o usuário está visualizando) — com verificação de acesso;
+// 2) body.org_id (chamadas server-to-server já confiáveis, ex.: agente-trafego);
+// 3) profiles.org_id (fallback single-tenant).
+// IMPORTANTE: como as edge functions usam service_role (ignoram RLS), a verificação de
+// acesso ao slug é feita aqui (super_admin OU membership ativo na org).
 async function getOrgId(supabase: any, req: Request, body: any): Promise<string | null> {
+  const slug = req.headers.get("x-org-slug");
   const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+  if (slug) {
+    const { data: org } = await supabase.from("organizations").select("id").eq("slug", slug).maybeSingle();
+    if (org?.id) {
+      if (!token) return org.id; // sem JWT = chamada interna confiável
+      const { data: u } = await supabase.auth.getUser(token);
+      if (u?.user) {
+        const { data: p } = await supabase.from("profiles").select("papel").eq("id", u.user.id).maybeSingle();
+        if (p?.papel === "super_admin") return org.id;
+        const { data: m } = await supabase.from("memberships").select("user_id").eq("user_id", u.user.id).eq("org_id", org.id).eq("status", "ativo").maybeSingle();
+        if (m) return org.id;
+      }
+    }
+  }
+  if (body?.org_id) return body.org_id;
   if (token) {
     const { data: u } = await supabase.auth.getUser(token);
     if (u?.user) {
@@ -25,7 +45,7 @@ async function getOrgId(supabase: any, req: Request, body: any): Promise<string 
       if (p?.org_id) return p.org_id as string;
     }
   }
-  return body?.org_id ?? null;
+  return null;
 }
 
 async function getMetaCfg(supabase: any, orgId: string): Promise<{ token: string; account: string }> {
@@ -290,7 +310,15 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
   return { ok: true, adset_id: newAdsetId, ad_ids: adIds };
 }
 
-// Baixa um criativo do Drive (via google-sheets), faz upload ao Meta e cria o adcreative.
+// URL pública de download direto do Drive (funciona p/ arquivos grandes em pasta compartilhada).
+function driveDownloadUrl(fileId: string): string {
+  return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+}
+
+// Cria o adcreative a partir de um arquivo do Drive.
+// VÍDEO: usa file_url (o Meta baixa direto do Drive) — não passa pela memória da função,
+//        então funciona com vídeos grandes (centenas de MB). Aguarda o processamento.
+// IMAGEM: baixa os bytes via google-sheets (imagens são pequenas) e sobe em /adimages.
 async function createCreativeFromDrive(
   supabase: any, orgId: string, token: string, acc: string, cr: any,
 ): Promise<string> {
@@ -298,41 +326,43 @@ async function createCreativeFromDrive(
   if (!file_id) throw new Error("file_id do criativo é obrigatório");
   if (!page_id) throw new Error("page_id (página do Facebook) é obrigatório para o criativo");
 
-  // Baixa bytes do Drive via a edge function google-sheets (server-to-server).
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const dl = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! },
-    body: JSON.stringify({ action: "download_drive_file", file_id, org_id: orgId }),
-  });
-  const dlj = await dl.json();
-  if (!dl.ok) throw new Error(dlj.error || "Falha ao baixar criativo do Drive");
-  const fileMime: string = mime || dlj.mime || "";
-  const isVideo = fileMime.startsWith("video/");
-
-  // Converte base64 -> bytes p/ upload binário ao Meta.
-  const bin = atob(dlj.base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const isVideo = (mime || "").startsWith("video/") || /\.(mp4|mov|m4v|avi|webm)$/i.test(file_name || "");
 
   const objectStorySpec: any = { page_id };
   if (instagram_actor_id) objectStorySpec.instagram_actor_id = instagram_actor_id;
 
   if (isVideo) {
-    // Upload de vídeo
-    const fd = new FormData();
-    fd.set("access_token", token);
-    fd.set("source", new Blob([bytes], { type: fileMime }), file_name || "video.mp4");
-    const vr = await fetch(`${GRAPH}/${acc}/advideos`, { method: "POST", body: fd });
-    const vj = await vr.json();
-    if (!vr.ok) throw new Error(vj?.error?.message || "Falha ao subir vídeo ao Meta");
+    // O Meta baixa o vídeo direto da URL pública do Drive (pasta deve estar compartilhada).
+    const vr = await graph(token, `/${acc}/advideos`, { file_url: driveDownloadUrl(file_id), name: file_name || "Vídeo" }, "POST");
+    const videoId = vr.id;
+    if (!videoId) throw new Error("O Meta não retornou o id do vídeo (verifique se a pasta do Drive está pública).");
+    // Aguarda o processamento do vídeo (até ~2min) — necessário antes de criar o anúncio.
+    for (let i = 0; i < 24; i++) {
+      const st = await graph(token, `/${videoId}`, { fields: "status" });
+      const vs = st?.status?.video_status;
+      if (vs === "ready") break;
+      if (vs === "error") throw new Error("O Meta falhou ao processar o vídeo baixado do Drive.");
+      await new Promise((r) => setTimeout(r, 5000));
+    }
     objectStorySpec.video_data = {
-      video_id: vj.id,
+      video_id: videoId,
       message: message || "",
       ...(link ? { call_to_action: { type: call_to_action || "LEARN_MORE", value: { link } } } : {}),
     };
   } else {
-    // Upload de imagem
+    // Imagem: baixa bytes via google-sheets (server-to-server) e sobe em /adimages.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const dl = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! },
+      body: JSON.stringify({ action: "download_drive_file", file_id, org_id: orgId }),
+    });
+    const dlj = await dl.json();
+    if (!dl.ok) throw new Error(dlj.error || "Falha ao baixar criativo do Drive");
+    const fileMime: string = mime || dlj.mime || "image/jpeg";
+    const bin = atob(dlj.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const fd = new FormData();
     fd.set("access_token", token);
     fd.set("filename", new Blob([bytes], { type: fileMime }), file_name || "image.jpg");

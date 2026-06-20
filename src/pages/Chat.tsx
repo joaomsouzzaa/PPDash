@@ -8,6 +8,7 @@ import { Plus, Send, Bot, MessageSquare, Loader2, Trash2, Mic, MicOff, BookOpen 
 import { supabase } from "@/integrations/supabase/client";
 import { useSpeechToText } from "@/hooks/use-speech-to-text";
 import { BaseConhecimentoDialog } from "@/components/BaseConhecimentoDialog";
+import { getTenantSlug } from "@/lib/tenant";
 import { toast } from "sonner";
 
 type Agente = { id: string; nome: string; provider: string; modelo: string | null; ativo: boolean; slug: string | null };
@@ -102,7 +103,7 @@ export default function Chat() {
       const jwt = trafego ? (sess.session?.access_token || SB_KEY) : SB_KEY;
       const resp = await fetch(`${SB_URL}/functions/v1/${fn}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${jwt}` },
+        headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${jwt}`, "x-org-slug": getTenantSlug() },
         body: JSON.stringify({ agente_id: agenteId, messages: novaLista.map((m) => ({ role: m.role, content: m.conteudo })) }),
       });
       if (!resp.ok || !resp.body) {

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, RefreshCw, Megaphone, Send, Bot, Copy, FolderOpen, Plus, ChevronRight, ChevronDown, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getTenantSlug } from "@/lib/tenant";
 import { fetchAdAccounts, type AdAccount } from "@/lib/meta-ads";
 import {
   listCampaigns, listSourceCampaigns, duplicateCampaign, createCampaign, updateEntity,
@@ -667,7 +668,7 @@ function AgenteTrafego() {
       const jwt = sess.session?.access_token || SB_KEY;
       const resp = await fetch(`${SB_URL}/functions/v1/agente-trafego`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${jwt}` },
+        headers: { "Content-Type": "application/json", apikey: SB_KEY, Authorization: `Bearer ${jwt}`, "x-org-slug": getTenantSlug() },
         body: JSON.stringify({ messages: novaLista, agente_id: agenteId }),
       });
       if (!resp.ok || !resp.body) {

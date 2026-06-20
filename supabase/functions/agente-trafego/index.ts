@@ -37,6 +37,34 @@ async function getKey(supabase: any, orgId: string | null, prefer?: string | nul
   throw new Error("Configure a API key da Anthropic ou OpenAI em Agentes → Configurar modelos para usar o Agente de Tráfego.");
 }
 
+// Resolve a org ATIVA: header x-org-slug (com verificação de acesso) > body.org_id > profiles.org_id.
+async function resolveOrg(supabase: any, req: Request, body: any): Promise<string | null> {
+  const slug = req.headers.get("x-org-slug");
+  const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+  if (slug) {
+    const { data: org } = await supabase.from("organizations").select("id").eq("slug", slug).maybeSingle();
+    if (org?.id) {
+      if (!token) return org.id;
+      const { data: u } = await supabase.auth.getUser(token);
+      if (u?.user) {
+        const { data: p } = await supabase.from("profiles").select("papel").eq("id", u.user.id).maybeSingle();
+        if (p?.papel === "super_admin") return org.id;
+        const { data: m } = await supabase.from("memberships").select("user_id").eq("user_id", u.user.id).eq("org_id", org.id).eq("status", "ativo").maybeSingle();
+        if (m) return org.id;
+      }
+    }
+  }
+  if (body?.org_id) return body.org_id;
+  if (token) {
+    const { data: u } = await supabase.auth.getUser(token);
+    if (u?.user) {
+      const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
+      if (p?.org_id) return p.org_id as string;
+    }
+  }
+  return null;
+}
+
 // Chama uma edge function irmã (Drive ou meta-ads-manager) server-to-server.
 async function callFn(name: string, body: Record<string, unknown>): Promise<any> {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
@@ -191,18 +219,10 @@ Deno.serve(async (req) => {
     const { messages, model, agente_id } = body;
     if (!Array.isArray(messages)) return json({ error: "Parâmetros inválidos" }, 400);
 
-    // org via JWT do usuário logado; ou via body.org_id (chamadas server-to-server, ex.: CEO delegando).
-    let orgId: string | null = null;
-    const authToken = (req.headers.get("Authorization") || "").replace("Bearer ", "");
-    if (authToken) {
-      const { data: u } = await supabase.auth.getUser(authToken);
-      if (u?.user) {
-        const { data: p } = await supabase.from("profiles").select("org_id").eq("id", u.user.id).maybeSingle();
-        orgId = p?.org_id ?? null;
-      }
-    }
-    if (!orgId) orgId = body.org_id ?? null;
-    if (!orgId) return json({ error: "Organização não identificada (faça login)" }, 401);
+    // Org ATIVA (multi-tenant): header x-org-slug (cliente visualizado) tem prioridade,
+    // depois body.org_id (server-to-server, ex.: CEO delegando), depois profiles.org_id.
+    const orgId = await resolveOrg(supabase, req, body);
+    if (!orgId) return json({ error: "Organização não identificada (faça login / selecione o cliente)" }, 401);
 
     // Carrega o agente configurado na página Agentes (por id, ou pelo slug "trafego").
     // Usa o provider/modelo/system_prompt dele — assim o agente de tráfego é ÚNICO,
