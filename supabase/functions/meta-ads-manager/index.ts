@@ -260,15 +260,16 @@ async function createAdsFromCreatives(
   supabase: any, orgId: string, token: string, acc: string, adsetId: string,
   creatives: any[], statusInicial: string,
 ): Promise<string[]> {
-  const adIds: string[] = [];
-  for (const cr of creatives) {
+  // Em PARALELO: cada vídeo espera o Meta processar (~min); sequencial estouraria o
+  // tempo limite da função com vários criativos.
+  const adIds = await Promise.all(creatives.map(async (cr) => {
     const creativeId = await createCreativeFromDrive(supabase, orgId, token, acc, cr);
     const adRes = await graph(token, `/${acc}/ads`, {
       name: cr.ad_name || cr.file_name || "Anúncio",
       adset_id: adsetId, creative: { creative_id: creativeId }, status: statusInicial,
     }, "POST");
-    adIds.push(adRes.id);
-  }
+    return adRes.id as string;
+  }));
   return adIds;
 }
 
@@ -370,7 +371,13 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
       call_to_action: c.call_to_action || src.call_to_action,
       message: c.message ?? src.message,
     }));
-    adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
+    try {
+      adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
+    } catch (e) {
+      // Não deixa conjunto vazio órfão se a criação dos anúncios falhar.
+      try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
+      throw e;
+    }
   }
   return { ok: true, adset_id: newAdsetId, ad_ids: adIds, criativos_trocados: trocarCriativos };
 }
