@@ -316,6 +316,21 @@ async function sourceCreativeDefaults(token: string, adsetId: string): Promise<{
   return {};
 }
 
+// Fallback de página: varre anúncios da CONTA e, por fim, as páginas do usuário.
+async function pageFromAccount(token: string, acc: string): Promise<string | undefined> {
+  try {
+    const r = await graph(token, `/${acc}/ads`, { fields: "creative{object_story_id,effective_object_story_id,object_story_spec}", limit: 50 });
+    for (const a of r.data || []) {
+      const cr = a.creative; if (!cr) continue;
+      const pid = cr.object_story_spec?.page_id;
+      if (pid) return pid;
+      const sid = cr.effective_object_story_id || cr.object_story_id;
+      if (sid && sid.includes("_")) return sid.split("_")[0];
+    }
+  } catch { /* ignora */ }
+  try { const me = await graph(token, `/me/accounts`, { fields: "id", limit: 1 }); return me.data?.[0]?.id || undefined; } catch { return undefined; }
+}
+
 // Duplica um conjunto existente (herda segmentação/orçamento) trocando os criativos.
 // Copia o conjunto SEM os anúncios (deep_copy:false) e cria novos anúncios com os criativos do Drive.
 async function duplicateAdSet(supabase: any, orgId: string, token: string, account: string, body: any) {
@@ -345,9 +360,11 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
   if (trocarCriativos) {
     // Herda página, link, CTA e texto do anúncio original — só a mídia muda.
     const src = await sourceCreativeDefaults(token, source_adset_id);
+    let pg = page_id || src.page_id;
+    if (!pg) pg = await pageFromAccount(token, acc); // fallback: página da conta
     const crs = creatives.map((c: any) => ({
       ...c,
-      page_id: c.page_id || page_id || src.page_id,
+      page_id: c.page_id || pg,
       instagram_actor_id: c.instagram_actor_id || src.instagram_actor_id,
       link: c.link || src.link,
       call_to_action: c.call_to_action || src.call_to_action,
