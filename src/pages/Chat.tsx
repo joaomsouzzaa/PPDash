@@ -27,7 +27,8 @@ export default function Chat() {
   const [messages, setMessages] = useState<Mensagem[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pensando, setPensando] = useState<string>(""); // nome de quem está "pensando" agora
+  const [pensando, setPensando] = useState<string>(""); // nome de quem está atuando agora
+  const [verbo, setVerbo] = useState<"pensando" | "executando">("pensando");
   const [baseOpen, setBaseOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -75,6 +76,7 @@ export default function Chat() {
     setInput("");
     setLoading(true);
     setPensando(agenteAtual?.nome || "CEO");
+    setVerbo("pensando");
 
     try {
       // Cria a conversa na primeira mensagem
@@ -126,6 +128,8 @@ export default function Chat() {
           // Leve delay pra a conversa do time parecer natural (não tudo de uma vez).
           await sleep(700);
           teveStep = true;
+          // Ferramenta em execução (🔧) → "executando"; texto → "pensando".
+          setVerbo(String(obj.step.conteudo || "").trim().startsWith("🔧") ? "executando" : "pensando");
           const m: Mensagem = { role: "assistant", conteudo: `${obj.step.autor}\n${obj.step.conteudo}` };
           novasMsgs.push(m);
           setMessages((prev) => [...prev, m]);
@@ -242,7 +246,7 @@ export default function Chat() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-muted rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> {pensando || agenteAtual?.nome || "Agente"} está pensando...
+                    <Loader2 className="h-4 w-4 animate-spin" /> {pensando || agenteAtual?.nome || "Agente"} está {verbo}...
                   </div>
                 </div>
               )}

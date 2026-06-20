@@ -640,6 +640,7 @@ function AgenteTrafego() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verbo, setVerbo] = useState<"pensando" | "executando">("pensando");
   const [agenteId, setAgenteId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -661,6 +662,7 @@ function AgenteTrafego() {
     const novaLista: ChatMsg[] = [...messages, { role: "user", content: texto }];
     setMessages(novaLista);
     setLoading(true);
+    setVerbo("pensando");
     try {
       const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
       const SB_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -681,6 +683,7 @@ function AgenteTrafego() {
       let buffer = "";
       const processar = (obj: any) => {
         if (obj.type === "step" && obj.step) {
+          setVerbo(String(obj.step.conteudo || "").trim().startsWith("🔧") ? "executando" : "pensando");
           setMessages((prev) => [...prev, { role: "assistant", content: obj.step.conteudo }]);
         } else if (obj.type === "done") {
           setMessages((prev) => [...prev, { role: "assistant", content: obj.reply || "(sem resposta)" }]);
@@ -725,7 +728,7 @@ function AgenteTrafego() {
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>{m.content}</div>
             </div>
           ))}
-          {loading && <div className="flex justify-start"><div className="bg-muted rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Pensando...</div></div>}
+          {loading && <div className="flex justify-start"><div className="bg-muted rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {verbo === "executando" ? "Executando..." : "Pensando..."}</div></div>}
         </div>
         <div className="flex items-end gap-2 pt-3 border-t mt-3">
           <Textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)}
