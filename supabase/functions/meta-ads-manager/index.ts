@@ -284,7 +284,7 @@ async function createAdSet(supabase: any, orgId: string, token: string, account:
 
 // Extrai os padrões do criativo de um anúncio existente do conjunto de origem
 // (página, IG, link de destino, CTA, texto) para herdar ao trocar só a mídia.
-interface SrcDefaults { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; feed?: { bodies?: any[]; titles?: any[]; descriptions?: any[]; optimization_type?: string } }
+interface SrcDefaults { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; raw?: any }
 async function sourceCreativeDefaults(token: string, adsetId: string): Promise<SrcDefaults> {
   const extrair = (cr: any): SrcDefaults => {
     const oss = cr?.object_story_spec;
@@ -293,18 +293,17 @@ async function sourceCreativeDefaults(token: string, adsetId: string): Promise<S
     const cta = d.call_to_action || (afs?.call_to_action_types?.[0] ? { type: afs.call_to_action_types[0] } : {});
     let page = oss?.page_id;
     if (!page) { const sid = cr?.effective_object_story_id || cr?.object_story_id; if (sid && sid.includes("_")) page = sid.split("_")[0]; }
-    const feed = afs ? { bodies: afs.bodies, titles: afs.titles, descriptions: afs.descriptions, optimization_type: afs.optimization_type } : undefined;
     return {
       page_id: page,
       instagram_user_id: oss?.instagram_user_id,
       link: cta?.value?.link || d.link || afs?.link_urls?.[0]?.website_url,
       call_to_action: cta?.type,
       message: d.message || afs?.bodies?.[0]?.text,
-      feed,
+      raw: { object_story_spec: oss, asset_feed_spec: afs, degrees_of_freedom_spec: cr?.degrees_of_freedom_spec },
     };
   };
   try {
-    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec,asset_feed_spec,object_story_id,effective_object_story_id}", limit: 5 });
+    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec,asset_feed_spec,degrees_of_freedom_spec,object_story_id,effective_object_story_id}", limit: 5 });
     for (const a of (r.data || [])) {
       const cr = a.creative; if (!cr) continue;
       const out = extrair(cr);
@@ -361,31 +360,30 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
     const src = await sourceCreativeDefaults(token, source_adset_id);
     let pg = page_id || src.page_id;
     if (!pg) pg = await pageFromAccount(token, acc);
-    // O Meta só permite VÁRIOS vídeos num ÚNICO anúncio se o conjunto for de "criativo
-    // dinâmico". Caso contrário, cria 1 anúncio por vídeo (forma padrão de testar criativos).
-    let isDyn = false;
-    try { const sa = await graph(token, `/${source_adset_id}`, { fields: "is_dynamic_creative" }); isDyn = !!sa?.is_dynamic_creative; } catch { /* assume normal */ }
+    const baseOpts = {
+      page_id: pg, instagram_user_id: src.instagram_user_id,
+      link: body.link || src.link, call_to_action: body.call_to_action || src.call_to_action,
+      message: body.message || src.message, raw: src.raw,
+      name: novo_nome, ad_name: body.ad_name || novo_nome,
+    };
     try {
-      if (isDyn) {
-        adIds = await createFlexibleAd(supabase, orgId, token, acc, newAdsetId, creatives, {
-          page_id: pg, instagram_user_id: src.instagram_user_id,
-          link: body.link || src.link, call_to_action: body.call_to_action || src.call_to_action,
-          message: body.message || src.message, feed: src.feed,
-          name: novo_nome, ad_name: body.ad_name || novo_nome,
-        }, status_inicial);
-      } else {
-        const crs = creatives.map((c: any) => ({
-          ...c,
-          page_id: c.page_id || pg,
-          link: c.link || body.link || src.link,
-          call_to_action: c.call_to_action || src.call_to_action,
-          message: c.message ?? body.message ?? src.message,
-        }));
-        adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
-      }
+      // Tenta 1 anúncio "Flexível/Advantage+" com todas as mídias (igual à origem).
+      adIds = await createFlexibleAd(supabase, orgId, token, acc, newAdsetId, creatives, baseOpts, status_inicial);
     } catch (e) {
-      try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
-      throw e;
+      const msg = e instanceof Error ? e.message : "";
+      // Se o Meta exigir conjunto dinâmico, cai para 1 anúncio por mídia.
+      if (/din[aâ]mic/i.test(msg)) {
+        try {
+          const crs = creatives.map((c: any) => ({ ...c, page_id: c.page_id || pg, link: c.link || baseOpts.link, call_to_action: c.call_to_action || src.call_to_action, message: c.message ?? baseOpts.message }));
+          adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
+        } catch (e2) {
+          try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
+          throw e2;
+        }
+      } else {
+        try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
+        throw e;
+      }
     }
   }
   return { ok: true, adset_id: newAdsetId, ad_ids: adIds, criativos_trocados: trocarCriativos };
@@ -485,34 +483,43 @@ async function createCreativeFromDrive(
   return creative.id;
 }
 
-// Cria UM anúncio FLEXÍVEL (dinâmico) com TODAS as mídias num único asset_feed_spec,
-// herdando textos/títulos/link/CTA/página do anúncio de origem. É o que a duplicação usa.
+// Cria UM anúncio "Flexível / Advantage+" com TODAS as mídias num único anúncio,
+// CLONANDO a estrutura do anúncio de origem (asset_feed_spec + degrees_of_freedom_spec,
+// que é o que faz o Meta tratar como Advantage+ e NÃO como criativo dinâmico) e só
+// trocando os vídeos/imagens. Funciona em conjunto normal.
 async function createFlexibleAd(
   supabase: any, orgId: string, token: string, acc: string, adsetId: string,
-  creatives: any[], opts: { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; feed?: any; name?: string; ad_name?: string },
+  creatives: any[], opts: { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; raw?: any; name?: string; ad_name?: string },
   statusInicial: string,
 ): Promise<string[]> {
   if (!opts.page_id) throw new Error("Não encontrei a página do Facebook do anúncio de origem.");
-  const link = opts.link;
-  if (!link) throw new Error("Não encontrei o link de destino no anúncio de origem; informe o link.");
-  // Sobe todas as mídias em paralelo (cada vídeo espera o processamento).
   const media = await Promise.all(creatives.map((c) => uploadDriveMedia(supabase, orgId, token, acc, c)));
   const videos = media.filter((m) => m.is_video).map((m) => ({ video_id: m.video_id, thumbnail_url: m.thumbnail_url }));
   const images = media.filter((m) => !m.is_video).map((m) => ({ hash: m.image_hash }));
-  const cta = opts.call_to_action || "LEARN_MORE";
-  const feed: any = {
-    ...(videos.length ? { videos } : {}),
-    ...(images.length ? { images } : {}),
-    bodies: (opts.feed?.bodies?.length ? opts.feed.bodies : [{ text: opts.message || "" }]),
-    ad_formats: [videos.length ? "SINGLE_VIDEO" : "SINGLE_IMAGE"],
-    call_to_action_types: [cta],
-    link_urls: [{ website_url: link, display_url: link }],
-  };
-  if (opts.feed?.titles?.length) feed.titles = opts.feed.titles;
-  if (opts.feed?.descriptions?.length && opts.feed.descriptions.some((d: any) => (d?.text || "").trim())) feed.descriptions = opts.feed.descriptions;
+
+  // Clona o asset_feed_spec da origem e troca só as mídias.
+  const feed: any = opts.raw?.asset_feed_spec ? JSON.parse(JSON.stringify(opts.raw.asset_feed_spec)) : {};
+  if (videos.length) feed.videos = videos; else delete feed.videos;
+  if (images.length) feed.images = images; else if (!videos.length) feed.images = [];
+  if (!feed.ad_formats?.length) feed.ad_formats = [videos.length ? "SINGLE_VIDEO" : "SINGLE_IMAGE"];
+  if (!feed.bodies?.length) feed.bodies = [{ text: opts.message || "" }];
+  if (!feed.call_to_action_types?.length) feed.call_to_action_types = [opts.call_to_action || "LEARN_MORE"];
+  // Link: garante website_url + display_url (o Meta exige os dois).
+  if (feed.link_urls?.length) {
+    feed.link_urls = feed.link_urls.map((l: any) => ({ ...l, display_url: l.display_url || l.website_url }));
+  } else if (opts.link) {
+    feed.link_urls = [{ website_url: opts.link, display_url: opts.link }];
+  } else {
+    throw new Error("Não encontrei o link de destino no anúncio de origem; informe o link.");
+  }
+
   const oss: any = { page_id: opts.page_id };
   if (opts.instagram_user_id) oss.instagram_user_id = opts.instagram_user_id;
-  const creative = await graph(token, `/${acc}/adcreatives`, { name: opts.name || "Criativo", object_story_spec: oss, asset_feed_spec: feed }, "POST");
+
+  const payload: any = { name: opts.name || "Criativo", object_story_spec: oss, asset_feed_spec: feed };
+  if (opts.raw?.degrees_of_freedom_spec) payload.degrees_of_freedom_spec = opts.raw.degrees_of_freedom_spec;
+
+  const creative = await graph(token, `/${acc}/adcreatives`, payload, "POST");
   const adRes = await graph(token, `/${acc}/ads`, { name: opts.ad_name || opts.name || "Anúncio", adset_id: adsetId, creative: { creative_id: creative.id }, status: statusInicial }, "POST");
   return [adRes.id as string];
 }
