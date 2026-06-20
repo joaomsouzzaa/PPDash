@@ -200,6 +200,13 @@ Deno.serve(async (req) => {
       return json({ files });
     }
 
+    if (action === "drive_file_meta") {
+      if (!body.file_id) throw new Error("file_id é obrigatório");
+      const token = await getAccessToken(supabase, orgId);
+      const j = await gapi(token, `https://www.googleapis.com/drive/v3/files/${body.file_id}?fields=id,name,mimeType,size&supportsAllDrives=true`);
+      return json({ id: j.id, name: j.name, mimeType: j.mimeType, size: j.size });
+    }
+
     if (action === "download_drive_file") {
       // Retorna o arquivo do Drive em base64 (usado server-to-server por meta-ads-manager).
       if (!body.file_id) throw new Error("file_id é obrigatório");

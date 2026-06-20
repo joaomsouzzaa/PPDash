@@ -354,10 +354,25 @@ function driveDownloadUrl(fileId: string): string {
 async function createCreativeFromDrive(
   supabase: any, orgId: string, token: string, acc: string, cr: any,
 ): Promise<string> {
-  const { file_id, file_name, mime, page_id, instagram_actor_id, message, link, call_to_action } = cr;
+  const { file_id, page_id, instagram_actor_id, message, link, call_to_action } = cr;
+  let { file_name, mime } = cr;
   if (!file_id) throw new Error("file_id do criativo é obrigatório");
   if (!page_id) throw new Error("page_id (página do Facebook) é obrigatório para o criativo");
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  // Descobre o tipo real no Drive quando o chamador não informou (evita tratar
+  // um vídeo grande como imagem e tentar baixá-lo inteiro → estouro de memória).
+  if (!mime) {
+    try {
+      const mr = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
+        method: "POST", headers: { "Content-Type": "application/json", apikey: svcKey },
+        body: JSON.stringify({ action: "drive_file_meta", file_id, org_id: orgId }),
+      });
+      const mj = await mr.json();
+      if (mr.ok) { mime = mj.mimeType || ""; if (!file_name) file_name = mj.name || ""; }
+    } catch { /* segue com heurística por extensão */ }
+  }
   const isVideo = (mime || "").startsWith("video/") || /\.(mp4|mov|m4v|avi|webm)$/i.test(file_name || "");
 
   const objectStorySpec: any = { page_id };
@@ -394,10 +409,9 @@ async function createCreativeFromDrive(
     };
   } else {
     // Imagem: baixa bytes via google-sheets (server-to-server) e sobe em /adimages.
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const dl = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! },
+      headers: { "Content-Type": "application/json", apikey: svcKey },
       body: JSON.stringify({ action: "download_drive_file", file_id, org_id: orgId }),
     });
     const dlj = await dl.json();
