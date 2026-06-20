@@ -284,34 +284,31 @@ async function createAdSet(supabase: any, orgId: string, token: string, account:
 
 // Extrai os padrões do criativo de um anúncio existente do conjunto de origem
 // (página, IG, link de destino, CTA, texto) para herdar ao trocar só a mídia.
-async function sourceCreativeDefaults(token: string, adsetId: string): Promise<{ page_id?: string; instagram_actor_id?: string; link?: string; call_to_action?: string; message?: string }> {
-  const fromOss = (oss: any) => {
-    if (!oss) return {} as any;
-    const d = oss.video_data || oss.link_data || {};
-    const cta = d.call_to_action || {};
-    return { page_id: oss.page_id, instagram_actor_id: oss.instagram_actor_id, link: cta?.value?.link || d.link, call_to_action: cta?.type, message: d.message };
+interface SrcDefaults { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; feed?: { bodies?: any[]; titles?: any[]; descriptions?: any[]; optimization_type?: string } }
+async function sourceCreativeDefaults(token: string, adsetId: string): Promise<SrcDefaults> {
+  const extrair = (cr: any): SrcDefaults => {
+    const oss = cr?.object_story_spec;
+    const afs = cr?.asset_feed_spec;
+    const d = oss?.video_data || oss?.link_data || {};
+    const cta = d.call_to_action || (afs?.call_to_action_types?.[0] ? { type: afs.call_to_action_types[0] } : {});
+    let page = oss?.page_id;
+    if (!page) { const sid = cr?.effective_object_story_id || cr?.object_story_id; if (sid && sid.includes("_")) page = sid.split("_")[0]; }
+    const feed = afs ? { bodies: afs.bodies, titles: afs.titles, descriptions: afs.descriptions, optimization_type: afs.optimization_type } : undefined;
+    return {
+      page_id: page,
+      instagram_user_id: oss?.instagram_user_id,
+      link: cta?.value?.link || d.link || afs?.link_urls?.[0]?.website_url,
+      call_to_action: cta?.type,
+      message: d.message || afs?.bodies?.[0]?.text,
+      feed,
+    };
   };
   try {
-    // Olha alguns anúncios do conjunto (não só 1) buscando os campos do criativo.
-    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{id,object_story_spec,object_story_id,effective_object_story_id}", limit: 5 });
-    const ads: any[] = r.data || [];
-    for (const a of ads) {
-      const cr = a.creative;
-      if (!cr) continue;
-      let out = fromOss(cr.object_story_spec);
+    const r = await graph(token, `/${adsetId}/ads`, { fields: "creative{object_story_spec,asset_feed_spec,object_story_id,effective_object_story_id}", limit: 5 });
+    for (const a of (r.data || [])) {
+      const cr = a.creative; if (!cr) continue;
+      const out = extrair(cr);
       if (out.page_id) return out;
-      // Sem object_story_spec inline: busca o criativo direto.
-      if (cr.id) {
-        try {
-          const c = await graph(token, `/${cr.id}`, { fields: "object_story_spec,object_story_id,effective_object_story_id" });
-          out = fromOss(c.object_story_spec);
-          if (out.page_id) return out;
-          const sid = c.effective_object_story_id || c.object_story_id;
-          if (sid && sid.includes("_")) return { ...out, page_id: sid.split("_")[0] };
-        } catch { /* tenta o próximo anúncio */ }
-      }
-      const sid = cr.effective_object_story_id || cr.object_story_id;
-      if (sid && sid.includes("_")) return { page_id: sid.split("_")[0] };
     }
   } catch { /* ignora */ }
   return {};
@@ -359,22 +356,34 @@ async function duplicateAdSet(supabase: any, orgId: string, token: string, accou
 
   let adIds: string[] = [];
   if (trocarCriativos) {
-    // Herda página, link, CTA e texto do anúncio original — só a mídia muda.
+    // Herda página/IG/link/CTA/textos do anúncio original e cria UM anúncio flexível
+    // (dinâmico) com TODAS as mídias novas — igual à estrutura do anúncio de origem.
     const src = await sourceCreativeDefaults(token, source_adset_id);
     let pg = page_id || src.page_id;
-    if (!pg) pg = await pageFromAccount(token, acc); // fallback: página da conta
-    const crs = creatives.map((c: any) => ({
-      ...c,
-      page_id: c.page_id || pg,
-      instagram_actor_id: c.instagram_actor_id || src.instagram_actor_id,
-      link: c.link || src.link,
-      call_to_action: c.call_to_action || src.call_to_action,
-      message: c.message ?? src.message,
-    }));
+    if (!pg) pg = await pageFromAccount(token, acc);
+    // O Meta só permite VÁRIOS vídeos num ÚNICO anúncio se o conjunto for de "criativo
+    // dinâmico". Caso contrário, cria 1 anúncio por vídeo (forma padrão de testar criativos).
+    let isDyn = false;
+    try { const sa = await graph(token, `/${source_adset_id}`, { fields: "is_dynamic_creative" }); isDyn = !!sa?.is_dynamic_creative; } catch { /* assume normal */ }
     try {
-      adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
+      if (isDyn) {
+        adIds = await createFlexibleAd(supabase, orgId, token, acc, newAdsetId, creatives, {
+          page_id: pg, instagram_user_id: src.instagram_user_id,
+          link: body.link || src.link, call_to_action: body.call_to_action || src.call_to_action,
+          message: body.message || src.message, feed: src.feed,
+          name: novo_nome, ad_name: body.ad_name || novo_nome,
+        }, status_inicial);
+      } else {
+        const crs = creatives.map((c: any) => ({
+          ...c,
+          page_id: c.page_id || pg,
+          link: c.link || body.link || src.link,
+          call_to_action: c.call_to_action || src.call_to_action,
+          message: c.message ?? body.message ?? src.message,
+        }));
+        adIds = await createAdsFromCreatives(supabase, orgId, token, acc, newAdsetId, crs, status_inicial);
+      }
     } catch (e) {
-      // Não deixa conjunto vazio órfão se a criação dos anúncios falhar.
       try { await graph(token, `/${newAdsetId}`, { status: "DELETED" }, "POST"); } catch { /* ignora */ }
       throw e;
     }
@@ -387,22 +396,16 @@ function driveDownloadUrl(fileId: string): string {
   return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
 }
 
-// Cria o adcreative a partir de um arquivo do Drive.
-// VÍDEO: usa file_url (o Meta baixa direto do Drive) — não passa pela memória da função,
-//        então funciona com vídeos grandes (centenas de MB). Aguarda o processamento.
-// IMAGEM: baixa os bytes via google-sheets (imagens são pequenas) e sobe em /adimages.
-async function createCreativeFromDrive(
+// Sobe UMA mídia do Drive ao Meta e devolve as peças do asset (sem criar criativo).
+// VÍDEO: file_url (o Meta baixa direto do Drive — funciona com arquivos grandes). IMAGEM: bytes via google-sheets.
+async function uploadDriveMedia(
   supabase: any, orgId: string, token: string, acc: string, cr: any,
-): Promise<string> {
-  const { file_id, page_id, instagram_actor_id, message, link, call_to_action } = cr;
+): Promise<{ is_video: boolean; video_id?: string; thumbnail_url?: string; image_hash?: string; file_name: string }> {
+  const { file_id } = cr;
   let { file_name, mime } = cr;
   if (!file_id) throw new Error("file_id do criativo é obrigatório");
-  if (!page_id) throw new Error("page_id (página do Facebook) é obrigatório para o criativo");
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  // Descobre o tipo real no Drive quando o chamador não informou (evita tratar
-  // um vídeo grande como imagem e tentar baixá-lo inteiro → estouro de memória).
   if (!mime) {
     try {
       const mr = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
@@ -411,19 +414,14 @@ async function createCreativeFromDrive(
       });
       const mj = await mr.json();
       if (mr.ok) { mime = mj.mimeType || ""; if (!file_name) file_name = mj.name || ""; }
-    } catch { /* segue com heurística por extensão */ }
+    } catch { /* heurística por extensão */ }
   }
   const isVideo = (mime || "").startsWith("video/") || /\.(mp4|mov|m4v|avi|webm)$/i.test(file_name || "");
 
-  const objectStorySpec: any = { page_id };
-  if (instagram_actor_id) objectStorySpec.instagram_actor_id = instagram_actor_id;
-
   if (isVideo) {
-    // O Meta baixa o vídeo direto da URL pública do Drive (pasta deve estar compartilhada).
     const vr = await graph(token, `/${acc}/advideos`, { file_url: driveDownloadUrl(file_id), name: file_name || "Vídeo" }, "POST");
     const videoId = vr.id;
     if (!videoId) throw new Error("O Meta não retornou o id do vídeo (verifique se a pasta do Drive está pública).");
-    // Aguarda o processamento do vídeo (até ~2min) — necessário antes de criar o anúncio.
     for (let i = 0; i < 24; i++) {
       const st = await graph(token, `/${videoId}`, { fields: "status" });
       const vs = st?.status?.video_status;
@@ -431,7 +429,6 @@ async function createCreativeFromDrive(
       if (vs === "error") throw new Error("O Meta falhou ao processar o vídeo baixado do Drive.");
       await new Promise((r) => setTimeout(r, 5000));
     }
-    // O Meta exige um thumbnail (image_url) no video_data — pega o auto-gerado do vídeo.
     let thumbUrl = "";
     for (let i = 0; i < 6; i++) {
       const th = await graph(token, `/${videoId}/thumbnails`, {});
@@ -441,42 +438,83 @@ async function createCreativeFromDrive(
       await new Promise((r) => setTimeout(r, 3000));
     }
     if (!thumbUrl) throw new Error("Não consegui obter o thumbnail do vídeo no Meta. Tente novamente em instantes.");
+    return { is_video: true, video_id: videoId, thumbnail_url: thumbUrl, file_name: file_name || "Vídeo" };
+  }
+  // Imagem
+  const dl = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
+    method: "POST", headers: { "Content-Type": "application/json", apikey: svcKey },
+    body: JSON.stringify({ action: "download_drive_file", file_id, org_id: orgId }),
+  });
+  const dlj = await dl.json();
+  if (!dl.ok) throw new Error(dlj.error || "Falha ao baixar criativo do Drive");
+  const fileMime: string = mime || dlj.mime || "image/jpeg";
+  const bin = atob(dlj.base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const fd = new FormData();
+  fd.set("access_token", token);
+  fd.set("filename", new Blob([bytes], { type: fileMime }), file_name || "image.jpg");
+  const ir = await fetch(`${GRAPH}/${acc}/adimages`, { method: "POST", body: fd });
+  const ij = await ir.json();
+  if (!ir.ok) throw new Error(ij?.error?.message || "Falha ao subir imagem ao Meta");
+  const imageHash = ij.images?.[Object.keys(ij.images)[0]]?.hash;
+  return { is_video: false, image_hash: imageHash, file_name: file_name || "Imagem" };
+}
+
+// Cria UM adcreative (object_story_spec) a partir de um arquivo — usado no wizard "do zero" (1 anúncio por criativo).
+async function createCreativeFromDrive(
+  supabase: any, orgId: string, token: string, acc: string, cr: any,
+): Promise<string> {
+  const { page_id, instagram_actor_id, message, link, call_to_action } = cr;
+  if (!page_id) throw new Error("page_id (página do Facebook) é obrigatório para o criativo");
+  const m = await uploadDriveMedia(supabase, orgId, token, acc, cr);
+  const objectStorySpec: any = { page_id };
+  if (instagram_actor_id) objectStorySpec.instagram_actor_id = instagram_actor_id;
+  if (m.is_video) {
     objectStorySpec.video_data = {
-      video_id: videoId,
-      image_url: thumbUrl,
-      message: message || "",
+      video_id: m.video_id, image_url: m.thumbnail_url, message: message || "",
       ...(link ? { call_to_action: { type: call_to_action || "LEARN_MORE", value: { link } } } : {}),
     };
   } else {
-    // Imagem: baixa bytes via google-sheets (server-to-server) e sobe em /adimages.
-    const dl = await fetch(`${supabaseUrl}/functions/v1/google-sheets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: svcKey },
-      body: JSON.stringify({ action: "download_drive_file", file_id, org_id: orgId }),
-    });
-    const dlj = await dl.json();
-    if (!dl.ok) throw new Error(dlj.error || "Falha ao baixar criativo do Drive");
-    const fileMime: string = mime || dlj.mime || "image/jpeg";
-    const bin = atob(dlj.base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const fd = new FormData();
-    fd.set("access_token", token);
-    fd.set("filename", new Blob([bytes], { type: fileMime }), file_name || "image.jpg");
-    const ir = await fetch(`${GRAPH}/${acc}/adimages`, { method: "POST", body: fd });
-    const ij = await ir.json();
-    if (!ir.ok) throw new Error(ij?.error?.message || "Falha ao subir imagem ao Meta");
-    const imageHash = ij.images?.[Object.keys(ij.images)[0]]?.hash;
     objectStorySpec.link_data = {
-      message: message || "", link: link || "https://facebook.com", image_hash: imageHash,
+      message: message || "", link: link || "https://facebook.com", image_hash: m.image_hash,
       ...(call_to_action ? { call_to_action: { type: call_to_action, value: { link: link || "https://facebook.com" } } } : {}),
     };
   }
-
-  const creative = await graph(token, `/${acc}/adcreatives`, {
-    name: file_name || "Criativo", object_story_spec: objectStorySpec,
-  }, "POST");
+  const creative = await graph(token, `/${acc}/adcreatives`, { name: m.file_name || "Criativo", object_story_spec: objectStorySpec }, "POST");
   return creative.id;
+}
+
+// Cria UM anúncio FLEXÍVEL (dinâmico) com TODAS as mídias num único asset_feed_spec,
+// herdando textos/títulos/link/CTA/página do anúncio de origem. É o que a duplicação usa.
+async function createFlexibleAd(
+  supabase: any, orgId: string, token: string, acc: string, adsetId: string,
+  creatives: any[], opts: { page_id?: string; instagram_user_id?: string; link?: string; call_to_action?: string; message?: string; feed?: any; name?: string; ad_name?: string },
+  statusInicial: string,
+): Promise<string[]> {
+  if (!opts.page_id) throw new Error("Não encontrei a página do Facebook do anúncio de origem.");
+  const link = opts.link;
+  if (!link) throw new Error("Não encontrei o link de destino no anúncio de origem; informe o link.");
+  // Sobe todas as mídias em paralelo (cada vídeo espera o processamento).
+  const media = await Promise.all(creatives.map((c) => uploadDriveMedia(supabase, orgId, token, acc, c)));
+  const videos = media.filter((m) => m.is_video).map((m) => ({ video_id: m.video_id, thumbnail_url: m.thumbnail_url }));
+  const images = media.filter((m) => !m.is_video).map((m) => ({ hash: m.image_hash }));
+  const cta = opts.call_to_action || "LEARN_MORE";
+  const feed: any = {
+    ...(videos.length ? { videos } : {}),
+    ...(images.length ? { images } : {}),
+    bodies: (opts.feed?.bodies?.length ? opts.feed.bodies : [{ text: opts.message || "" }]),
+    ad_formats: [videos.length ? "SINGLE_VIDEO" : "SINGLE_IMAGE"],
+    call_to_action_types: [cta],
+    link_urls: [{ website_url: link, display_url: link }],
+  };
+  if (opts.feed?.titles?.length) feed.titles = opts.feed.titles;
+  if (opts.feed?.descriptions?.length && opts.feed.descriptions.some((d: any) => (d?.text || "").trim())) feed.descriptions = opts.feed.descriptions;
+  const oss: any = { page_id: opts.page_id };
+  if (opts.instagram_user_id) oss.instagram_user_id = opts.instagram_user_id;
+  const creative = await graph(token, `/${acc}/adcreatives`, { name: opts.name || "Criativo", object_story_spec: oss, asset_feed_spec: feed }, "POST");
+  const adRes = await graph(token, `/${acc}/ads`, { name: opts.ad_name || opts.name || "Anúncio", adset_id: adsetId, creative: { creative_id: creative.id }, status: statusInicial }, "POST");
+  return [adRes.id as string];
 }
 
 Deno.serve(async (req) => {
