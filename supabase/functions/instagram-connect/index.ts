@@ -105,15 +105,24 @@ async function listarContas(supabase: any, orgId: string, token: string) {
   return contas;
 }
 
-// Assina o app à página para receber o field `comments` do Instagram.
+// Vincula o app à Página (subscribed_apps) para que o app receba os eventos dos ativos
+// conectados a ela. Os comentários do Instagram chegam pela inscrição do app no OBJETO
+// `instagram` (nível do app, configurado no painel da Meta) — `comments` NÃO é um campo
+// válido de subscribed_apps da Página (esses são campos de Página, ex.: `feed`).
+// Aqui apenas garantimos (idempotente) que o app está vinculado à Página.
 async function assinarWebhook(supabase: any, orgId: string, igUserId: string) {
   const { data: conta } = await supabase.from("ig_contas")
     .select("page_id,page_token").eq("org_id", orgId).eq("ig_user_id", igUserId).maybeSingle();
   if (!conta?.page_id || !conta.page_token) throw new Error("Conta Instagram não encontrada. Conecte novamente.");
-  await graphPost(conta.page_token, `/${conta.page_id}/subscribed_apps`, { subscribed_fields: "comments" });
+  // Já existe? (evita erro se o app já estiver vinculado à Página)
+  const atual = await graphGet(conta.page_token, `/${conta.page_id}/subscribed_apps`).catch(() => null);
+  const jaVinculado = Array.isArray(atual?.data) && atual.data.length > 0;
+  if (!jaVinculado) {
+    await graphPost(conta.page_token, `/${conta.page_id}/subscribed_apps`, { subscribed_fields: "feed" });
+  }
   await supabase.from("ig_contas").update({ webhook_assinado: true, updated_at: new Date().toISOString() })
     .eq("org_id", orgId).eq("ig_user_id", igUserId);
-  return { ok: true };
+  return { ok: true, ja_vinculado: jaVinculado };
 }
 
 // Lista posts/Reels da conta IG para o seletor de mídia.
