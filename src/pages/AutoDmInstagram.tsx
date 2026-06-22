@@ -45,8 +45,16 @@ export default function AutoDmInstagram() {
   const [midias, setMidias] = useState<IgMidia[]>([]);
 
   const [automacoes, setAutomacoes] = useState<IgAutomacao[]>([]);
+  const [execucoes, setExecucoes] = useState<Record<string, number>>({});
   const [edit, setEdit] = useState<IgAutomacao | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // Conta selecionada persiste entre reloads (senão o seletor volta pro 1º da lista).
+  const SEL_KEY = "autodm_conta_sel";
+  const selecionarConta = useCallback((c: IgConta) => {
+    setContaSel(c);
+    try { localStorage.setItem(SEL_KEY, c.ig_user_id); } catch { /* ignore */ }
+  }, []);
 
   // ---- Carregamento inicial: contas conectadas (ig_contas) + automações ----
   const carregar = useCallback(async () => {
@@ -56,10 +64,19 @@ export default function AutoDmInstagram() {
       page_name: c.page_name, profile_picture_url: null,
     }));
     setContas(mapped);
-    if (mapped.length && !contaSel) setContaSel(mapped[0]);
+    if (mapped.length) {
+      const salvo = (() => { try { return localStorage.getItem(SEL_KEY); } catch { return null; } })();
+      const escolhida = mapped.find((m) => m.ig_user_id === salvo) || mapped[0];
+      setContaSel((atual) => atual ?? escolhida);
+    }
     const { data: autos } = await db.from("ig_automacoes").select("*").order("created_at", { ascending: false });
     setAutomacoes((autos || []) as IgAutomacao[]);
-  }, [contaSel]);
+    // Contagem de execuções (logs) por automação — estilo ManyChat.
+    const { data: logs } = await db.from("ig_automacao_logs").select("automacao_id");
+    const cont: Record<string, number> = {};
+    for (const l of (logs || []) as any[]) { if (l.automacao_id) cont[l.automacao_id] = (cont[l.automacao_id] || 0) + 1; }
+    setExecucoes(cont);
+  }, []);
 
   useEffect(() => { carregar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -80,7 +97,6 @@ export default function AutoDmInstagram() {
       }
       await carregar();
       setContas(cts.length ? cts : contas);
-      if (cts.length) setContaSel(cts[0]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao conectar Instagram.");
     } finally {
@@ -171,7 +187,7 @@ export default function AutoDmInstagram() {
           <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
             {/* Conexão da conta */}
             <ConexaoCard
-              contas={contas} contaSel={contaSel} setContaSel={setContaSel}
+              contas={contas} contaSel={contaSel} setContaSel={selecionarConta}
               conectando={conectando} onConectar={conectar} onAtivarWebhook={ativarWebhook}
             />
 
@@ -182,7 +198,7 @@ export default function AutoDmInstagram() {
               />
             ) : (
               <ListaAutomacoes
-                automacoes={automacoes} onNova={novaAutomacao}
+                automacoes={automacoes} execucoes={execucoes} midias={midias} onNova={novaAutomacao}
                 onEditar={setEdit} onExcluir={excluir} onToggle={toggleStatus}
               />
             )}
@@ -240,10 +256,14 @@ function ConexaoCard({ contas, contaSel, setContaSel, conectando, onConectar, on
 // ============================================================
 // Lista de automações
 // ============================================================
-function ListaAutomacoes({ automacoes, onNova, onEditar, onExcluir, onToggle }: {
-  automacoes: IgAutomacao[]; onNova: () => void;
+function ListaAutomacoes({ automacoes, execucoes, midias, onNova, onEditar, onExcluir, onToggle }: {
+  automacoes: IgAutomacao[]; execucoes: Record<string, number>; midias: IgMidia[]; onNova: () => void;
   onEditar: (a: IgAutomacao) => void; onExcluir: (id: string) => void; onToggle: (a: IgAutomacao) => void;
 }) {
+  const thumbDe = (a: IgAutomacao) => {
+    if (a.escopo !== "post_especifico" || a.media_ids.length === 0) return null;
+    return midias.find((m) => m.id === a.media_ids[0])?.thumbnail || null;
+  };
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -254,14 +274,25 @@ function ListaAutomacoes({ automacoes, onNova, onEditar, onExcluir, onToggle }: 
         {automacoes.length === 0 && (
           <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma automação ainda. Crie a primeira.</p>
         )}
-        {automacoes.map((a) => (
-          <div key={a.id} className="flex items-center justify-between rounded-lg border p-3">
-            <div className="flex items-center gap-3 min-w-0">
+        {/* Cabeçalho de colunas estilo ManyChat */}
+        {automacoes.length > 0 && (
+          <div className="hidden md:flex items-center gap-3 px-3 pb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <span className="flex-1">Nome</span>
+            <span className="w-20 text-center">Execuções</span>
+            <span className="w-16 text-center">Post</span>
+            <span className="w-[150px]" />
+          </div>
+        )}
+        {automacoes.map((a) => {
+          const thumb = thumbDe(a);
+          const execs = execucoes[a.id] || 0;
+          return (
+            <div key={a.id} className="flex items-center gap-3 rounded-lg border p-3">
               <Badge variant={a.status === "live" ? "default" : "secondary"}
                 className={a.status === "live" ? "bg-green-600" : ""}>
                 {a.status === "live" ? "LIVE" : "Pausada"}
               </Badge>
-              <div className="min-w-0">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{a.nome}</p>
                 <p className="text-xs text-muted-foreground truncate">
                   {a.gatilho_tipo === "palavra" ? `Palavras: ${a.palavras.join(", ") || "—"}` : "Qualquer comentário"}
@@ -269,14 +300,29 @@ function ListaAutomacoes({ automacoes, onNova, onEditar, onExcluir, onToggle }: 
                   {a.escopo === "post_especifico" ? `${a.media_ids.length} post(s)` : a.escopo === "qualquer" ? "Qualquer post" : "Próximo post"}
                 </p>
               </div>
+              {/* Execuções */}
+              <div className="w-20 text-center shrink-0">
+                <span className="text-base font-semibold tabular-nums">{execs}</span>
+                <p className="text-[10px] text-muted-foreground -mt-0.5">execuções</p>
+              </div>
+              {/* Miniatura do post setado */}
+              <div className="w-16 flex justify-center shrink-0">
+                {thumb ? (
+                  <img src={thumb} alt="" className="h-12 w-12 rounded-md object-cover border" />
+                ) : (
+                  <div className="h-12 w-12 rounded-md border bg-muted flex items-center justify-center text-muted-foreground">
+                    <Instagram className="h-4 w-4" />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0 w-[150px] justify-end">
+                <Switch checked={a.status === "live"} onCheckedChange={() => onToggle(a)} />
+                <Button variant="ghost" size="sm" onClick={() => onEditar(a)}>Editar</Button>
+                <Button variant="ghost" size="icon" onClick={() => onExcluir(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Switch checked={a.status === "live"} onCheckedChange={() => onToggle(a)} />
-              <Button variant="ghost" size="sm" onClick={() => onEditar(a)}>Editar</Button>
-              <Button variant="ghost" size="icon" onClick={() => onExcluir(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
