@@ -50,7 +50,9 @@ async function responderComentario(token: string, commentId: string, mensagem: s
 }
 
 // DM via Private Reply (Instagram Messaging API) — usa recipient.comment_id.
-async function enviarDM(token: string, igUserId: string, commentId: string, payload: any) {
+// IMPORTANTE: o endpoint é /{page_id}/messages (com o page_token). Usar /{ig_user_id}/messages
+// retorna "(#3) Application does not have the capability to make this API call".
+async function enviarDM(token: string, pageId: string, commentId: string, payload: any) {
   const texto: string = payload?.texto || "";
   const botoes: any[] = Array.isArray(payload?.botoes) ? payload.botoes.filter((b: any) => b?.url) : [];
   let message: any;
@@ -68,7 +70,7 @@ async function enviarDM(token: string, igUserId: string, commentId: string, payl
   } else {
     message = { text: texto };
   }
-  return graphPost(token, `/${igUserId}/messages`, { recipient: { comment_id: commentId }, message });
+  return graphPost(token, `/${pageId}/messages`, { recipient: { comment_id: commentId }, message });
 }
 
 // Escolhe uma variação de resposta pública aleatoriamente (como o ManyChat).
@@ -118,10 +120,11 @@ Deno.serve(async (req) => {
 
         // Org + token/conta a partir do ig_user_id.
         const { data: conta } = await supabase.from("ig_contas")
-          .select("org_id, ig_user_id, page_token, ativo").eq("ig_user_id", igUserId).eq("ativo", true).maybeSingle();
+          .select("org_id, ig_user_id, page_id, page_token, ativo").eq("ig_user_id", igUserId).eq("ativo", true).maybeSingle();
         if (!conta?.org_id || !conta.page_token) { console.warn("[ig-comments] conta não vinculada:", igUserId); continue; }
         const orgId = conta.org_id as string;
         const token = conta.page_token as string;
+        const pageId = String(conta.page_id ?? "");
 
         // Ignora comentários do próprio dono da conta.
         if (fromId && fromId === String(conta.ig_user_id)) continue;
@@ -144,7 +147,7 @@ Deno.serve(async (req) => {
           catch (e) { acoes.erros.push(`reply: ${e instanceof Error ? e.message : "erro"}`); }
         }
         if (auto.enviar_dm) {
-          try { await enviarDM(token, String(conta.ig_user_id), commentId, auto.dm_payload); acoes.dm_ok = true; }
+          try { await enviarDM(token, pageId, commentId, auto.dm_payload); acoes.dm_ok = true; }
           catch (e) { acoes.erros.push(`dm: ${e instanceof Error ? e.message : "erro"}`); }
         }
 
