@@ -87,9 +87,10 @@ Deno.serve(async (req) => {
   // 1) Verificação do webhook (Meta chama via GET).
   if (req.method === "GET") {
     const mode = url.searchParams.get("hub.mode");
-    const verify = url.searchParams.get("hub.verify_token");
+    const verify = (url.searchParams.get("hub.verify_token") || "").trim();
     const challenge = url.searchParams.get("hub.challenge");
-    if (mode === "subscribe" && verify && verify === Deno.env.get("META_WEBHOOK_VERIFY_TOKEN")) {
+    const expected = (Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") || "").trim();
+    if (mode === "subscribe" && verify && expected && verify === expected) {
       return new Response(challenge ?? "", { status: 200 });
     }
     return new Response("forbidden", { status: 403 });
