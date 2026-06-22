@@ -286,6 +286,157 @@ export type Database = {
         }
         Relationships: []
       }
+      ig_automacao_logs: {
+        Row: {
+          acoes: Json
+          automacao_id: string | null
+          comment_id: string
+          comment_text: string | null
+          created_at: string | null
+          from_username: string | null
+          id: string
+          media_id: string | null
+          org_id: string | null
+        }
+        Insert: {
+          acoes?: Json
+          automacao_id?: string | null
+          comment_id: string
+          comment_text?: string | null
+          created_at?: string | null
+          from_username?: string | null
+          id?: string
+          media_id?: string | null
+          org_id?: string | null
+        }
+        Update: {
+          acoes?: Json
+          automacao_id?: string | null
+          comment_id?: string
+          comment_text?: string | null
+          created_at?: string | null
+          from_username?: string | null
+          id?: string
+          media_id?: string | null
+          org_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ig_automacao_logs_automacao_id_fkey"
+            columns: ["automacao_id"]
+            isOneToOne: false
+            referencedRelation: "ig_automacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ig_automacoes: {
+        Row: {
+          created_at: string | null
+          dm_payload: Json
+          enviar_dm: boolean
+          escopo: string
+          gatilho_tipo: string
+          id: string
+          ig_conta_id: string | null
+          match_tipo: string
+          media_ids: Json
+          nome: string
+          org_id: string | null
+          palavras: string[]
+          responder_comentario: boolean
+          resposta_comentario_templates: Json
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          dm_payload?: Json
+          enviar_dm?: boolean
+          escopo?: string
+          gatilho_tipo?: string
+          id?: string
+          ig_conta_id?: string | null
+          match_tipo?: string
+          media_ids?: Json
+          nome?: string
+          org_id?: string | null
+          palavras?: string[]
+          responder_comentario?: boolean
+          resposta_comentario_templates?: Json
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          dm_payload?: Json
+          enviar_dm?: boolean
+          escopo?: string
+          gatilho_tipo?: string
+          id?: string
+          ig_conta_id?: string | null
+          match_tipo?: string
+          media_ids?: Json
+          nome?: string
+          org_id?: string | null
+          palavras?: string[]
+          responder_comentario?: boolean
+          resposta_comentario_templates?: Json
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ig_automacoes_ig_conta_id_fkey"
+            columns: ["ig_conta_id"]
+            isOneToOne: false
+            referencedRelation: "ig_contas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ig_contas: {
+        Row: {
+          ativo: boolean
+          created_at: string | null
+          id: string
+          ig_user_id: string
+          ig_username: string | null
+          org_id: string | null
+          page_id: string
+          page_name: string | null
+          page_token: string | null
+          updated_at: string | null
+          webhook_assinado: boolean
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string | null
+          id?: string
+          ig_user_id: string
+          ig_username?: string | null
+          org_id?: string | null
+          page_id: string
+          page_name?: string | null
+          page_token?: string | null
+          updated_at?: string | null
+          webhook_assinado?: boolean
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string | null
+          id?: string
+          ig_user_id?: string
+          ig_username?: string | null
+          org_id?: string | null
+          page_id?: string
+          page_name?: string | null
+          page_token?: string | null
+          updated_at?: string | null
+          webhook_assinado?: boolean
+        }
+        Relationships: []
+      }
       insights_trafego: {
         Row: {
           cidade_slug: string

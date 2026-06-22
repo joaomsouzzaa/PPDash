@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.webhook-leads]
 verify_jwt = false
+
+# Webhook de comentários do Instagram (Auto-DM): público, chamado pela Meta.
+[functions.instagram-comments]
+verify_jwt = false

@@ -60,6 +60,7 @@ const ICONS: Record<string, any> = {
   "growth.designer": Palette,
   "growth.scraping": Instagram,
   "growth.metaads": Megaphone,
+  "growth.autodm": MessageSquare,
 };
 
 export function AppSidebar() {
