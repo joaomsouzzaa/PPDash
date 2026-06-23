@@ -10,19 +10,30 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 type Coluna = { id: string; nome: string; ordem: number; agente_id: string | null };
-type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string };
+type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null };
 type Agente = { id: string; nome: string };
 type Resposta = { id: string; autor: string | null; conteudo: string; created_at: string };
 type Anexo = { id: string; tipo: string; url: string | null; status: string; created_at: string };
+type Subtarefa = { id: string; titulo: string; concluida: boolean; ordem: number };
+type ChecklistItem = { id: string; item: string; concluido: boolean; ordem: number };
 
-const PRIORIDADES: Record<string, string> = { baixa: "Baixa", media: "Média", alta: "Alta" };
-const prioCor: Record<string, string> = { baixa: "secondary", media: "outline", alta: "destructive" };
+const PRIORIDADES: Record<string, string> = { urgente: "Urgente", alta: "Alta", normal: "Normal", baixa: "Baixa" };
+// classes Tailwind no estilo ClickUp (vermelho / amarelo / azul / cinza)
+const prioClasse: Record<string, string> = {
+  urgente: "bg-red-500/15 text-red-500 border-red-500/30",
+  alta: "bg-amber-500/15 text-amber-500 border-amber-500/30",
+  normal: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+  baixa: "bg-muted text-muted-foreground border-border",
+};
 
 export default function Workflow() {
   // v4 build check
@@ -61,7 +72,7 @@ export default function Workflow() {
   // ---- Dialog da tarefa ----
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tarefa | null>(null);
-  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", prioridade: "media" };
+  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[] };
   const [form, setForm] = useState({ ...emptyForm });
   const [comentario, setComentario] = useState("");
 
@@ -83,6 +94,64 @@ export default function Workflow() {
       return (data || []) as Anexo[];
     },
   });
+
+  const { data: subtarefas = [] } = useQuery({
+    queryKey: ["subtarefas", editing?.id],
+    enabled: !!editing,
+    queryFn: async () => {
+      const { data } = await supabase.from("tarefa_subtarefas").select("*").eq("tarefa_id", editing!.id).order("ordem");
+      return (data || []) as Subtarefa[];
+    },
+  });
+  const { data: checklist = [] } = useQuery({
+    queryKey: ["checklist", editing?.id],
+    enabled: !!editing,
+    queryFn: async () => {
+      const { data } = await supabase.from("tarefa_checklist").select("*").eq("tarefa_id", editing!.id).order("ordem");
+      return (data || []) as ChecklistItem[];
+    },
+  });
+  const [novaSub, setNovaSub] = useState("");
+  const [novoCheck, setNovoCheck] = useState("");
+  const [novaTag, setNovaTag] = useState("");
+
+  const addSubtarefa = async () => {
+    if (!editing || !novaSub.trim()) return;
+    await supabase.from("tarefa_subtarefas").insert({ tarefa_id: editing.id, titulo: novaSub.trim(), ordem: subtarefas.length });
+    setNovaSub("");
+    queryClient.invalidateQueries({ queryKey: ["subtarefas", editing.id] });
+  };
+  const toggleSubtarefa = async (s: Subtarefa) => {
+    await supabase.from("tarefa_subtarefas").update({ concluida: !s.concluida }).eq("id", s.id);
+    queryClient.invalidateQueries({ queryKey: ["subtarefas", editing!.id] });
+  };
+  const delSubtarefa = async (s: Subtarefa) => {
+    await supabase.from("tarefa_subtarefas").delete().eq("id", s.id);
+    queryClient.invalidateQueries({ queryKey: ["subtarefas", editing!.id] });
+  };
+  const addCheck = async () => {
+    if (!editing || !novoCheck.trim()) return;
+    await supabase.from("tarefa_checklist").insert({ tarefa_id: editing.id, item: novoCheck.trim(), ordem: checklist.length });
+    setNovoCheck("");
+    queryClient.invalidateQueries({ queryKey: ["checklist", editing.id] });
+  };
+  const toggleCheck = async (c: ChecklistItem) => {
+    await supabase.from("tarefa_checklist").update({ concluido: !c.concluido }).eq("id", c.id);
+    queryClient.invalidateQueries({ queryKey: ["checklist", editing!.id] });
+  };
+  const delCheck = async (c: ChecklistItem) => {
+    await supabase.from("tarefa_checklist").delete().eq("id", c.id);
+    queryClient.invalidateQueries({ queryKey: ["checklist", editing!.id] });
+  };
+  const addTag = () => {
+    const v = novaTag.trim();
+    if (!v || form.etiquetas.includes(v)) { setNovaTag(""); return; }
+    setForm({ ...form, etiquetas: [...form.etiquetas, v] });
+    setNovaTag("");
+  };
+  const removeTag = (t: string) => setForm({ ...form, etiquetas: form.etiquetas.filter((x) => x !== t) });
+  const fmtData = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const estaAtrasada = (d: string | null) => !!d && d < new Date().toISOString().slice(0, 10);
 
   // Etapa de design? (compara pelo nome da coluna selecionada no form)
   const etapaNome = colunas.find((c) => c.id === form.coluna_id)?.nome || "";
@@ -133,7 +202,7 @@ export default function Workflow() {
   };
   const abrirTarefa = (t: Tarefa) => {
     setEditing(t);
-    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", prioridade: t.prioridade || "media" });
+    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [] });
     setComentario("");
     setOpen(true);
   };
@@ -143,6 +212,9 @@ export default function Workflow() {
     const payload = {
       titulo: form.titulo.trim(), descricao: form.descricao || null,
       coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, prioridade: form.prioridade,
+      data_inicio: form.data_inicio || null, data_vencimento: form.data_vencimento || null,
+      tempo_estimado: form.tempo_estimado.trim() ? parseInt(form.tempo_estimado, 10) : null,
+      etiquetas: form.etiquetas,
       updated_at: new Date().toISOString(),
     };
     const res = editing
@@ -286,7 +358,8 @@ export default function Workflow() {
                               <p className="text-sm font-medium leading-tight">{t.titulo}</p>
                               {t.descricao && <p className="text-xs text-muted-foreground line-clamp-2">{t.descricao}</p>}
                               <div className="flex items-center gap-1 flex-wrap">
-                                <Badge variant={prioCor[t.prioridade] as any} className="text-[10px]">{PRIORIDADES[t.prioridade] || t.prioridade}</Badge>
+                                {t.data_vencimento && <Badge variant="outline" className={`text-[10px] flex items-center gap-1 ${estaAtrasada(t.data_vencimento) ? "text-red-500 border-red-500/40" : ""}`}><CalendarIcon className="h-3 w-3" />{fmtData(t.data_vencimento)}</Badge>}
+                                <Badge variant="outline" className={`text-[10px] border ${prioClasse[t.prioridade] || ""}`}>{PRIORIDADES[t.prioridade] || t.prioridade}</Badge>
                                 {t.agente_id && <Badge variant="secondary" className="text-[10px] flex items-center gap-1"><Bot className="h-3 w-3" />{agenteNome(t.agente_id)}</Badge>}
                                 {t.origem === "delegacao" && <Badge variant="outline" className="text-[10px]">auto</Badge>}
                               </div>
@@ -305,17 +378,18 @@ export default function Workflow() {
               <div className="rounded-lg border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>Tarefa</TableHead><TableHead>Etapa</TableHead><TableHead>Responsável</TableHead><TableHead>Prioridade</TableHead><TableHead>Origem</TableHead></TableRow>
+                    <TableRow><TableHead>Tarefa</TableHead><TableHead>Etapa</TableHead><TableHead>Responsável</TableHead><TableHead>Vencimento</TableHead><TableHead>Prioridade</TableHead><TableHead>Origem</TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
                     {tarefas.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhuma tarefa ainda.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma tarefa ainda.</TableCell></TableRow>
                     ) : tarefas.map((t) => (
                       <TableRow key={t.id} className="cursor-pointer" onClick={() => abrirTarefa(t)}>
                         <TableCell className="font-medium">{t.titulo}</TableCell>
                         <TableCell>{colunaNome(t.coluna_id) || "—"}</TableCell>
                         <TableCell>{agenteNome(t.agente_id) || "—"}</TableCell>
-                        <TableCell><Badge variant={prioCor[t.prioridade] as any} className="text-[10px]">{PRIORIDADES[t.prioridade] || t.prioridade}</Badge></TableCell>
+                        <TableCell className={estaAtrasada(t.data_vencimento) ? "text-red-500" : ""}>{t.data_vencimento ? fmtData(t.data_vencimento) : "—"}</TableCell>
+                        <TableCell><Badge variant="outline" className={`text-[10px] border ${prioClasse[t.prioridade] || ""}`}>{PRIORIDADES[t.prioridade] || t.prioridade}</Badge></TableCell>
                         <TableCell>{t.origem === "delegacao" ? "Agente" : "Manual"}</TableCell>
                       </TableRow>
                     ))}
@@ -362,30 +436,120 @@ export default function Workflow() {
       {/* Popup da tarefa */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? "Tarefa" : "Nova tarefa"}</DialogTitle></DialogHeader>
+          <DialogHeader className="sr-only"><DialogTitle>{editing ? "Tarefa" : "Nova tarefa"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1"><Label>Título</Label><Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ex: Copy do Workshop Brasília" /></div>
-            <div className="space-y-1"><Label>Descrição / Briefing</Label><Textarea rows={4} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Briefing da tarefa..." /></div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1"><Label>Etapa</Label>
-                <Select value={form.coluna_id} onValueChange={(v) => setForm({ ...form, coluna_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Coluna" /></SelectTrigger>
-                  <SelectContent>{colunas.map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1"><Label>Responsável</Label>
-                <Select value={form.agente_id || "_none"} onValueChange={(v) => setForm({ ...form, agente_id: v === "_none" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Agente" /></SelectTrigger>
-                  <SelectContent><SelectItem value="_none">—</SelectItem>{agentes.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1"><Label>Prioridade</Label>
-                <Select value={form.prioridade} onValueChange={(v) => setForm({ ...form, prioridade: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{Object.entries(PRIORIDADES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+            {/* Título grande sem borda (estilo ClickUp) */}
+            <Input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Nome da Tarefa"
+              className="border-0 px-0 text-lg font-medium shadow-none focus-visible:ring-0 h-auto" />
+            {/* Descrição sem borda */}
+            <Textarea rows={3} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Adicione uma descrição..."
+              className="border-0 px-0 shadow-none resize-none focus-visible:ring-0" />
+
+            {/* Linha de chips de atributos */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Etapa / Status */}
+              <Select value={form.coluna_id} onValueChange={(v) => setForm({ ...form, coluna_id: v })}>
+                <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><ListChecks className="h-3.5 w-3.5" /><SelectValue placeholder="Etapa" /></SelectTrigger>
+                <SelectContent>{colunas.map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
+              </Select>
+
+              {/* Responsável */}
+              <Select value={form.agente_id || "_none"} onValueChange={(v) => setForm({ ...form, agente_id: v === "_none" ? "" : v })}>
+                <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><User className="h-3.5 w-3.5" /><SelectValue placeholder="Responsável" /></SelectTrigger>
+                <SelectContent><SelectItem value="_none">— Sem responsável</SelectItem>{agentes.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
+              </Select>
+
+              {/* Data de vencimento */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className={`h-8 gap-1.5 rounded-full px-3 text-xs ${estaAtrasada(form.data_vencimento) ? "text-red-500 border-red-500/40" : ""}`}>
+                    <CalendarIcon className="h-3.5 w-3.5" />{form.data_vencimento ? `Vence ${fmtData(form.data_vencimento)}` : "Vencimento"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={form.data_vencimento ? new Date(form.data_vencimento + "T00:00:00") : undefined}
+                    onSelect={(d) => setForm({ ...form, data_vencimento: d ? d.toISOString().slice(0, 10) : "" })} />
+                  {form.data_vencimento && <div className="border-t p-2"><Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setForm({ ...form, data_vencimento: "" })}>Limpar</Button></div>}
+                </PopoverContent>
+              </Popover>
+
+              {/* Data inicial */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full px-3 text-xs">
+                    <CalendarIcon className="h-3.5 w-3.5" />{form.data_inicio ? `Início ${fmtData(form.data_inicio)}` : "Início"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={form.data_inicio ? new Date(form.data_inicio + "T00:00:00") : undefined}
+                    onSelect={(d) => setForm({ ...form, data_inicio: d ? d.toISOString().slice(0, 10) : "" })} />
+                  {form.data_inicio && <div className="border-t p-2"><Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setForm({ ...form, data_inicio: "" })}>Limpar</Button></div>}
+                </PopoverContent>
+              </Popover>
+
+              {/* Prioridade */}
+              <Select value={form.prioridade} onValueChange={(v) => setForm({ ...form, prioridade: v })}>
+                <SelectTrigger className={`h-8 w-auto gap-1.5 rounded-full border px-3 text-xs ${prioClasse[form.prioridade] || ""}`}><Flag className="h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
+                <SelectContent>{Object.entries(PRIORIDADES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+              </Select>
+
+              {/* Tempo estimado (minutos) */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full px-3 text-xs">
+                    <Clock className="h-3.5 w-3.5" />{form.tempo_estimado ? `${form.tempo_estimado} min` : "Tempo est."}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-2" align="start">
+                  <Label className="text-xs">Tempo estimado (min)</Label>
+                  <Input type="number" min={0} value={form.tempo_estimado} onChange={(e) => setForm({ ...form, tempo_estimado: e.target.value })} placeholder="Ex: 60" className="mt-1 h-8" />
+                </PopoverContent>
+              </Popover>
             </div>
+
+            {/* Etiquetas */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+              {form.etiquetas.map((t) => (
+                <Badge key={t} variant="secondary" className="gap-1 text-[11px]">{t}<button type="button" onClick={() => removeTag(t)}><X className="h-3 w-3" /></button></Badge>
+              ))}
+              <Input value={novaTag} onChange={(e) => setNovaTag(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }} placeholder="Etiqueta..."
+                className="h-7 w-28 border-0 px-1 text-xs shadow-none focus-visible:ring-0" />
+            </div>
+
+            {/* Subtarefas e Checklist (só ao editar — precisam de tarefa salva) */}
+            {editing && (
+              <div className="space-y-3 border-t border-border pt-3">
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-2 text-sm"><GitBranch className="h-4 w-4 text-primary" /> Subtarefas</Label>
+                  {subtarefas.map((s) => (
+                    <div key={s.id} className="flex items-center gap-2 group">
+                      <Checkbox checked={s.concluida} onCheckedChange={() => toggleSubtarefa(s)} />
+                      <span className={`flex-1 text-sm ${s.concluida ? "line-through text-muted-foreground" : ""}`}>{s.titulo}</span>
+                      <button type="button" onClick={() => delSubtarefa(s)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input value={novaSub} onChange={(e) => setNovaSub(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addSubtarefa(); }} placeholder="Adicionar subtarefa..." className="h-8 text-sm" />
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={addSubtarefa}><Plus className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-2 text-sm"><ListChecks className="h-4 w-4 text-primary" /> Checklist</Label>
+                  {checklist.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2 group">
+                      <Checkbox checked={c.concluido} onCheckedChange={() => toggleCheck(c)} />
+                      <span className={`flex-1 text-sm ${c.concluido ? "line-through text-muted-foreground" : ""}`}>{c.item}</span>
+                      <button type="button" onClick={() => delCheck(c)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input value={novoCheck} onChange={(e) => setNovoCheck(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addCheck(); }} placeholder="Adicionar item..." className="h-8 text-sm" />
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={addCheck}><Plus className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {editing && isDesign && (
               <div className="space-y-2 border-t border-border pt-3">
@@ -474,7 +638,7 @@ export default function Workflow() {
             {editing ? <Button variant="ghost" className="text-destructive" onClick={excluir}><Trash2 className="mr-2 h-4 w-4" /> Excluir</Button> : <span />}
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setOpen(false)}>Fechar</Button>
-              <Button onClick={salvar}>Salvar</Button>
+              <Button onClick={salvar}>{editing ? "Salvar" : "Criar Tarefa"}</Button>
             </div>
           </DialogFooter>
         </DialogContent>

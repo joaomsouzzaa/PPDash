@@ -1536,13 +1536,17 @@ export type Database = {
           agente_id: string | null
           coluna_id: string | null
           created_at: string | null
+          data_inicio: string | null
+          data_vencimento: string | null
           deleted_at: string | null
           descricao: string | null
+          etiquetas: string[] | null
           id: string
           ordem: number | null
           org_id: string | null
           origem: string | null
           prioridade: string | null
+          tempo_estimado: number | null
           titulo: string
           updated_at: string | null
         }
@@ -1550,13 +1554,17 @@ export type Database = {
           agente_id?: string | null
           coluna_id?: string | null
           created_at?: string | null
+          data_inicio?: string | null
+          data_vencimento?: string | null
           deleted_at?: string | null
           descricao?: string | null
+          etiquetas?: string[] | null
           id?: string
           ordem?: number | null
           org_id?: string | null
           origem?: string | null
           prioridade?: string | null
+          tempo_estimado?: number | null
           titulo: string
           updated_at?: string | null
         }
@@ -1564,15 +1572,79 @@ export type Database = {
           agente_id?: string | null
           coluna_id?: string | null
           created_at?: string | null
+          data_inicio?: string | null
+          data_vencimento?: string | null
           deleted_at?: string | null
           descricao?: string | null
+          etiquetas?: string[] | null
           id?: string
           ordem?: number | null
           org_id?: string | null
           origem?: string | null
           prioridade?: string | null
+          tempo_estimado?: number | null
           titulo?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      tarefa_subtarefas: {
+        Row: {
+          concluida: boolean
+          created_at: string
+          id: string
+          ordem: number
+          org_id: string | null
+          tarefa_id: string
+          titulo: string
+        }
+        Insert: {
+          concluida?: boolean
+          created_at?: string
+          id?: string
+          ordem?: number
+          org_id?: string | null
+          tarefa_id: string
+          titulo: string
+        }
+        Update: {
+          concluida?: boolean
+          created_at?: string
+          id?: string
+          ordem?: number
+          org_id?: string | null
+          tarefa_id?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
+      tarefa_checklist: {
+        Row: {
+          concluido: boolean
+          created_at: string
+          id: string
+          item: string
+          ordem: number
+          org_id: string | null
+          tarefa_id: string
+        }
+        Insert: {
+          concluido?: boolean
+          created_at?: string
+          id?: string
+          item: string
+          ordem?: number
+          org_id?: string | null
+          tarefa_id: string
+        }
+        Update: {
+          concluido?: boolean
+          created_at?: string
+          id?: string
+          item?: string
+          ordem?: number
+          org_id?: string | null
+          tarefa_id?: string
         }
         Relationships: []
       }
