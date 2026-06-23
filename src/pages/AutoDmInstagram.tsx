@@ -33,7 +33,11 @@ const AUTOMACAO_VAZIA: Omit<IgAutomacao, "id"> = {
   palavras: [],
   match_tipo: "contem",
   responder_comentario: true,
-  resposta_comentario_templates: ["Te enviei no direct! 📩"],
+  resposta_comentario_templates: [
+    "Te enviei no direct! 📩",
+    "Acabei de te chamar na DM, dá uma olhada! 👀",
+    "Prontinho! Te mandei tudo no direct 💬",
+  ],
   enviar_dm: true,
   dm_payload: { texto: "Aqui está o link que você pediu 👇", botoes: [] },
 };
