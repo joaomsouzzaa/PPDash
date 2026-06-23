@@ -9,3 +9,7 @@ verify_jwt = false
 # Webhook de comentários do Instagram (Auto-DM): público, chamado pela Meta.
 [functions.instagram-comments]
 verify_jwt = false
+
+# Processador de follow-ups do Auto-DM: chamado por cron (pg_cron).
+[functions.instagram-followups]
+verify_jwt = false

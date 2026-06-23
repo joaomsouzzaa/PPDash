@@ -14,14 +14,23 @@ import {
 } from "@/components/ui/select";
 import {
   Instagram, Plus, Trash2, Plug, RefreshCw, CheckCircle2, AlertTriangle,
-  Heart, MessageCircle, Send as SendIcon, Bookmark, ChevronLeft, X, Link2,
+  Heart, MessageCircle, Send as SendIcon, Bookmark, ChevronLeft, X, Link2, Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { listarContas, assinarWebhook, listarMidias, type IgConta, type IgMidia, type IgAutomacao, type DmBotao } from "@/lib/instagram";
+import { listarContas, assinarWebhook, listarMidias, type IgConta, type IgMidia, type IgAutomacao, type DmBotao, type DmPayload } from "@/lib/instagram";
 import { toast } from "sonner";
 
 // Tabelas novas ainda não regeneradas em supabase/types.ts — cast pontual.
 const db = supabase as any;
+
+// Conversão de minutos <-> unidade amigável para o input de delay do follow-up.
+type Unidade = "min" | "horas" | "dias";
+const toMinutos = (valor: number, u: Unidade) => Math.max(1, Math.round(valor * (u === "dias" ? 1440 : u === "horas" ? 60 : 1)));
+function deMinutos(min: number): { valor: number; unidade: Unidade } {
+  if (min % 1440 === 0 && min >= 1440) return { valor: min / 1440, unidade: "dias" };
+  if (min % 60 === 0 && min >= 60) return { valor: min / 60, unidade: "horas" };
+  return { valor: min, unidade: "min" };
+}
 
 const AUTOMACAO_VAZIA: Omit<IgAutomacao, "id"> = {
   ig_conta_id: null,
@@ -39,7 +48,20 @@ const AUTOMACAO_VAZIA: Omit<IgAutomacao, "id"> = {
     "Prontinho! Te mandei tudo no direct 💬",
   ],
   enviar_dm: true,
-  dm_payload: { texto: "Aqui está o link que você pediu 👇", botoes: [] },
+  dm_payload: {
+    modo: "optin",
+    // direto (caso troque o modo)
+    texto: "Aqui está o link que você pediu 👇",
+    botoes: [],
+    // optin (padrão)
+    optin_texto: "TOP! Você comentou no post certo! 🎉\n\nÉ só clicar no botão abaixo que eu te envio o link 👇",
+    optin_botao_titulo: "Me envie o link",
+    link_texto: "Aqui está o link para você se cadastrar e tirar suas dúvidas com meu time! 🚀",
+    link_botoes: [],
+  },
+  followup_ativo: false,
+  followup_delay_min: 60,
+  followup_payload: { texto: "E aí, conseguiu abrir o link e se cadastrar? Qualquer dúvida é só me chamar! 😉", botoes: [] },
 };
 
 export default function AutoDmInstagram() {
@@ -125,6 +147,19 @@ export default function AutoDmInstagram() {
     setEdit({ id: "", ...AUTOMACAO_VAZIA, ig_conta_id: null } as IgAutomacao);
   };
 
+  // Abre uma automação existente preenchendo campos que automações antigas não tinham
+  // (modo opt-in da DM, follow-up). Mantém o que já existe.
+  const abrirEdicao = (a: IgAutomacao) => {
+    const dmV = AUTOMACAO_VAZIA.dm_payload;
+    setEdit({
+      ...a,
+      dm_payload: { ...dmV, ...(a.dm_payload || {}) },
+      followup_ativo: a.followup_ativo ?? false,
+      followup_delay_min: a.followup_delay_min ?? 60,
+      followup_payload: { ...AUTOMACAO_VAZIA.followup_payload, ...(a.followup_payload || {}) },
+    });
+  };
+
   const salvar = async () => {
     if (!edit || !contaSel) return;
     setSalvando(true);
@@ -143,6 +178,9 @@ export default function AutoDmInstagram() {
         resposta_comentario_templates: edit.resposta_comentario_templates,
         enviar_dm: edit.enviar_dm,
         dm_payload: edit.dm_payload,
+        followup_ativo: edit.followup_ativo,
+        followup_delay_min: edit.followup_delay_min,
+        followup_payload: edit.followup_payload,
         updated_at: new Date().toISOString(),
       };
       if (edit.id) {
@@ -203,7 +241,7 @@ export default function AutoDmInstagram() {
             ) : (
               <ListaAutomacoes
                 automacoes={automacoes} execucoes={execucoes} midias={midias} onNova={novaAutomacao}
-                onEditar={setEdit} onExcluir={excluir} onToggle={toggleStatus}
+                onEditar={abrirEdicao} onExcluir={excluir} onToggle={toggleStatus}
               />
             )}
           </div>
@@ -349,11 +387,11 @@ function Editor({ edit, setEdit, midias, contaSel, salvando, onSalvar, onCancela
     set({ media_ids: has ? edit.media_ids.filter((x) => x !== id) : [...edit.media_ids, id] });
   };
 
-  const setBotao = (i: number, patch: Partial<DmBotao>) => {
-    const botoes = [...edit.dm_payload.botoes];
-    botoes[i] = { ...botoes[i], ...patch };
-    set({ dm_payload: { ...edit.dm_payload, botoes } });
-  };
+  const dm = edit.dm_payload;
+  const setDm = (patch: Partial<DmPayload>) => set({ dm_payload: { ...dm, ...patch } });
+
+  // Follow-up: converte minutos <-> unidade amigável para o input.
+  const { valor: delayValor, unidade: delayUnidade } = deMinutos(edit.followup_delay_min);
 
   const midiasVisiveis = verTodas ? midias : midias.slice(0, 4);
 
@@ -511,30 +549,86 @@ function Editor({ edit, setEdit, midias, contaSel, salvando, onSalvar, onCancela
             <Switch checked={edit.enviar_dm} onCheckedChange={(v) => set({ enviar_dm: v })} />
           </CardHeader>
           {edit.enviar_dm && (
-            <CardContent className="space-y-3">
-              <Textarea
-                value={edit.dm_payload.texto}
-                onChange={(e) => set({ dm_payload: { ...edit.dm_payload, texto: e.target.value } })}
-                placeholder="Aqui está o link que você pediu 👇" rows={3}
-              />
+            <CardContent className="space-y-4">
+              {/* Modo da DM */}
               <div className="space-y-2">
-                <Label className="text-xs">Botões com link (até 3)</Label>
-                {edit.dm_payload.botoes.map((b, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input value={b.titulo} onChange={(e) => setBotao(i, { titulo: e.target.value })} placeholder="Título do botão" className="w-[40%]" />
-                    <Input value={b.url} onChange={(e) => setBotao(i, { url: e.target.value })} placeholder="https://..." />
-                    <Button variant="ghost" size="icon" onClick={() => set({ dm_payload: { ...edit.dm_payload, botoes: edit.dm_payload.botoes.filter((_, x) => x !== i) } })}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                {edit.dm_payload.botoes.length < 3 && (
-                  <Button variant="outline" size="sm"
-                    onClick={() => set({ dm_payload: { ...edit.dm_payload, botoes: [...edit.dm_payload.botoes, { titulo: "Abrir link", url: "" }] } })}>
-                    <Link2 className="h-4 w-4 mr-2" /> Adicionar botão
-                  </Button>
-                )}
+                <Label className="text-xs">Como enviar</Label>
+                <Select value={dm.modo} onValueChange={(v) => setDm({ modo: v as DmPayload["modo"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="optin">2 etapas (opt-in) — recomendado</SelectItem>
+                    <SelectItem value="direto">DM direta com o link</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {dm.modo === "optin"
+                    ? "1ª DM com um botão sem link (a pessoa toca = interação). Só depois enviamos a 2ª DM com o link — o Instagram não trata como spam."
+                    : "Uma única DM já com o link no botão."}
+                </p>
               </div>
+
+              {dm.modo === "optin" ? (
+                <>
+                  {/* Etapa 1 — abertura/opt-in */}
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">1ª DM — abertura (sem link)</p>
+                    <Textarea value={dm.optin_texto} onChange={(e) => setDm({ optin_texto: e.target.value })}
+                      placeholder="TOP! Clique no botão que eu te envio o link 👇" rows={3} />
+                    <div className="space-y-1">
+                      <Label className="text-xs">Texto do botão (sem link)</Label>
+                      <Input value={dm.optin_botao_titulo} onChange={(e) => setDm({ optin_botao_titulo: e.target.value })} placeholder="Me envie o link" />
+                    </div>
+                  </div>
+                  {/* Etapa 2 — link */}
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">2ª DM — enviada quando a pessoa toca o botão</p>
+                    <Textarea value={dm.link_texto} onChange={(e) => setDm({ link_texto: e.target.value })}
+                      placeholder="Aqui está o link para você se cadastrar! 🚀" rows={3} />
+                    <BotoesEditor botoes={dm.link_botoes || []} onChange={(b) => setDm({ link_botoes: b })} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Textarea value={dm.texto} onChange={(e) => setDm({ texto: e.target.value })}
+                    placeholder="Aqui está o link que você pediu 👇" rows={3} />
+                  <BotoesEditor botoes={dm.botoes || []} onChange={(b) => setDm({ botoes: b })} />
+                </>
+              )}
+            </CardContent>
+          )}
+        </Card>
+
+        {/* Bloco 5: Follow-up agendado */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4" /> Follow-up automático</CardTitle>
+            <Switch checked={edit.followup_ativo} onCheckedChange={(v) => set({ followup_ativo: v })} />
+          </CardHeader>
+          {edit.followup_ativo && (
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">Enviar após</Label>
+                <Input type="number" min={1} className="w-24"
+                  value={delayValor}
+                  onChange={(e) => set({ followup_delay_min: toMinutos(Number(e.target.value) || 0, delayUnidade) })} />
+                <Select value={delayUnidade} onValueChange={(u) => set({ followup_delay_min: toMinutos(delayValor, u as Unidade) })}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="min">minutos</SelectItem>
+                    <SelectItem value="horas">horas</SelectItem>
+                    <SelectItem value="dias">dias</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Textarea value={edit.followup_payload.texto}
+                onChange={(e) => set({ followup_payload: { ...edit.followup_payload, texto: e.target.value } })}
+                placeholder="E aí, conseguiu se cadastrar? Qualquer dúvida me chama! 😉" rows={3} />
+              <BotoesEditor botoes={edit.followup_payload.botoes || []}
+                onChange={(b) => set({ followup_payload: { ...edit.followup_payload, botoes: b } })} />
+              <p className="text-xs text-muted-foreground">
+                Enviado para todos que receberam a DM. Obs.: fora da janela de 24h, o envio usa a tag
+                "agente humano" (até 7 dias) — pode exigir aprovação da Meta em produção.
+              </p>
             </CardContent>
           )}
         </Card>
@@ -556,6 +650,28 @@ function Editor({ edit, setEdit, midias, contaSel, salvando, onSalvar, onCancela
   );
 }
 
+// Editor reutilizável de botões com link (até `max`).
+function BotoesEditor({ botoes, onChange, max = 3 }: { botoes: DmBotao[]; onChange: (b: DmBotao[]) => void; max?: number }) {
+  const setB = (i: number, patch: Partial<DmBotao>) => { const arr = [...botoes]; arr[i] = { ...arr[i], ...patch }; onChange(arr); };
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">Botões com link (até {max})</Label>
+      {botoes.map((b, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input value={b.titulo} onChange={(e) => setB(i, { titulo: e.target.value })} placeholder="Título do botão" className="w-[40%]" />
+          <Input value={b.url} onChange={(e) => setB(i, { url: e.target.value })} placeholder="https://..." />
+          <Button variant="ghost" size="icon" onClick={() => onChange(botoes.filter((_, x) => x !== i))}><X className="h-4 w-4" /></Button>
+        </div>
+      ))}
+      {botoes.length < max && (
+        <Button variant="outline" size="sm" onClick={() => onChange([...botoes, { titulo: "Abrir link", url: "" }])}>
+          <Link2 className="h-4 w-4 mr-2" /> Adicionar botão
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ============================================================
 // Preview tipo celular (publicação + comentário + DM)
 // ============================================================
@@ -564,6 +680,9 @@ function PhonePreview({ edit, conta, midias }: { edit: IgAutomacao; conta: IgCon
   const capa = (edit.media_ids.length ? midias.find((m) => m.id === edit.media_ids[0]) : midias[0])?.thumbnail || null;
   const palavraExemplo = edit.palavras[0] || "Franquia";
   const resposta = edit.resposta_comentario_templates.find(Boolean) || "Te enviei no direct! 📩";
+  const dmModo = edit.dm_payload?.modo === "direto" ? "direto" : (edit.dm_payload?.modo === "optin" || edit.dm_payload?.optin_texto ? "optin" : "direto");
+  const dl = deMinutos(edit.followup_delay_min || 60);
+  const rotuloDelay = `${dl.valor} ${dl.unidade === "min" ? "min" : dl.unidade}`;
 
   return (
     <div className="lg:sticky lg:top-4 h-fit">
@@ -599,21 +718,48 @@ function PhonePreview({ edit, conta, midias }: { edit: IgAutomacao; conta: IgCon
             )}
           </div>
 
-          {/* Balão de DM */}
+          {/* Balões de DM (fluxo) */}
           {edit.enviar_dm && (
-            <div className="bg-neutral-900 px-3 py-3 border-t border-neutral-700">
-              <p className="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Direct</p>
-              <div className="bg-neutral-800 text-white text-xs rounded-2xl rounded-bl-sm px-3 py-2 max-w-[85%]">
-                {edit.dm_payload.texto || "Aqui está o link 👇"}
-                {edit.dm_payload.botoes.filter((b) => b.url).map((b, i) => (
-                  <div key={i} className="mt-2 bg-blue-600 rounded-lg py-1.5 text-center text-[11px] font-medium">{b.titulo || "Abrir link"}</div>
-                ))}
-              </div>
+            <div className="bg-neutral-900 px-3 py-3 border-t border-neutral-700 space-y-3">
+              <p className="text-[10px] uppercase tracking-wider text-neutral-500">Direct</p>
+              {dmModo === "optin" ? (
+                <>
+                  <Balao texto={edit.dm_payload.optin_texto || "Clique no botão que eu te envio o link 👇"}
+                    botoes={[{ titulo: edit.dm_payload.optin_botao_titulo || "Me envie o link", url: "" }]} azul />
+                  <p className="text-[9px] text-center text-neutral-500">↓ quando a pessoa toca o botão ↓</p>
+                  <Balao texto={edit.dm_payload.link_texto || "Aqui está o link! 🚀"}
+                    botoes={(edit.dm_payload.link_botoes || []).filter((b) => b.url)} azul />
+                </>
+              ) : (
+                <Balao texto={edit.dm_payload.texto || "Aqui está o link 👇"}
+                  botoes={(edit.dm_payload.botoes || []).filter((b) => b.url)} azul />
+              )}
+              {edit.followup_ativo && (
+                <>
+                  <p className="text-[9px] text-center text-neutral-500">↓ após {rotuloDelay} ↓</p>
+                  <Balao texto={edit.followup_payload.texto || "Conseguiu se cadastrar? 😉"}
+                    botoes={(edit.followup_payload.botoes || []).filter((b) => b.url)} />
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
       <p className="text-center text-xs text-muted-foreground mt-2">Pré-visualização</p>
+    </div>
+  );
+}
+
+// Um balão de mensagem no preview.
+function Balao({ texto, botoes, azul }: { texto: string; botoes: DmBotao[]; azul?: boolean }) {
+  return (
+    <div className="bg-neutral-800 text-white text-xs rounded-2xl rounded-bl-sm px-3 py-2 max-w-[90%] whitespace-pre-wrap">
+      {texto}
+      {botoes.map((b, i) => (
+        <div key={i} className={`mt-2 rounded-lg py-1.5 text-center text-[11px] font-medium ${azul ? "bg-blue-600" : "bg-neutral-600"}`}>
+          {b.titulo || "Abrir link"}
+        </div>
+      ))}
     </div>
   );
 }

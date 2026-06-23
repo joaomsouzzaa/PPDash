@@ -22,7 +22,21 @@ export interface IgMidia {
 
 // Botão de DM (link). Texto + botões viram o template do Private Reply.
 export interface DmBotao { titulo: string; url: string; }
-export interface DmPayload { texto: string; botoes: DmBotao[]; }
+// DM em 2 modos (estilo ManyChat):
+//  - "direto": uma DM única já com o link nos botões (texto + botoes).
+//  - "optin": 1ª DM de abertura com botão SEM link (postback); ao tocar, envia a 2ª com o link.
+export interface DmPayload {
+  modo: "optin" | "direto";
+  // direto
+  texto: string;
+  botoes: DmBotao[];
+  // optin
+  optin_texto: string;
+  optin_botao_titulo: string;
+  link_texto: string;
+  link_botoes: DmBotao[];
+}
+export interface FollowupPayload { texto: string; botoes: DmBotao[]; }
 
 export interface IgAutomacao {
   id: string;
@@ -38,6 +52,9 @@ export interface IgAutomacao {
   resposta_comentario_templates: string[];
   enviar_dm: boolean;
   dm_payload: DmPayload;
+  followup_ativo: boolean;
+  followup_delay_min: number;
+  followup_payload: FollowupPayload;
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {

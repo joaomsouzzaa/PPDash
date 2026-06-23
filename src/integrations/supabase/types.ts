@@ -336,6 +336,9 @@ export type Database = {
           dm_payload: Json
           enviar_dm: boolean
           escopo: string
+          followup_ativo: boolean
+          followup_delay_min: number
+          followup_payload: Json
           gatilho_tipo: string
           id: string
           ig_conta_id: string | null
@@ -354,6 +357,9 @@ export type Database = {
           dm_payload?: Json
           enviar_dm?: boolean
           escopo?: string
+          followup_ativo?: boolean
+          followup_delay_min?: number
+          followup_payload?: Json
           gatilho_tipo?: string
           id?: string
           ig_conta_id?: string | null
@@ -372,6 +378,9 @@ export type Database = {
           dm_payload?: Json
           enviar_dm?: boolean
           escopo?: string
+          followup_ativo?: boolean
+          followup_delay_min?: number
+          followup_payload?: Json
           gatilho_tipo?: string
           id?: string
           ig_conta_id?: string | null
@@ -436,6 +445,56 @@ export type Database = {
           webhook_assinado?: boolean
         }
         Relationships: []
+      }
+      ig_followups: {
+        Row: {
+          automacao_id: string | null
+          created_at: string | null
+          erro: string | null
+          id: string
+          org_id: string | null
+          page_id: string
+          payload: Json
+          recipient_igsid: string
+          send_at: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          automacao_id?: string | null
+          created_at?: string | null
+          erro?: string | null
+          id?: string
+          org_id?: string | null
+          page_id: string
+          payload?: Json
+          recipient_igsid: string
+          send_at: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          automacao_id?: string | null
+          created_at?: string | null
+          erro?: string | null
+          id?: string
+          org_id?: string | null
+          page_id?: string
+          payload?: Json
+          recipient_igsid?: string
+          send_at?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ig_followups_automacao_id_fkey"
+            columns: ["automacao_id"]
+            isOneToOne: false
+            referencedRelation: "ig_automacoes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       insights_trafego: {
         Row: {
