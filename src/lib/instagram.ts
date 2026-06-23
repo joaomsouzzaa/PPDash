@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 // para a página Growth → Auto-DM Instagram. Espelha o estilo de meta-ads-manager.ts.
 
 export interface IgConta {
+  id?: string; // id da linha em ig_contas (presente quando vem do banco; usado p/ filtrar automações)
   ig_user_id: string;
   ig_username: string | null;
   page_id: string;

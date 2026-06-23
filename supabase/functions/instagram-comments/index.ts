@@ -118,7 +118,7 @@ async function jaProcessado(supabase: any, orgId: string, chave: string): Promis
 
 async function contaPorIg(supabase: any, igUserId: string) {
   const { data } = await supabase.from("ig_contas")
-    .select("org_id, ig_user_id, page_id, page_token, ativo").eq("ig_user_id", igUserId).eq("ativo", true).maybeSingle();
+    .select("id, org_id, ig_user_id, page_id, page_token, ativo").eq("ig_user_id", igUserId).eq("ativo", true).maybeSingle();
   return data;
 }
 
@@ -167,7 +167,9 @@ Deno.serve(async (req) => {
         if (fromId && fromId === String(conta.ig_user_id)) continue; // ignora o dono
         if (await jaProcessado(supabase, orgId, commentId)) continue;
 
-        const { data: autos } = await supabase.from("ig_automacoes").select("*").eq("org_id", orgId).eq("status", "live");
+        // Apenas automações DESTA conta (ig_conta_id) — não vazar entre perfis da mesma org.
+        const { data: autos } = await supabase.from("ig_automacoes")
+          .select("*").eq("org_id", orgId).eq("status", "live").eq("ig_conta_id", conta.id);
         const auto = (autos || []).find((a: any) => casaEscopo(a, mediaId) && casaGatilho(a, texto));
         if (!auto) continue;
 

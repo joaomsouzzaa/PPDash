@@ -86,7 +86,7 @@ export default function AutoDmInstagram() {
   const carregar = useCallback(async () => {
     const { data: cts } = await db.from("ig_contas").select("*").eq("ativo", true);
     const mapped: IgConta[] = (cts || []).map((c: any) => ({
-      ig_user_id: c.ig_user_id, ig_username: c.ig_username, page_id: c.page_id,
+      id: c.id, ig_user_id: c.ig_user_id, ig_username: c.ig_username, page_id: c.page_id,
       page_name: c.page_name, profile_picture_url: null,
     }));
     setContas(mapped);
@@ -121,8 +121,7 @@ export default function AutoDmInstagram() {
       } else {
         toast.success(`${cts.length} conta(s) Instagram conectada(s).`);
       }
-      await carregar();
-      setContas(cts.length ? cts : contas);
+      await carregar(); // recarrega as contas do banco (com id) — base p/ filtrar automações
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao conectar Instagram.");
     } finally {
@@ -240,7 +239,8 @@ export default function AutoDmInstagram() {
               />
             ) : (
               <ListaAutomacoes
-                automacoes={automacoes} execucoes={execucoes} midias={midias} onNova={novaAutomacao}
+                automacoes={automacoes.filter((a) => a.ig_conta_id === (contaSel?.id ?? null))}
+                conta={contaSel} execucoes={execucoes} midias={midias} onNova={novaAutomacao}
                 onEditar={abrirEdicao} onExcluir={excluir} onToggle={toggleStatus}
               />
             )}
@@ -298,8 +298,8 @@ function ConexaoCard({ contas, contaSel, setContaSel, conectando, onConectar, on
 // ============================================================
 // Lista de automações
 // ============================================================
-function ListaAutomacoes({ automacoes, execucoes, midias, onNova, onEditar, onExcluir, onToggle }: {
-  automacoes: IgAutomacao[]; execucoes: Record<string, number>; midias: IgMidia[]; onNova: () => void;
+function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEditar, onExcluir, onToggle }: {
+  automacoes: IgAutomacao[]; conta: IgConta | null; execucoes: Record<string, number>; midias: IgMidia[]; onNova: () => void;
   onEditar: (a: IgAutomacao) => void; onExcluir: (id: string) => void; onToggle: (a: IgAutomacao) => void;
 }) {
   const thumbDe = (a: IgAutomacao) => {
@@ -309,12 +309,14 @@ function ListaAutomacoes({ automacoes, execucoes, midias, onNova, onEditar, onEx
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-base">Automações</CardTitle>
+        <CardTitle className="text-base">
+          Automações {conta && <span className="text-muted-foreground font-normal">· @{conta.ig_username || conta.ig_user_id}</span>}
+        </CardTitle>
         <Button onClick={onNova} size="sm"><Plus className="h-4 w-4 mr-2" /> Nova automação</Button>
       </CardHeader>
       <CardContent className="space-y-2">
         {automacoes.length === 0 && (
-          <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma automação ainda. Crie a primeira.</p>
+          <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma automação ainda para @{conta?.ig_username || "esta conta"}. Crie a primeira.</p>
         )}
         {/* Cabeçalho de colunas estilo ManyChat */}
         {automacoes.length > 0 && (

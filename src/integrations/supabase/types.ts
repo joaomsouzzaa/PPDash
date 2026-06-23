@@ -1504,6 +1504,44 @@ export type Database = {
           },
         ]
       }
+      tarefa_checklist: {
+        Row: {
+          concluido: boolean
+          created_at: string
+          id: string
+          item: string
+          ordem: number
+          org_id: string | null
+          tarefa_id: string
+        }
+        Insert: {
+          concluido?: boolean
+          created_at?: string
+          id?: string
+          item: string
+          ordem?: number
+          org_id?: string | null
+          tarefa_id: string
+        }
+        Update: {
+          concluido?: boolean
+          created_at?: string
+          id?: string
+          item?: string
+          ordem?: number
+          org_id?: string | null
+          tarefa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_checklist_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tarefa_respostas: {
         Row: {
           autor: string | null
@@ -1528,63 +1566,6 @@ export type Database = {
           id?: string
           org_id?: string | null
           tarefa_id?: string | null
-        }
-        Relationships: []
-      }
-      tarefas: {
-        Row: {
-          agente_id: string | null
-          coluna_id: string | null
-          created_at: string | null
-          data_inicio: string | null
-          data_vencimento: string | null
-          deleted_at: string | null
-          descricao: string | null
-          etiquetas: string[] | null
-          id: string
-          ordem: number | null
-          org_id: string | null
-          origem: string | null
-          prioridade: string | null
-          tempo_estimado: number | null
-          titulo: string
-          updated_at: string | null
-        }
-        Insert: {
-          agente_id?: string | null
-          coluna_id?: string | null
-          created_at?: string | null
-          data_inicio?: string | null
-          data_vencimento?: string | null
-          deleted_at?: string | null
-          descricao?: string | null
-          etiquetas?: string[] | null
-          id?: string
-          ordem?: number | null
-          org_id?: string | null
-          origem?: string | null
-          prioridade?: string | null
-          tempo_estimado?: number | null
-          titulo: string
-          updated_at?: string | null
-        }
-        Update: {
-          agente_id?: string | null
-          coluna_id?: string | null
-          created_at?: string | null
-          data_inicio?: string | null
-          data_vencimento?: string | null
-          deleted_at?: string | null
-          descricao?: string | null
-          etiquetas?: string[] | null
-          id?: string
-          ordem?: number | null
-          org_id?: string | null
-          origem?: string | null
-          prioridade?: string | null
-          tempo_estimado?: number | null
-          titulo?: string
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -1616,35 +1597,70 @@ export type Database = {
           tarefa_id?: string
           titulo?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_subtarefas_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      tarefa_checklist: {
+      tarefas: {
         Row: {
-          concluido: boolean
-          created_at: string
+          agente_id: string | null
+          coluna_id: string | null
+          created_at: string | null
+          data_inicio: string | null
+          data_vencimento: string | null
+          deleted_at: string | null
+          descricao: string | null
+          etiquetas: string[]
           id: string
-          item: string
-          ordem: number
+          ordem: number | null
           org_id: string | null
-          tarefa_id: string
+          origem: string | null
+          prioridade: string | null
+          tempo_estimado: number | null
+          titulo: string
+          updated_at: string | null
         }
         Insert: {
-          concluido?: boolean
-          created_at?: string
+          agente_id?: string | null
+          coluna_id?: string | null
+          created_at?: string | null
+          data_inicio?: string | null
+          data_vencimento?: string | null
+          deleted_at?: string | null
+          descricao?: string | null
+          etiquetas?: string[]
           id?: string
-          item: string
-          ordem?: number
+          ordem?: number | null
           org_id?: string | null
-          tarefa_id: string
+          origem?: string | null
+          prioridade?: string | null
+          tempo_estimado?: number | null
+          titulo: string
+          updated_at?: string | null
         }
         Update: {
-          concluido?: boolean
-          created_at?: string
+          agente_id?: string | null
+          coluna_id?: string | null
+          created_at?: string | null
+          data_inicio?: string | null
+          data_vencimento?: string | null
+          deleted_at?: string | null
+          descricao?: string | null
+          etiquetas?: string[]
           id?: string
-          item?: string
-          ordem?: number
+          ordem?: number | null
           org_id?: string | null
-          tarefa_id?: string
+          origem?: string | null
+          prioridade?: string | null
+          tempo_estimado?: number | null
+          titulo?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
