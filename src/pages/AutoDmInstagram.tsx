@@ -13,7 +13,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Instagram, Plus, Trash2, Plug, RefreshCw, CheckCircle2, AlertTriangle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Instagram, Plus, Trash2, Plug, RefreshCw, CheckCircle2, AlertTriangle, Settings2,
   Heart, MessageCircle, Send as SendIcon, Bookmark, ChevronLeft, X, Link2, Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,8 +67,12 @@ const AUTOMACAO_VAZIA: Omit<IgAutomacao, "id"> = {
   followup_payload: { texto: "E aí, conseguiu abrir o link e se cadastrar? Qualquer dúvida é só me chamar! 😉", botoes: [] },
 };
 
+type ContaGerenciar = IgConta & { ativo: boolean };
+
 export default function AutoDmInstagram() {
   const [contas, setContas] = useState<IgConta[]>([]);
+  const [todasContas, setTodasContas] = useState<ContaGerenciar[]>([]);
+  const [gerenciarOpen, setGerenciarOpen] = useState(false);
   const [contaSel, setContaSel] = useState<IgConta | null>(null);
   const [conectando, setConectando] = useState(false);
   const [midias, setMidias] = useState<IgMidia[]>([]);
@@ -84,16 +91,23 @@ export default function AutoDmInstagram() {
 
   // ---- Carregamento inicial: contas conectadas (ig_contas) + automações ----
   const carregar = useCallback(async () => {
-    const { data: cts } = await db.from("ig_contas").select("*").eq("ativo", true);
-    const mapped: IgConta[] = (cts || []).map((c: any) => ({
+    // Carrega TODAS as contas conectadas (para o "Gerenciar contas") e deriva as ATIVAS
+    // (as que o cliente escolheu interagir) — só as ativas aparecem no seletor.
+    const { data: cts } = await db.from("ig_contas").select("*").order("ig_username");
+    const todas: ContaGerenciar[] = (cts || []).map((c: any) => ({
       id: c.id, ig_user_id: c.ig_user_id, ig_username: c.ig_username, page_id: c.page_id,
-      page_name: c.page_name, profile_picture_url: null,
+      page_name: c.page_name, profile_picture_url: null, ativo: c.ativo !== false,
     }));
+    setTodasContas(todas);
+    const mapped: IgConta[] = todas.filter((c) => c.ativo);
     setContas(mapped);
     if (mapped.length) {
       const salvo = (() => { try { return localStorage.getItem(SEL_KEY); } catch { return null; } })();
       const escolhida = mapped.find((m) => m.ig_user_id === salvo) || mapped[0];
-      setContaSel((atual) => atual ?? escolhida);
+      // Mantém a seleção se ainda estiver ativa; senão cai para a 1ª ativa.
+      setContaSel((atual) => (atual && mapped.some((m) => m.ig_user_id === atual.ig_user_id)) ? atual : escolhida);
+    } else {
+      setContaSel(null);
     }
     const { data: autos } = await db.from("ig_automacoes").select("*").order("created_at", { ascending: false });
     setAutomacoes((autos || []) as IgAutomacao[]);
@@ -127,6 +141,13 @@ export default function AutoDmInstagram() {
     } finally {
       setConectando(false);
     }
+  };
+
+  // Liga/desliga uma conta da curadoria (campo ativo). Só ativas aparecem no seletor.
+  const toggleContaAtiva = async (igUserId: string, ativo: boolean) => {
+    setTodasContas((prev) => prev.map((c) => c.ig_user_id === igUserId ? { ...c, ativo } : c));
+    const { error } = await db.from("ig_contas").update({ ativo }).eq("ig_user_id", igUserId);
+    if (error) { toast.error(error.message); await carregar(); return; }
   };
 
   const ativarWebhook = async () => {
@@ -230,6 +251,12 @@ export default function AutoDmInstagram() {
             <ConexaoCard
               contas={contas} contaSel={contaSel} setContaSel={selecionarConta}
               conectando={conectando} onConectar={conectar} onAtivarWebhook={ativarWebhook}
+              onGerenciar={() => setGerenciarOpen(true)}
+            />
+
+            <GerenciarContasDialog
+              open={gerenciarOpen} onOpenChange={(o) => { setGerenciarOpen(o); if (!o) carregar(); }}
+              contas={todasContas} onToggle={toggleContaAtiva}
             />
 
             {edit ? (
@@ -254,9 +281,9 @@ export default function AutoDmInstagram() {
 // ============================================================
 // Conexão da conta
 // ============================================================
-function ConexaoCard({ contas, contaSel, setContaSel, conectando, onConectar, onAtivarWebhook }: {
+function ConexaoCard({ contas, contaSel, setContaSel, conectando, onConectar, onAtivarWebhook, onGerenciar }: {
   contas: IgConta[]; contaSel: IgConta | null; setContaSel: (c: IgConta) => void;
-  conectando: boolean; onConectar: () => void; onAtivarWebhook: () => void;
+  conectando: boolean; onConectar: () => void; onAtivarWebhook: () => void; onGerenciar: () => void;
 }) {
   return (
     <Card>
@@ -271,6 +298,9 @@ function ConexaoCard({ contas, contaSel, setContaSel, conectando, onConectar, on
         <Button onClick={onConectar} disabled={conectando} variant="outline">
           {conectando ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Instagram className="h-4 w-4 mr-2" />}
           {contas.length ? "Atualizar contas" : "Conectar Instagram"}
+        </Button>
+        <Button onClick={onGerenciar} variant="outline">
+          <Settings2 className="h-4 w-4 mr-2" /> Gerenciar contas
         </Button>
         {contas.length > 0 && (
           <Select
@@ -292,6 +322,48 @@ function ConexaoCard({ contas, contaSel, setContaSel, conectando, onConectar, on
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ============================================================
+// Gerenciar contas: curadoria de quais @ aparecem no seletor (campo ativo).
+// Útil quando o token Meta da org enxerga vários perfis (agência), mas o cliente
+// só quer automatizar alguns.
+// ============================================================
+function GerenciarContasDialog({ open, onOpenChange, contas, onToggle }: {
+  open: boolean; onOpenChange: (o: boolean) => void;
+  contas: (IgConta & { ativo: boolean })[]; onToggle: (igUserId: string, ativo: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Gerenciar contas</DialogTitle>
+          <DialogDescription>
+            Escolha quais perfis aparecem no seletor para automatizar. Os desmarcados ficam ocultos
+            (não recebem automações), mas continuam conectados.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[55vh] overflow-y-auto space-y-1 -mx-1 px-1">
+          {contas.length === 0 && (
+            <p className="text-sm text-muted-foreground py-4 text-center">Nenhuma conta conectada. Clique em "Atualizar contas".</p>
+          )}
+          {contas.map((c) => (
+            <label key={c.ig_user_id} className="flex items-center justify-between gap-3 rounded-md border p-2.5 cursor-pointer">
+              <span className="flex items-center gap-2 min-w-0">
+                <Instagram className="h-4 w-4 text-pink-600 shrink-0" />
+                <span className="truncate text-sm font-medium">@{c.ig_username || c.ig_user_id}</span>
+                {c.page_name && <span className="truncate text-xs text-muted-foreground">· {c.page_name}</span>}
+              </span>
+              <Switch checked={c.ativo} onCheckedChange={(v) => onToggle(c.ig_user_id, v)} />
+            </label>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)}>Concluído</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
