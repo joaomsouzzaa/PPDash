@@ -47,6 +47,7 @@ const TIPOS: { value: TipoPergunta; label: string }[] = [
 const TIPOS_EM_BREVE = ["Email", "Telefone", "Número", "Data", "Escala de opinião", "NPS", "Avaliação", "Dropdown"];
 
 const rid = () => Math.random().toString(36).slice(2, 10);
+const uuid = () => (crypto as any).randomUUID?.() ?? `${rid()}${rid()}-${rid().slice(0,4)}-4${rid().slice(0,3)}-a${rid().slice(0,3)}-${rid()}${rid()}`;
 const DIACRITICOS = new RegExp("[\\u0300-\\u036f]", "g");
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(DIACRITICOS, "")
@@ -195,7 +196,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
 
   const addPergunta = () => {
     const nova: Pergunta = {
-      id: rid(), pesquisa_id: pesquisaId, ordem: perguntas.length,
+      id: uuid(), pesquisa_id: pesquisaId, ordem: perguntas.length,
       titulo: "Nova pergunta", descricao: "", tipo: "texto_curto",
       obrigatoria: true, opcoes: [], logica: [],
     };
