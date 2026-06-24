@@ -75,6 +75,56 @@ def set_etapa(db: Client, job_id: str, etapa: str):
     db.table("video_jobs").update({"etapa": etapa}).eq("id", job_id).execute()
 
 
+# ============================================================
+# Fila (1 job por vez) + cancelamento (cada job roda em processo próprio, matável)
+# ============================================================
+import multiprocessing as _mp
+import queue as _queue
+import signal as _signal
+import threading as _threading
+
+_JOBQ: "_queue.Queue" = _queue.Queue()
+_RUNNING: dict = {}            # job_id -> Process em execução
+_CANCEL_QUEUED: set = set()    # jobs cancelados antes de iniciar
+_LOCK = _threading.Lock()
+
+
+def _worker(kind: str, job_id: str, args: tuple):
+    try:
+        os.setsid()  # grupo de processos próprio → dá pra matar a árvore (ffmpeg etc.)
+    except Exception:
+        pass
+    if kind == "corte":
+        processar_job(job_id, *args)
+    elif kind == "completo":
+        processar_edicao(job_id, *args)
+    elif kind == "render":
+        processar_render(job_id)
+
+
+def _dispatcher():
+    while True:
+        kind, job_id, args = _JOBQ.get()
+        with _LOCK:
+            if job_id in _CANCEL_QUEUED:
+                _CANCEL_QUEUED.discard(job_id)
+                continue
+        p = _mp.Process(target=_worker, args=(kind, job_id, args), daemon=True)
+        with _LOCK:
+            _RUNNING[job_id] = p
+        p.start()
+        p.join()
+        with _LOCK:
+            _RUNNING.pop(job_id, None)
+
+
+_threading.Thread(target=_dispatcher, daemon=True).start()
+
+
+def enqueue(kind: str, job_id: str, *args):
+    _JOBQ.put((kind, job_id, args))
+
+
 def exigir_usuario(authorization: str):
     """Valida o token do Supabase; levanta 401 se inválido."""
     token = authorization.replace("Bearer ", "").strip()
@@ -136,7 +186,7 @@ async def cortar(
 
     db = svc()
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "modo": "corte", "erro": None}).eq("id", job_id).execute()
-    background.add_task(processar_job, job_id, brief, org_id)
+    enqueue("corte", job_id, brief, org_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
@@ -175,8 +225,34 @@ async def editar(
 
     db = svc()
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "modo": "completo", "erro": None}).eq("id", job_id).execute()
-    background.add_task(processar_edicao, job_id, brief, org_id)
+    enqueue("completo", job_id, brief, org_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
+
+
+@app.post("/cancelar")
+def cancelar(body: dict, authorization: str = Header(default="")):
+    """Interrompe um job (em execução ou na fila) e o marca como cancelado."""
+    exigir_usuario(authorization)
+    job_id = (body or {}).get("job_id")
+    if not job_id:
+        raise HTTPException(400, "job_id obrigatório")
+    with _LOCK:
+        p = _RUNNING.get(job_id)
+        if p and p.is_alive():
+            try:
+                os.killpg(os.getpgid(p.pid), _signal.SIGKILL)  # mata o processo + filhos (ffmpeg)
+            except Exception:
+                try:
+                    p.terminate()
+                except Exception:
+                    pass
+            _RUNNING.pop(job_id, None)
+        else:
+            _CANCEL_QUEUED.add(job_id)  # ainda não começou: pula quando sair da fila
+    svc().table("video_jobs").update(
+        {"status": "erro", "etapa": None, "erro": "Cancelado pelo usuário"}
+    ).eq("id", job_id).execute()
+    return {"ok": True, "job_id": job_id}
 
 
 @app.post("/renderizar")
@@ -188,7 +264,7 @@ def renderizar(background: BackgroundTasks, body: dict, authorization: str = Hea
         raise HTTPException(400, "job_id obrigatório")
     db = svc()
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
-    background.add_task(processar_render, job_id)
+    enqueue("render", job_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
@@ -208,7 +284,7 @@ def reprocessar(background: BackgroundTasks, body: dict, authorization: str = He
     if modo == "completo" and not (WORK_DIR / job_id / "assets").exists():
         raise HTTPException(409, "Os assets deste job não estão mais salvos. Reenvie.")
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
-    background.add_task(processar_edicao if modo == "completo" else processar_job, job_id, brief, org_id)
+    enqueue("completo" if modo == "completo" else "corte", job_id, brief, org_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 

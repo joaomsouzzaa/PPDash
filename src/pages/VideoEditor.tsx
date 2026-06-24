@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Scissors, Upload, Download, RefreshCw, Film, AlertTriangle, Loader2, Clock, CheckCircle2,
-  Trash2, RotateCcw, HardDrive, Wand2, ImagePlus, X,
+  Trash2, RotateCcw, HardDrive, Wand2, ImagePlus, X, Ban,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
@@ -209,6 +209,22 @@ export default function VideoEditor() {
     }
   };
 
+  const cancelar = async (j: VideoJob) => {
+    if (!confirm("Cancelar o processamento deste vídeo?")) return;
+    try {
+      const res = await fetch(`${SERVICE_URL}/cancelar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await authToken()}` },
+        body: JSON.stringify({ job_id: j.id }),
+      });
+      if (!res.ok) throw new Error(`Falha ao cancelar (${res.status})`);
+      toast.success("Processamento cancelado.");
+      queryClient.invalidateQueries({ queryKey: ["video_jobs"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao cancelar.");
+    }
+  };
+
   const reprocessar = async (j: VideoJob) => {
     try {
       const res = await fetch(`${SERVICE_URL}/reprocessar`, {
@@ -375,6 +391,11 @@ export default function VideoEditor() {
                         </Badge>
                         <span className="flex-1 min-w-0 truncate text-sm font-medium">{j.nome || "vídeo"}</span>
                         <span className="text-xs text-muted-foreground hidden sm:inline">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
+                        {(j.status === "processando" || j.status === "pendente") && (
+                          <Button variant="ghost" size="sm" className="h-8 text-destructive" title="Cancelar processamento" onClick={() => cancelar(j)}>
+                            <Ban className="h-4 w-4 mr-1" /> Cancelar
+                          </Button>
+                        )}
                         {(j.status === "editar" || (j.status === "pronto" && j.modo === "completo")) && (
                           <Button variant="secondary" size="sm" className="h-8" onClick={() => navigate(`/video-editor/editar/${j.id}`)}>
                             <Wand2 className="h-4 w-4 mr-1" /> Editar
