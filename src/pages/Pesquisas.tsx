@@ -22,7 +22,10 @@ import { toast } from "sonner";
 // As tabelas de pesquisas ainda não estão no types.ts gerado — usamos `db` (cast).
 const db = supabase as any;
 
-type TipoPergunta = "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao";
+type TipoPergunta =
+  | "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao"
+  | "email" | "telefone" | "numero" | "data" | "dropdown"
+  | "escala_opiniao" | "nps" | "avaliacao";
 type Opcao = { id: string; label: string };
 type Regra = { quando_opcao_id: string; ir_para_pergunta_id: string | null }; // null = finalizar; "" = próxima
 type Pergunta = {
@@ -42,9 +45,20 @@ const TIPOS: { value: TipoPergunta; label: string }[] = [
   { value: "texto_curto", label: "Texto curto" },
   { value: "texto_longo", label: "Texto longo" },
   { value: "multipla_escolha", label: "Múltipla escolha" },
+  { value: "dropdown", label: "Dropdown" },
   { value: "sim_nao", label: "Sim / Não" },
+  { value: "email", label: "Email" },
+  { value: "telefone", label: "Telefone" },
+  { value: "numero", label: "Número" },
+  { value: "data", label: "Data" },
+  { value: "escala_opiniao", label: "Escala de opinião (1-10)" },
+  { value: "nps", label: "NPS (0-10)" },
+  { value: "avaliacao", label: "Avaliação (estrelas)" },
 ];
-const TIPOS_EM_BREVE = ["Email", "Telefone", "Número", "Data", "Escala de opinião", "NPS", "Avaliação", "Dropdown"];
+
+// Tipos baseados em opções (têm lista de opções editável e suportam bifurcação)
+const TIPOS_OPCOES: TipoPergunta[] = ["multipla_escolha", "dropdown"];
+const TIPOS_BIFURCAVEIS: TipoPergunta[] = ["multipla_escolha", "dropdown", "sim_nao"];
 
 const rid = () => Math.random().toString(36).slice(2, 10);
 const uuid = () => (crypto as any).randomUUID?.() ?? `${rid()}${rid()}-${rid().slice(0,4)}-4${rid().slice(0,3)}-a${rid().slice(0,3)}-${rid()}${rid()}`;
@@ -283,7 +297,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                 >
                   <span className="text-xs font-bold text-muted-foreground mt-0.5">{i + 1}</span>
                   <span className="flex-1 truncate">{p.titulo || "(sem título)"}</span>
-                  {(p.tipo === "multipla_escolha" || p.tipo === "sim_nao") && p.logica.length > 0 && (
+                  {TIPOS_BIFURCAVEIS.includes(p.tipo) && p.logica.length > 0 && (
                     <GitBranch className="h-3.5 w-3.5 text-primary shrink-0" />
                   )}
                 </button>
@@ -301,12 +315,29 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                   <div className="pt-2">
                     {sel.tipo === "texto_curto" && <Input disabled placeholder="Responde aqui..." />}
                     {sel.tipo === "texto_longo" && <Textarea disabled placeholder="Responde aqui..." rows={4} />}
+                    {sel.tipo === "email" && <Input disabled type="email" placeholder="nome@email.com" />}
+                    {sel.tipo === "telefone" && <Input disabled type="tel" placeholder="(00) 00000-0000" />}
+                    {sel.tipo === "numero" && <Input disabled type="number" placeholder="0" />}
+                    {sel.tipo === "data" && <Input disabled type="date" />}
+                    {sel.tipo === "dropdown" && (
+                      <div className="rounded-md border border-border px-4 py-2.5 bg-background text-muted-foreground">Selecione uma opção ▾</div>
+                    )}
                     {(sel.tipo === "multipla_escolha" || sel.tipo === "sim_nao") && (
                       <div className="space-y-2">
                         {opcoesDaPergunta(sel).map((o) => (
                           <div key={o.id} className="rounded-md border border-border px-4 py-2.5 bg-background">{o.label}</div>
                         ))}
                       </div>
+                    )}
+                    {(sel.tipo === "escala_opiniao" || sel.tipo === "nps") && (
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from({ length: sel.tipo === "nps" ? 11 : 10 }, (_, i) => (sel.tipo === "nps" ? i : i + 1)).map((n) => (
+                          <div key={n} className="h-10 w-10 rounded-md border border-border flex items-center justify-center bg-background">{n}</div>
+                        ))}
+                      </div>
+                    )}
+                    {sel.tipo === "avaliacao" && (
+                      <div className="flex gap-1 text-2xl text-muted-foreground">{"★★★★★".split("").map((s, i) => <span key={i}>{s}</span>)}</div>
                     )}
                   </div>
                 </div>
@@ -332,7 +363,6 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                      {TIPOS_EM_BREVE.map((t) => <SelectItem key={t} value={t} disabled>{t} (em breve)</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -341,7 +371,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                   <Switch checked={sel.obrigatoria} onCheckedChange={(v) => upd(sel.id, { obrigatoria: v })} />
                 </div>
 
-                {sel.tipo === "multipla_escolha" && (
+                {TIPOS_OPCOES.includes(sel.tipo) && (
                   <div className="space-y-2">
                     <Label>Opções</Label>
                     {sel.opcoes.map((o) => (
@@ -354,7 +384,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                   </div>
                 )}
 
-                {(sel.tipo === "multipla_escolha" || sel.tipo === "sim_nao") && (
+                {TIPOS_BIFURCAVEIS.includes(sel.tipo) && (
                   <div className="space-y-2 border-t border-border pt-3">
                     <Label className="flex items-center gap-2"><GitBranch className="h-4 w-4" /> Lógica (bifurcação)</Label>
                     <p className="text-[11px] text-muted-foreground">Para cada resposta, escolha a próxima pergunta.</p>
@@ -429,7 +459,7 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
                   <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString("pt-BR")}</TableCell>
                   {perguntas.map((p) => (
                     <TableCell key={p.id} className="text-sm">
-                      {p.tipo === "multipla_escolha" || p.tipo === "sim_nao" ? labelOpcao(p, r.respostas?.[p.id]) : (r.respostas?.[p.id] ?? "")}
+                      {TIPOS_BIFURCAVEIS.includes(p.tipo) ? labelOpcao(p, r.respostas?.[p.id]) : (r.respostas?.[p.id] ?? "")}
                     </TableCell>
                   ))}
                 </TableRow>

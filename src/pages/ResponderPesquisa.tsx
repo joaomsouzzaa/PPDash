@@ -7,13 +7,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTenantSlug } from "@/lib/tenant";
 import { Loader2, CheckCircle2 } from "lucide-react";
 
+type TipoPergunta =
+  | "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao"
+  | "email" | "telefone" | "numero" | "data" | "dropdown"
+  | "escala_opiniao" | "nps" | "avaliacao";
 type Opcao = { id: string; label: string };
 type Regra = { quando_opcao_id: string; ir_para_pergunta_id: string | null };
 type Pergunta = {
   id: string; ordem: number; titulo: string; descricao: string | null;
-  tipo: "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao";
+  tipo: TipoPergunta;
   obrigatoria: boolean; opcoes: Opcao[]; logica: Regra[];
 };
+
+const TIPOS_BIFURCAVEIS: TipoPergunta[] = ["multipla_escolha", "dropdown", "sim_nao"];
 
 function opcoesDaPergunta(p: Pergunta): Opcao[] {
   if (p.tipo === "sim_nao") return [{ id: "sim", label: "Sim" }, { id: "nao", label: "Não" }];
@@ -56,7 +62,7 @@ export default function ResponderPesquisa() {
 
   // Calcula o índice da próxima pergunta seguindo a lógica de bifurcação.
   const proximoIndice = (p: Pergunta, valor: any): number | "fim" => {
-    if (p.tipo === "multipla_escolha" || p.tipo === "sim_nao") {
+    if (TIPOS_BIFURCAVEIS.includes(p.tipo)) {
       const regra = (p.logica || []).find((r) => r.quando_opcao_id === valor);
       if (regra) {
         if (regra.ir_para_pergunta_id === null) return "fim";
@@ -144,6 +150,29 @@ export default function ResponderPesquisa() {
           {atual.tipo === "texto_longo" && (
             <Textarea autoFocus rows={4} value={respostaAtual ?? ""} onChange={(e) => setValor(e.target.value)} placeholder="Responde aqui..." />
           )}
+          {atual.tipo === "email" && (
+            <Input autoFocus type="email" value={respostaAtual ?? ""} onChange={(e) => setValor(e.target.value)} placeholder="nome@email.com" />
+          )}
+          {atual.tipo === "telefone" && (
+            <Input autoFocus type="tel" value={respostaAtual ?? ""} onChange={(e) => setValor(e.target.value)} placeholder="(00) 00000-0000" />
+          )}
+          {atual.tipo === "numero" && (
+            <Input autoFocus type="number" value={respostaAtual ?? ""} onChange={(e) => setValor(e.target.value)} placeholder="0" />
+          )}
+          {atual.tipo === "data" && (
+            <Input autoFocus type="date" value={respostaAtual ?? ""} onChange={(e) => setValor(e.target.value)} />
+          )}
+          {atual.tipo === "dropdown" && (
+            <select
+              autoFocus
+              value={respostaAtual ?? ""}
+              onChange={(e) => setValor(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-4 py-3"
+            >
+              <option value="" disabled>Selecione uma opção</option>
+              {opcoesDaPergunta(atual).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          )}
           {(atual.tipo === "multipla_escolha" || atual.tipo === "sim_nao") && (
             <div className="space-y-2">
               {opcoesDaPergunta(atual).map((o) => (
@@ -153,6 +182,32 @@ export default function ResponderPesquisa() {
                   className={`w-full text-left rounded-md border px-4 py-3 transition ${respostaAtual === o.id ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted/50"}`}
                 >
                   {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {(atual.tipo === "escala_opiniao" || atual.tipo === "nps") && (
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: atual.tipo === "nps" ? 11 : 10 }, (_, i) => (atual.tipo === "nps" ? i : i + 1)).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setValor(n)}
+                  className={`h-11 w-11 rounded-md border transition ${respostaAtual === n ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted/50"}`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          )}
+          {atual.tipo === "avaliacao" && (
+            <div className="flex gap-1 text-3xl">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setValor(n)}
+                  className={Number(respostaAtual) >= n ? "text-yellow-400" : "text-muted-foreground hover:text-yellow-300"}
+                >
+                  ★
                 </button>
               ))}
             </div>
