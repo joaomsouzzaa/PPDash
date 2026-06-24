@@ -30,10 +30,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV WHISPER_MODEL=small
 RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
 
-# Projeto Remotion (renderizador da edição) + Chromium do Remotion
+# Projeto Remotion (renderizador da edição) + Chromium do Remotion.
+# Instala deps a partir do package.json primeiro (cacheado), depois copia o código —
+# assim mudanças em src/ não re-rodam o npm install.
+COPY remotion/package.json /app/remotion/package.json
+RUN cd /app/remotion && npm install --no-audit --no-fund && npx remotion browser ensure
 COPY remotion/ /app/remotion/
-RUN cd /app/remotion && npm install --no-audit --no-fund \
-    && npx remotion browser ensure
 ENV REMOTION_DIR=/app/remotion
 
 COPY main.py transcribe_words.py planner.py ./
