@@ -96,6 +96,16 @@ export default function VideoEditor() {
     const s = Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
+  // % aproximado do pipeline por etapa (não há % exato dentro de cada passo).
+  const pctEtapa = (etapa: string | null): number => {
+    const e = (etapa || "").toLowerCase();
+    if (e.includes("transcre")) return 25;
+    if (e.includes("organiz")) return 45;
+    if (e.includes("decid")) return 65;
+    if (e.includes("renderiz")) return 85;
+    if (e.includes("conclu")) return 100;
+    return 8; // na fila / iniciando
+  };
 
   const cortar = async () => {
     if (!file) { toast.error("Selecione um vídeo primeiro."); return; }
@@ -225,11 +235,12 @@ export default function VideoEditor() {
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-muted-foreground capitalize">{j.etapa || "na fila"}…</span>
-                            <span className="tabular-nums text-muted-foreground">{decorrido(j.created_at)}</span>
+                            <span className="tabular-nums text-muted-foreground">{pctEtapa(j.etapa)}% · {decorrido(j.created_at)}</span>
                           </div>
-                          {/* Barra indeterminada (o processamento não tem % exato — são etapas) */}
+                          {/* % aproximado por etapa do pipeline (transcrição → pack → IA → render) */}
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                            <div className="h-full w-full rounded-full bg-blue-600 animate-pulse" />
+                            <div className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                                 style={{ width: `${pctEtapa(j.etapa)}%` }} />
                           </div>
                         </div>
                       )}

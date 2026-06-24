@@ -109,23 +109,32 @@ def processar_job(job_id: str, workdir_s: str, src_s: str, brief: str, org_id: s
     workdir = pathlib.Path(workdir_s)
     src = pathlib.Path(src_s)
     try:
+        # video-use organiza tudo dentro de um "edit dir"; transcribe e pack compartilham ele.
+        editdir = workdir / "edit"
+        editdir.mkdir(parents=True, exist_ok=True)
+
         set_etapa(db, job_id, "transcrevendo áudio")
-        run_helper("transcribe.py", [str(src)], cwd=workdir)
+        run_helper("transcribe.py", [str(src), "--edit-dir", str(editdir)], cwd=workdir)
 
         set_etapa(db, job_id, "organizando transcrição")
-        run_helper("pack_transcripts.py", ["--edit-dir", str(workdir)], cwd=workdir)
-        packed = workdir / "takes_packed.md"
+        run_helper("pack_transcripts.py", ["--edit-dir", str(editdir)], cwd=workdir)
+        packed = editdir / "takes_packed.md"
         if not packed.exists():
             raise RuntimeError("Falha ao empacotar a transcrição (takes_packed.md não gerado)")
 
         set_etapa(db, job_id, "decidindo cortes (IA)")
-        edl = gerar_edl(packed.read_text(encoding="utf-8"), brief, source_name=src.name)
-        edl_path = workdir / "edl.json"
+        ranges = gerar_ranges(packed.read_text(encoding="utf-8"), brief)
+        stem = src.stem  # nome da fonte (= nome do transcript gerado pelo video-use)
+        edl = {
+            "sources": {stem: str(src)},
+            "ranges": [{"source": stem, "start": r["start"], "end": r["end"]} for r in ranges],
+        }
+        edl_path = editdir / "edl.json"
         edl_path.write_text(json.dumps(edl), encoding="utf-8")
 
         set_etapa(db, job_id, "renderizando vídeo")
         out = OUTPUT_DIR / f"{job_id}.mp4"
-        run_helper("render.py", [str(edl_path), "-o", str(out)], cwd=workdir)
+        run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles"], cwd=workdir)
         if not out.exists():
             raise RuntimeError("render.py não gerou o final.mp4")
 
@@ -151,22 +160,26 @@ def run_helper(script: str, args: list[str], cwd: pathlib.Path):
         raise RuntimeError(f"{script} falhou: {proc.stderr[-500:] or proc.stdout[-500:]}")
 
 
-def gerar_edl(takes_packed: str, brief: str, source_name: str) -> dict:
+def gerar_ranges(takes_packed: str, brief: str) -> list[dict]:
+    """
+    Pede ao Claude os trechos a MANTER (start/end em segundos) a partir da transcrição empacotada.
+    Retorna a lista de ranges; o EDL final (sources + ranges) é montado em processar_job.
+    """
     client = anthropic.Anthropic()  # usa ANTHROPIC_API_KEY do ambiente
     instrucao = brief.strip() or (
         "Remova pausas longas, silêncios e vícios de linguagem (\"é...\", \"tipo...\", "
         "repetições e falsos começos), mantendo a fala natural e o ritmo dinâmico."
     )
     system = (
-        "Você é um editor de vídeo. Recebe a transcrição de UM vídeo, já empacotada em frases "
-        "com timestamps (em segundos), e devolve um EDL (Edit Decision List) em JSON para o "
-        "render.py do video-use. Regras NÃO-NEGOCIÁVEIS: nunca corte no meio de uma palavra "
-        "(use os limites de palavra do transcript); adicione 30–200ms de padding em cada borda; "
-        "preserve a ordem cronológica; remova apenas trechos ruins. Responda APENAS com o JSON.\n"
-        'Formato: {"segments": [{"source": "<arquivo>", "start": <seg>, "end": <seg>}, ...]}'
+        "Você é um editor de vídeo. Recebe a transcrição de UM vídeo empacotada em frases, cada "
+        "uma com prefixo [início-fim] em SEGUNDOS. Decida quais trechos MANTER no corte final. "
+        "Regras: use os limites de tempo das frases (nunca corte no meio de uma palavra); "
+        "adicione ~0.1s de folga nas bordas quando fizer sentido; preserve a ordem cronológica; "
+        "remova apenas pausas/silêncios/vícios/repetições/falsos começos. "
+        "Responda APENAS com JSON, sem texto extra.\n"
+        'Formato EXATO: {"ranges": [{"start": <seg>, "end": <seg>}, ...]}  (start < end, em ordem)'
     )
     user = (
-        f"Arquivo de origem: {source_name}\n\n"
         f"Instrução de corte do usuário:\n{instrucao}\n\n"
         f"Transcrição empacotada (takes_packed.md):\n{takes_packed}"
     )
@@ -181,7 +194,19 @@ def gerar_edl(takes_packed: str, brief: str, source_name: str) -> dict:
     texto = "".join(b.text for b in resp.content if b.type == "text").strip()
     if texto.startswith("```"):
         texto = texto.split("```", 2)[1].lstrip("json").strip()
-    edl = json.loads(texto)
-    if not isinstance(edl, dict) or "segments" not in edl:
-        raise RuntimeError("EDL inválido retornado pelo modelo")
-    return edl
+    data = json.loads(texto)
+    ranges = data.get("ranges") if isinstance(data, dict) else None
+    if not ranges or not isinstance(ranges, list):
+        raise RuntimeError("O modelo não retornou ranges de corte válidos")
+    # Sanitiza: só pares start<end numéricos, em ordem
+    limpos = []
+    for r in ranges:
+        try:
+            s, e = float(r["start"]), float(r["end"])
+            if e > s:
+                limpos.append({"start": round(s, 3), "end": round(e, 3)})
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not limpos:
+        raise RuntimeError("Nenhum range de corte aproveitável")
+    return limpos
