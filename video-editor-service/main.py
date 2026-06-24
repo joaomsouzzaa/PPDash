@@ -179,6 +179,19 @@ async def editar(
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
+@app.post("/renderizar")
+def renderizar(background: BackgroundTasks, body: dict, authorization: str = Header(default="")):
+    """Renderiza o vídeo final a partir da edição salva (editor_doc) de um job em 'editar'."""
+    exigir_usuario(authorization)
+    job_id = (body or {}).get("job_id")
+    if not job_id:
+        raise HTTPException(400, "job_id obrigatório")
+    db = svc()
+    db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
+    background.add_task(processar_render, job_id)
+    return {"ok": True, "job_id": job_id, "status": "processando"}
+
+
 @app.post("/reprocessar")
 def reprocessar(background: BackgroundTasks, body: dict, authorization: str = Header(default="")):
     exigir_usuario(authorization)
@@ -276,8 +289,49 @@ def processar_job(job_id: str, brief: str, org_id: str):
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+OVERLAY_LAYOUTS = {"overlay_card", "split_horizontal", "image_fullscreen", "broll_fullscreen"}
+
+
+def _timeline_para_clips(timeline: dict) -> list[dict]:
+    """Deriva os clips de overlay (editáveis) a partir da timeline do planner."""
+    clips = []
+    n = 0
+    for seg in timeline.get("segments", []):
+        layout = seg.get("layout")
+        asset = seg.get("asset")
+        if asset and layout in OVERLAY_LAYOUTS:
+            clips.append({"id": f"c{n}", "asset": asset, "layout": layout,
+                          "start": float(seg["start"]), "end": float(seg["end"])})
+            n += 1
+    return clips
+
+
+def _clips_para_timeline(doc: dict) -> dict:
+    """Deriva a timeline (segmentos contíguos) a partir dos clips. Espelha clipsParaTimeline do front."""
+    dur = float(doc.get("durationInSeconds") or 0)
+    clips = sorted([c for c in doc.get("clips", []) if float(c["end"]) > float(c["start"])], key=lambda c: c["start"])
+    segs = []
+    cursor = 0.0
+    for c in clips:
+        start = max(cursor, float(c["start"]))
+        end = min(dur, float(c["end"]))
+        if end <= start:
+            continue
+        if start > cursor:
+            segs.append({"start": cursor, "end": start, "layout": "talking_full", "asset": None})
+        segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"]})
+        cursor = end
+    if cursor < dur:
+        segs.append({"start": cursor, "end": dur, "layout": "talking_full", "asset": None})
+    if not segs:
+        segs.append({"start": 0, "end": dur, "layout": "talking_full", "asset": None})
+    return {"video": doc.get("video", "talking_head.mp4"), "fps": doc.get("fps", 30),
+            "durationInSeconds": dur, "segments": segs, "stickers": []}
+
+
 def processar_edicao(job_id: str, brief: str, org_id: str):
-    """Modo 'completo': corte → transcrição word-level → planner → render Remotion."""
+    """Modo 'completo' — FASE PREPARAR: corte → transcrição → planner (rascunho). NÃO renderiza.
+    Salva o editor_doc em video_jobs.timeline e deixa o job em status 'editar' para o usuário ajustar."""
     import shutil
     from transcribe_words import transcrever_words
     from planner import gerar_timeline
@@ -286,19 +340,15 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
     src = input_path(job_id)
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     workjob = WORK_DIR / job_id
-    assets_dir = workjob / "assets"
     try:
-        # 1) Corte → talking_head cortado dentro do dir servido (/work/<job>/talking_head.mp4)
         workjob.mkdir(parents=True, exist_ok=True)
         cut = workjob / "talking_head.mp4"
         _gerar_corte(db, job_id, src, workdir, cut, prefixo="")
 
-        # 2) Transcrição word-level NO vídeo cortado (para legenda + planner)
         set_etapa(db, job_id, "transcrevendo legendas")
         transcript = transcrever_words(str(cut))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
 
-        # 3) Planner → timeline.json
         set_etapa(db, job_id, "planejando layouts")
         meta = []
         meta_path = workjob / "assets_meta.json"
@@ -308,8 +358,37 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
         assets_map = {m["id"]: f"assets/{pathlib.Path(m.get('filename','')).name}" for m in meta if m.get("id") and m.get("filename")}
         timeline = gerar_timeline(transcript, assets_list, "talking_head.mp4", brief)
 
-        # 4) Render Remotion (lê mídias via http em /work/<job>)
-        props = {"timeline": timeline, "words": words, "assets": assets_map, "mediaBase": f"{INTERNAL_BASE}/work/{job_id}"}
+        # editor_doc: clips (editáveis) + tudo que o preview/render precisam.
+        editor_doc = {
+            "clips": _timeline_para_clips(timeline),
+            "words": words,
+            "assets": assets_map,
+            "video": "talking_head.mp4",
+            "fps": int(timeline.get("fps", 30)) or 30,
+            "durationInSeconds": float(timeline.get("durationInSeconds") or (timeline["segments"][-1]["end"] if timeline.get("segments") else 0)),
+        }
+        db.table("video_jobs").update({
+            "status": "editar", "etapa": None, "timeline": editor_doc, "erro": None,
+        }).eq("id", job_id).execute()
+        # Mantém entrada + /work (vídeo cortado + assets) para o editor e o render.
+    except Exception as e:
+        db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def processar_render(job_id: str):
+    """FASE RENDER: lê o editor_doc (clips) do banco, deriva a timeline e renderiza o vídeo final."""
+    db = svc()
+    workjob = WORK_DIR / job_id
+    try:
+        row = db.table("video_jobs").select("timeline").eq("id", job_id).maybe_single().execute()
+        doc = (row.data or {}).get("timeline")
+        if not doc or "clips" not in doc:
+            raise RuntimeError("Edição não encontrada para este job")
+        timeline = _clips_para_timeline(doc)
+        props = {"timeline": timeline, "words": doc.get("words", []), "assets": doc.get("assets", {}),
+                 "mediaBase": f"{INTERNAL_BASE}/work/{job_id}"}
         props_path = workjob / "props.json"
         props_path.write_text(json.dumps(props), encoding="utf-8")
 
@@ -321,14 +400,11 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
 
         db.table("video_jobs").update({
             "status": "pronto", "etapa": "concluído",
-            "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "timeline": timeline, "erro": None,
+            "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "erro": None,
         }).eq("id", job_id).execute()
-        # Mantém entrada + assets para permitir reprocessar; o usuário libera espaço pela lixeira.
     except Exception as e:
-        # erro: mantém entrada + assets para permitir reprocessar
-        db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        # volta para 'editar' para o usuário tentar de novo / ajustar
+        db.table("video_jobs").update({"status": "editar", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
 
 
 def _render_remotion(db: Client, job_id: str, props_path: pathlib.Path, out: pathlib.Path):

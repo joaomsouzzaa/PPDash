@@ -13,6 +13,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 // Tabela nova ainda não regenerada em supabase/types.ts — cast pontual.
@@ -52,7 +53,7 @@ type VideoJob = {
   nome: string | null;
   video_url: string;
   brief: string | null;
-  status: "pendente" | "processando" | "pronto" | "erro";
+  status: "pendente" | "processando" | "pronto" | "erro" | "editar";
   etapa: string | null;
   modo: "corte" | "completo" | null;
   resultado_url: string | null;
@@ -64,7 +65,8 @@ type AssetItem = { file: File; descricao: string };
 
 const STATUS_META: Record<VideoJob["status"], { label: string; cls: string; icon: JSX.Element }> = {
   pendente:    { label: "Na fila",    cls: "bg-amber-500",  icon: <Clock className="h-3 w-3" /> },
-  processando: { label: "Cortando",   cls: "bg-blue-600",   icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+  processando: { label: "Processando", cls: "bg-blue-600",  icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+  editar:      { label: "Pronto p/ editar", cls: "bg-violet-600", icon: <Wand2 className="h-3 w-3" /> },
   pronto:      { label: "Pronto",     cls: "bg-green-600",  icon: <CheckCircle2 className="h-3 w-3" /> },
   erro:        { label: "Erro",       cls: "bg-destructive", icon: <AlertTriangle className="h-3 w-3" /> },
 };
@@ -78,6 +80,7 @@ export default function VideoEditor() {
   const [progresso, setProgresso] = useState<number | null>(null); // % de upload (null = sem upload em curso)
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Lista de jobs da org. Faz polling enquanto houver algum em andamento.
   const { data: jobs = [] } = useQuery<VideoJob[]>({
@@ -372,6 +375,11 @@ export default function VideoEditor() {
                         </Badge>
                         <span className="flex-1 min-w-0 truncate text-sm font-medium">{j.nome || "vídeo"}</span>
                         <span className="text-xs text-muted-foreground hidden sm:inline">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
+                        {(j.status === "editar" || (j.status === "pronto" && j.modo === "completo")) && (
+                          <Button variant="secondary" size="sm" className="h-8" onClick={() => navigate(`/video-editor/editar/${j.id}`)}>
+                            <Wand2 className="h-4 w-4 mr-1" /> Editar
+                          </Button>
+                        )}
                         {(j.status === "erro" || j.status === "pronto") && (
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Reprocessar (refazer com os ajustes atuais)" onClick={() => reprocessar(j)}>
                             <RotateCcw className="h-4 w-4" />
