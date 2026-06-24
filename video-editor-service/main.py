@@ -207,7 +207,9 @@ def processar_job(job_id: str, brief: str, org_id: str):
                 i = int(m.group(1)) + 1
                 set_etapa(db, job_id, f"renderizando vídeo ({i}/{total})" if i < total else "montando vídeo final")
 
-        run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles"], cwd=workdir, on_line=on_render_line)
+        # --preview = 1080p, CRF 22: ótima qualidade para redes sociais e arquivo bem menor
+        # que o render final (que reencoda em qualidade máxima e infla o tamanho).
+        run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles", "--preview"], cwd=workdir, on_line=on_render_line)
         if not out.exists():
             raise RuntimeError("render.py não gerou o final.mp4")
 
