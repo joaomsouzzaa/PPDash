@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Instagram, Plus, Trash2, Plug, RefreshCw, CheckCircle2, AlertTriangle, Settings2,
+  Instagram, Plus, Trash2, Plug, RefreshCw, CheckCircle2, AlertTriangle, Settings2, Copy,
   Heart, MessageCircle, Send as SendIcon, Bookmark, ChevronLeft, X, Link2, Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -234,6 +234,23 @@ export default function AutoDmInstagram() {
     await carregar();
   };
 
+  // Duplica a automação (mesma conta/config) já PAUSADA — útil para reaproveitar e só
+  // trocar o post. Abre direto a cópia para edição.
+  const duplicar = async (a: IgAutomacao) => {
+    const { id, ...resto } = a as any;
+    const copia = {
+      ...resto,
+      nome: `${a.nome} (cópia)`,
+      status: "pausada",
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await db.from("ig_automacoes").insert(copia).select("*").maybeSingle();
+    if (error) { toast.error(error.message); return; }
+    toast.success("Automação duplicada. Selecione o novo post e ajuste o que quiser.");
+    await carregar();
+    if (data) abrirEdicao(data as IgAutomacao);
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -268,7 +285,7 @@ export default function AutoDmInstagram() {
               <ListaAutomacoes
                 automacoes={automacoes.filter((a) => a.ig_conta_id === (contaSel?.id ?? null))}
                 conta={contaSel} execucoes={execucoes} midias={midias} onNova={novaAutomacao}
-                onEditar={abrirEdicao} onExcluir={excluir} onToggle={toggleStatus}
+                onEditar={abrirEdicao} onExcluir={excluir} onToggle={toggleStatus} onDuplicar={duplicar}
               />
             )}
           </div>
@@ -370,9 +387,9 @@ function GerenciarContasDialog({ open, onOpenChange, contas, onToggle }: {
 // ============================================================
 // Lista de automações
 // ============================================================
-function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEditar, onExcluir, onToggle }: {
+function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEditar, onExcluir, onToggle, onDuplicar }: {
   automacoes: IgAutomacao[]; conta: IgConta | null; execucoes: Record<string, number>; midias: IgMidia[]; onNova: () => void;
-  onEditar: (a: IgAutomacao) => void; onExcluir: (id: string) => void; onToggle: (a: IgAutomacao) => void;
+  onEditar: (a: IgAutomacao) => void; onExcluir: (id: string) => void; onToggle: (a: IgAutomacao) => void; onDuplicar: (a: IgAutomacao) => void;
 }) {
   const thumbDe = (a: IgAutomacao) => {
     if (a.escopo !== "post_especifico" || a.media_ids.length === 0) return null;
@@ -396,7 +413,7 @@ function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEdita
             <span className="flex-1">Nome</span>
             <span className="w-20 text-center">Execuções</span>
             <span className="w-16 text-center">Post</span>
-            <span className="w-[150px]" />
+            <span className="w-[190px]" />
           </div>
         )}
         {automacoes.map((a) => {
@@ -431,10 +448,11 @@ function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEdita
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 shrink-0 w-[150px] justify-end">
+              <div className="flex items-center gap-1 shrink-0 w-[190px] justify-end">
                 <Switch checked={a.status === "live"} onCheckedChange={() => onToggle(a)} />
                 <Button variant="ghost" size="sm" onClick={() => onEditar(a)}>Editar</Button>
-                <Button variant="ghost" size="icon" onClick={() => onExcluir(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                <Button variant="ghost" size="icon" title="Duplicar" onClick={() => onDuplicar(a)}><Copy className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" title="Excluir" onClick={() => onExcluir(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
             </div>
           );
