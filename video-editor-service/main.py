@@ -31,6 +31,7 @@ import uuid
 import anthropic
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import Client, create_client
 
@@ -41,6 +42,15 @@ STORAGE_BUCKET = os.environ.get("STORAGE_BUCKET", "video-editor")
 MODEL = "claude-opus-4-8"
 
 app = FastAPI(title="PPDash Vídeo Editor Service")
+
+# CORS: o front (Vercel + subdomínios dos clientes) chama este serviço pelo navegador.
+# Não usamos cookies — só o header Authorization — então liberar todas as origens é seguro aqui.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def svc() -> Client:
