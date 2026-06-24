@@ -1,7 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Sequence, Img, OffthreadVideo } from "remotion";
-import { TransitionSeries, linearTiming } from "@remotion/transitions";
-import { fade } from "@remotion/transitions/fade";
+import { AbsoluteFill, Sequence, Series, Img } from "remotion";
 import { LAYOUT_COMPONENTS, url, type Ctx } from "./layouts";
 import { Captions } from "./Captions";
 import type { MainProps, Sticker } from "./schema";
@@ -24,11 +22,10 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase }
     id && assets[id] ? url(mediaBase, assets[id]) : null;
   const isVideoAsset = (s: string | null) => !!s && VIDEO_EXT.test(s);
 
-  const transitionFrames = Math.max(1, Math.round(0.15 * fps)); // cross-dissolve ~150ms
-
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
-      <TransitionSeries>
+      {/* Corte seco entre os trechos (sem transição) */}
+      <Series>
         {timeline.segments.map((seg, i) => {
           const durFrames = Math.max(1, Math.round((seg.end - seg.start) * fps));
           const Comp = LAYOUT_COMPONENTS[seg.layout];
@@ -40,20 +37,12 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase }
             isVideoAsset,
           };
           return (
-            <React.Fragment key={i}>
-              {i > 0 && (
-                <TransitionSeries.Transition
-                  presentation={fade()}
-                  timing={linearTiming({ durationInFrames: transitionFrames })}
-                />
-              )}
-              <TransitionSeries.Sequence durationInFrames={durFrames}>
-                <Comp {...ctx} />
-              </TransitionSeries.Sequence>
-            </React.Fragment>
+            <Series.Sequence key={i} durationInFrames={durFrames}>
+              <Comp {...ctx} />
+            </Series.Sequence>
           );
         })}
-      </TransitionSeries>
+      </Series>
 
       {/* Stickers (logos/figurinhas) sobre qualquer layout, na janela de tempo deles */}
       {timeline.stickers.map((s: Sticker, i) => {

@@ -7,14 +7,13 @@ const WIDTH = 1080;
 const HEIGHT = 1920;
 const FPS = 30;
 
-// Duração = soma dos trechos menos as sobreposições das transições (cross-dissolve).
+// Duração = soma dos trechos (corte seco, sem sobreposição de transição).
 function durationInFrames(props: MainProps): number {
   const fps = props.timeline.fps || FPS;
   const segs = props.timeline.segments;
   if (!segs.length) return fps; // 1s placeholder
   const total = segs.reduce((acc, s) => acc + Math.max(1, Math.round((s.end - s.start) * fps)), 0);
-  const transition = Math.max(1, Math.round(0.15 * fps));
-  return Math.max(fps, total - transition * (segs.length - 1));
+  return Math.max(fps, total);
 }
 
 const DEFAULTS: MainProps = {
