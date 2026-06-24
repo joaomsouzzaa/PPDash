@@ -1,68 +1,67 @@
 """
 Serviço de cortes de vídeo por IA para o PPDash (página Growth → Vídeo Editor).
 
+O vídeo é enviado DIRETO para este serviço (multipart) — não passa pelo Supabase Storage,
+que no plano free trava em 50MB. O resultado também é servido por aqui (/files/<job>.mp4).
+
 Reaproveita o pipeline do repo browser-use/video-use (Python + FFmpeg):
-  transcribe.py  → transcripts/<name>.json
+  transcribe.py  → transcrição
   pack_transcripts.py → takes_packed.md
   [Claude claude-opus-4-8 lê o takes_packed.md + brief → edl.json]   ← decisão de corte
   render.py edl.json → final.mp4
 
 Fluxo:
-  POST /cortar  { job_id, video_url, brief, org_id }  (Authorization: Bearer <supabase access_token>)
+  POST /cortar  (multipart: video, job_id, brief, org_id ; Authorization: Bearer <supabase token>)
     1. valida o usuário via Supabase Auth
-    2. marca video_jobs.status = processando
-    3. processa em background (download → transcribe → pack → edl → render → upload)
-    4. grava resultado_url + status=pronto (ou status=erro)
+    2. salva o vídeo em disco, marca video_jobs.status = processando
+    3. processa em background (transcribe → pack → edl → render)
+    4. grava resultado_url (URL na VPS) + status=pronto (ou erro), atualizando `etapa` a cada passo
 
 Variáveis de ambiente (ver .env.example):
   ANTHROPIC_API_KEY, ELEVENLABS_API_KEY,
   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-  VIDEO_USE_DIR (default ./video-use), STORAGE_BUCKET (default video-editor)
+  VIDEO_USE_DIR (default ./video-use), OUTPUT_DIR (default ./outputs),
+  PUBLIC_BASE (ex.: https://srv1779748.hstgr.cloud)
 """
 
 import json
 import os
 import pathlib
-import shutil
 import subprocess
 import tempfile
 import uuid
 
 import anthropic
-import httpx
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
 from supabase import Client, create_client
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 VIDEO_USE_DIR = pathlib.Path(os.environ.get("VIDEO_USE_DIR", "./video-use")).resolve()
-STORAGE_BUCKET = os.environ.get("STORAGE_BUCKET", "video-editor")
+OUTPUT_DIR = pathlib.Path(os.environ.get("OUTPUT_DIR", "./outputs")).resolve()
+PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "").rstrip("/")
 MODEL = "claude-opus-4-8"
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="PPDash Vídeo Editor Service")
 
 # CORS: o front (Vercel + subdomínios dos clientes) chama este serviço pelo navegador.
-# Não usamos cookies — só o header Authorization — então liberar todas as origens é seguro aqui.
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+# Serve os vídeos cortados em /files/<job>.mp4
+app.mount("/files", StaticFiles(directory=str(OUTPUT_DIR)), name="files")
 
 
 def svc() -> Client:
-    """Cliente Supabase com service role (ignora RLS — atualiza video_jobs e sobe o resultado)."""
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
-class CortarBody(BaseModel):
-    job_id: str
-    video_url: str
-    brief: str = ""
-    org_id: str | None = None
+def set_etapa(db: Client, job_id: str, etapa: str):
+    db.table("video_jobs").update({"etapa": etapa}).eq("id", job_id).execute()
 
 
 @app.get("/health")
@@ -71,11 +70,17 @@ def health():
 
 
 @app.post("/cortar")
-def cortar(body: CortarBody, background: BackgroundTasks, authorization: str = Header(default="")):
+async def cortar(
+    background: BackgroundTasks,
+    job_id: str = Form(...),
+    brief: str = Form(""),
+    org_id: str = Form(""),
+    video: UploadFile = File(...),
+    authorization: str = Header(default=""),
+):
     token = authorization.replace("Bearer ", "").strip()
     if not token:
         raise HTTPException(401, "Sem token de autorização")
-    # Valida que o token pertence a um usuário logado (não confiamos só no corpo).
     try:
         user = svc().auth.get_user(token)
         if not user or not user.user:
@@ -83,83 +88,70 @@ def cortar(body: CortarBody, background: BackgroundTasks, authorization: str = H
     except Exception:
         raise HTTPException(401, "Token inválido")
 
-    svc().table("video_jobs").update({"status": "processando"}).eq("id", body.job_id).execute()
-    background.add_task(processar_job, body.job_id, body.video_url, body.brief, body.org_id)
-    return {"ok": True, "job_id": body.job_id, "status": "processando"}
+    # Salva o upload em disco (não cabe mantê-lo em memória para a background task).
+    workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
+    src = workdir / "input.mp4"
+    with open(src, "wb") as f:
+        while chunk := await video.read(1024 * 1024):
+            f.write(chunk)
+
+    db = svc()
+    db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
+    background.add_task(processar_job, job_id, str(workdir), str(src), brief, org_id)
+    return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
 # ============================================================
 # Pipeline
 # ============================================================
-def processar_job(job_id: str, video_url: str, brief: str, org_id: str | None):
+def processar_job(job_id: str, workdir_s: str, src_s: str, brief: str, org_id: str):
     db = svc()
-    workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
+    workdir = pathlib.Path(workdir_s)
+    src = pathlib.Path(src_s)
     try:
-        # 1) Baixa o vídeo de entrada
-        src = workdir / "input.mp4"
-        with httpx.stream("GET", video_url, timeout=120) as r:
-            r.raise_for_status()
-            with open(src, "wb") as f:
-                for chunk in r.iter_bytes():
-                    f.write(chunk)
-
-        # 2) Transcreve (ElevenLabs Scribe via helper do video-use)
+        set_etapa(db, job_id, "transcrevendo áudio")
         run_helper("transcribe.py", [str(src)], cwd=workdir)
 
-        # 3) Empacota a transcrição em frases com timestamps
+        set_etapa(db, job_id, "organizando transcrição")
         run_helper("pack_transcripts.py", ["--edit-dir", str(workdir)], cwd=workdir)
-        packed = (workdir / "takes_packed.md")
+        packed = workdir / "takes_packed.md"
         if not packed.exists():
             raise RuntimeError("Falha ao empacotar a transcrição (takes_packed.md não gerado)")
 
-        # 4) Claude lê a transcrição + brief e decide os cortes (edl.json)
+        set_etapa(db, job_id, "decidindo cortes (IA)")
         edl = gerar_edl(packed.read_text(encoding="utf-8"), brief, source_name=src.name)
         edl_path = workdir / "edl.json"
         edl_path.write_text(json.dumps(edl), encoding="utf-8")
 
-        # 5) Renderiza o vídeo cortado
-        out = workdir / "final.mp4"
+        set_etapa(db, job_id, "renderizando vídeo")
+        out = OUTPUT_DIR / f"{job_id}.mp4"
         run_helper("render.py", [str(edl_path), "-o", str(out)], cwd=workdir)
         if not out.exists():
             raise RuntimeError("render.py não gerou o final.mp4")
 
-        # 6) Sobe o resultado e marca o job como pronto
-        dest = f"{org_id or 'global'}/{job_id}/{uuid.uuid4()}.mp4"
-        with open(out, "rb") as f:
-            db.storage.from_(STORAGE_BUCKET).upload(
-                dest, f.read(), {"content-type": "video/mp4", "upsert": "true"}
-            )
-        public_url = db.storage.from_(STORAGE_BUCKET).get_public_url(dest)
+        resultado_url = f"{PUBLIC_BASE}/files/{job_id}.mp4"
         db.table("video_jobs").update(
-            {"status": "pronto", "resultado_url": public_url, "edl": edl, "erro": None}
+            {"status": "pronto", "etapa": "concluído", "resultado_url": resultado_url, "edl": edl, "erro": None}
         ).eq("id", job_id).execute()
     except Exception as e:
         db.table("video_jobs").update(
-            {"status": "erro", "erro": str(e)[:500]}
+            {"status": "erro", "etapa": None, "erro": str(e)[:500]}
         ).eq("id", job_id).execute()
     finally:
+        import shutil
         shutil.rmtree(workdir, ignore_errors=True)
 
 
 def run_helper(script: str, args: list[str], cwd: pathlib.Path):
-    """Roda um helper do video-use (helpers/<script>) e levanta erro com o stderr em caso de falha."""
     helper = VIDEO_USE_DIR / "helpers" / script
     proc = subprocess.run(
-        ["python", str(helper), *args],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
+        ["python", str(helper), *args], cwd=str(cwd), capture_output=True, text=True
     )
     if proc.returncode != 0:
         raise RuntimeError(f"{script} falhou: {proc.stderr[-500:] or proc.stdout[-500:]}")
 
 
 def gerar_edl(takes_packed: str, brief: str, source_name: str) -> dict:
-    """
-    Pede ao Claude um edl.json válido para o render.py do video-use a partir da transcrição
-    empacotada. Segue as regras do SKILL.md: cortes em limites de palavra, padding de 30–200ms,
-    nunca cortar no meio de uma palavra, fades de 30ms aplicados pelo render.
-    """
     client = anthropic.Anthropic()  # usa ANTHROPIC_API_KEY do ambiente
     instrucao = brief.strip() or (
         "Remova pausas longas, silêncios e vícios de linguagem (\"é...\", \"tipo...\", "
@@ -187,7 +179,6 @@ def gerar_edl(takes_packed: str, brief: str, source_name: str) -> dict:
         messages=[{"role": "user", "content": user}],
     )
     texto = "".join(b.text for b in resp.content if b.type == "text").strip()
-    # Remove cercas de código se vierem
     if texto.startswith("```"):
         texto = texto.split("```", 2)[1].lstrip("json").strip()
     edl = json.loads(texto)

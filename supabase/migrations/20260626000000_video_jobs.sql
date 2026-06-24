@@ -14,6 +14,7 @@ create table if not exists public.video_jobs (
   video_url text not null,                          -- vídeo de entrada (bucket video-editor)
   brief text,                                       -- instrução de corte (ex.: "remova pausas")
   status text not null default 'pendente',          -- 'pendente' | 'processando' | 'pronto' | 'erro'
+  etapa text,                                        -- etapa atual do processamento (ex.: "renderizando vídeo")
   resultado_url text,                               -- vídeo cortado (final.mp4)
   edl jsonb,                                         -- decisão de corte (auditoria/debug)
   erro text,

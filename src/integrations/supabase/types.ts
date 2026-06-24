@@ -1975,6 +1975,7 @@ export type Database = {
           created_by: string | null
           edl: Json | null
           erro: string | null
+          etapa: string | null
           id: string
           nome: string | null
           org_id: string | null
@@ -1989,6 +1990,7 @@ export type Database = {
           created_by?: string | null
           edl?: Json | null
           erro?: string | null
+          etapa?: string | null
           id?: string
           nome?: string | null
           org_id?: string | null
@@ -2003,6 +2005,7 @@ export type Database = {
           created_by?: string | null
           edl?: Json | null
           erro?: string | null
+          etapa?: string | null
           id?: string
           nome?: string | null
           org_id?: string | null

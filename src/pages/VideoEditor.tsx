@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,8 +17,32 @@ import { toast } from "sonner";
 // Tabela nova ainda não regenerada em supabase/types.ts — cast pontual.
 const db = supabase as any;
 
-// URL do serviço Python (video-use) que processa os cortes.
+// URL do serviço Python (video-use) que recebe o vídeo e processa os cortes.
+// O vídeo vai DIRETO pra cá (não pelo Supabase Storage, que trava em 50MB no plano free).
 const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
+
+// Envia o vídeo (multipart) pro serviço com progresso real via XHR.
+function enviarParaServico(
+  fields: Record<string, string>, file: File, token: string, onProgress: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    form.append("video", file, file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${SERVICE_URL}/cortar`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Serviço respondeu ${xhr.status}: ${xhr.responseText.slice(0, 200)}`));
+    xhr.onerror = () => reject(new Error("Falha de rede ao enviar o vídeo"));
+    xhr.send(form);
+  });
+}
 
 type VideoJob = {
   id: string;
@@ -26,6 +50,7 @@ type VideoJob = {
   video_url: string;
   brief: string | null;
   status: "pendente" | "processando" | "pronto" | "erro";
+  etapa: string | null;
   resultado_url: string | null;
   erro: string | null;
   created_at: string;
@@ -42,6 +67,7 @@ export default function VideoEditor() {
   const [file, setFile] = useState<File | null>(null);
   const [brief, setBrief] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [progresso, setProgresso] = useState<number | null>(null); // % de upload (null = sem upload em curso)
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -54,41 +80,46 @@ export default function VideoEditor() {
     },
     refetchInterval: (q) => {
       const list = (q.state.data as VideoJob[] | undefined) || [];
-      return list.some((j) => j.status === "pendente" || j.status === "processando") ? 5000 : false;
+      return list.some((j) => j.status === "pendente" || j.status === "processando") ? 4000 : false;
     },
   });
+
+  // Relógio que tica de 1s em 1s enquanto há job em andamento (para o tempo decorrido).
+  const [agora, setAgora] = useState(() => Date.now());
+  const temAtivo = jobs.some((j) => j.status === "pendente" || j.status === "processando");
+  useEffect(() => {
+    if (!temAtivo) return;
+    const t = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [temAtivo]);
+  const decorrido = (iso: string) => {
+    const s = Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
 
   const cortar = async () => {
     if (!file) { toast.error("Selecione um vídeo primeiro."); return; }
     if (!SERVICE_URL) { toast.error("Serviço de vídeo não configurado (VITE_VIDEO_EDITOR_URL)."); return; }
     setEnviando(true);
+    setProgresso(0);
     try {
-      // 1) Upload do vídeo de entrada no bucket video-editor (pasta da org).
       const orgId = await getOrgId();
-      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
-      const path = `${orgId}/${crypto.randomUUID()}.${ext}`;
-      const up = await supabase.storage.from("video-editor").upload(path, file, { contentType: file.type || "video/mp4" });
-      if (up.error) throw up.error;
-      const videoUrl = supabase.storage.from("video-editor").getPublicUrl(path).data.publicUrl;
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token ?? "";
 
-      // 2) Cria o job (org_id é preenchido pelo trigger set_org_id).
+      // 1) Cria o job (org_id é preenchido pelo trigger set_org_id). video_url fica vazio
+      //    porque o vídeo vai direto pro serviço (não pro Storage).
       const ins = await db.from("video_jobs")
-        .insert({ nome: file.name, video_url: videoUrl, brief: brief.trim() || null, status: "pendente" })
+        .insert({ nome: file.name, video_url: "", brief: brief.trim() || null, status: "pendente" })
         .select("id").single();
       if (ins.error) throw ins.error;
       const jobId: string = ins.data.id;
 
-      // 3) Dispara o serviço Python (processa em background).
-      const session = await supabase.auth.getSession();
-      const res = await fetch(`${SERVICE_URL}/cortar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.data.session?.access_token ?? ""}` },
-        body: JSON.stringify({ job_id: jobId, video_url: videoUrl, brief: brief.trim(), org_id: orgId }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`Serviço respondeu ${res.status}: ${txt.slice(0, 200)}`);
-      }
+      // 2) Envia o vídeo (multipart) pro serviço com progresso real; ele processa em background.
+      await enviarParaServico(
+        { job_id: jobId, brief: brief.trim(), org_id: orgId ?? "" },
+        file, token, setProgresso,
+      );
 
       toast.success("Vídeo enviado para corte. Acompanhe o status abaixo.");
       setFile(null);
@@ -99,6 +130,7 @@ export default function VideoEditor() {
       toast.error(e instanceof Error ? e.message : "Falha ao enviar o vídeo.");
     } finally {
       setEnviando(false);
+      setProgresso(null);
     }
   };
 
@@ -147,8 +179,20 @@ export default function VideoEditor() {
                 </div>
                 <Button onClick={cortar} disabled={enviando || !file}>
                   {enviando ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Scissors className="h-4 w-4 mr-2" />}
-                  {enviando ? "Enviando..." : "Cortar vídeo"}
+                  {enviando
+                    ? progresso !== null ? `Enviando ${progresso}%` : "Iniciando corte..."
+                    : "Cortar vídeo"}
                 </Button>
+                {progresso !== null && file && (
+                  <div className="space-y-1">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-violet-600 transition-all duration-200" style={{ width: `${progresso}%` }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enviando vídeo… {progresso}% · {(file.size * progresso / 100 / 1024 / 1024).toFixed(1)} / {(file.size / 1024 / 1024).toFixed(1)} MB
+                    </p>
+                  </div>
+                )}
                 {!SERVICE_URL && (
                   <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300">
                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -177,8 +221,20 @@ export default function VideoEditor() {
                         <span className="text-xs text-muted-foreground">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
                       </div>
                       {j.brief && <p className="text-xs text-muted-foreground line-clamp-2">Instrução: {j.brief}</p>}
+                      {(j.status === "processando" || j.status === "pendente") && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground capitalize">{j.etapa || "na fila"}…</span>
+                            <span className="tabular-nums text-muted-foreground">{decorrido(j.created_at)}</span>
+                          </div>
+                          {/* Barra indeterminada (o processamento não tem % exato — são etapas) */}
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div className="h-full w-full rounded-full bg-blue-600 animate-pulse" />
+                          </div>
+                        </div>
+                      )}
                       {j.status === "erro" && j.erro && (
-                        <p className="text-xs text-destructive">{j.erro}</p>
+                        <p className="text-xs text-destructive break-words">{j.erro}</p>
                       )}
                       {j.status === "pronto" && j.resultado_url && (
                         <div className="space-y-2">
