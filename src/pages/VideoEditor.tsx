@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Scissors, Upload, Download, RefreshCw, Film, AlertTriangle, Loader2, Clock, CheckCircle2,
-  Trash2, RotateCcw, HardDrive,
+  Trash2, RotateCcw, HardDrive, Wand2, ImagePlus, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
@@ -22,16 +22,18 @@ const db = supabase as any;
 // O vídeo vai DIRETO pra cá (não pelo Supabase Storage, que trava em 50MB no plano free).
 const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
 
-// Envia o vídeo (multipart) pro serviço com progresso real via XHR.
+// Envia o vídeo (+ assets opcionais) em multipart pro serviço, com progresso real via XHR.
 function enviarParaServico(
-  fields: Record<string, string>, file: File, token: string, onProgress: (pct: number) => void,
+  path: string, fields: Record<string, string>, video: File,
+  assetFiles: { file: File; name: string }[], token: string, onProgress: (pct: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     for (const [k, v] of Object.entries(fields)) form.append(k, v);
-    form.append("video", file, file.name);
+    form.append("video", video, video.name);
+    for (const a of assetFiles) form.append("assets", a.file, a.name);
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${SERVICE_URL}/cortar`);
+    xhr.open("POST", `${SERVICE_URL}${path}`);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
@@ -52,10 +54,13 @@ type VideoJob = {
   brief: string | null;
   status: "pendente" | "processando" | "pronto" | "erro";
   etapa: string | null;
+  modo: "corte" | "completo" | null;
   resultado_url: string | null;
   erro: string | null;
   created_at: string;
 };
+
+type AssetItem = { file: File; descricao: string };
 
 const STATUS_META: Record<VideoJob["status"], { label: string; cls: string; icon: JSX.Element }> = {
   pendente:    { label: "Na fila",    cls: "bg-amber-500",  icon: <Clock className="h-3 w-3" /> },
@@ -67,6 +72,8 @@ const STATUS_META: Record<VideoJob["status"], { label: string; cls: string; icon
 export default function VideoEditor() {
   const [file, setFile] = useState<File | null>(null);
   const [brief, setBrief] = useState("");
+  const [modo, setModo] = useState<"corte" | "completo">("corte");
+  const [assets, setAssets] = useState<AssetItem[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [progresso, setProgresso] = useState<number | null>(null); // % de upload (null = sem upload em curso)
   const inputRef = useRef<HTMLInputElement>(null);
@@ -110,26 +117,37 @@ export default function VideoEditor() {
     const s = Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
-  // % do pipeline por etapa. O render (etapa mais longa) tem progresso REAL por trecho
-  // ("renderizando vídeo (x/y)") e ocupa uma faixa larga (55→95%) para a barra avançar de verdade.
-  const pctEtapa = (etapa: string | null): number => {
+  // % aproximado do pipeline por etapa (depende do modo: corte simples vs edição completa).
+  const frac = (e: string) => { const m = e.match(/\((\d+)\/(\d+)\)/); return m ? Number(m[1]) / Number(m[2]) : null; };
+  const pct = (e: string) => { const m = e.match(/\((\d+)%\)/); return m ? Number(m[1]) : null; };
+  const pctEtapa = (etapa: string | null, modo: VideoJob["modo"]): number => {
     const e = (etapa || "").toLowerCase();
-    if (e.includes("transcre")) return 15;
-    if (e.includes("organiz")) return 28;
-    if (e.includes("decid")) return 42;
-    if (e.includes("renderiz")) {
-      const m = e.match(/\((\d+)\/(\d+)\)/);
-      if (m) return Math.min(95, Math.round(55 + (Number(m[1]) / Number(m[2])) * 40));
-      return 55;
-    }
-    if (e.includes("montando") || e.includes("finaliz")) return 97;
     if (e.includes("conclu")) return 100;
-    return 6; // na fila / iniciando
+    if (modo === "completo") {
+      if (e.includes("transcrevendo áudio") || e.includes("transcrevendo audio")) return 8;
+      if (e.includes("organiz")) return 12;
+      if (e.includes("decid")) return 16;
+      if (e.includes("cortando")) return Math.round(18 + (frac(e) ?? 0) * 17);
+      if (e.includes("montando corte")) return 36;
+      if (e.includes("transcrevendo legendas")) return 42;
+      if (e.includes("planej")) return 50;
+      if (e.includes("renderiz")) return Math.min(96, Math.round(55 + (pct(e) ?? 0) * 0.4));
+      if (e.includes("montando")) return 97;
+      return 4;
+    }
+    // modo corte
+    if (e.includes("transcre")) return 10;
+    if (e.includes("organiz")) return 18;
+    if (e.includes("decid")) return 28;
+    if (e.includes("cortando")) return Math.round(30 + (frac(e) ?? 0) * 60);
+    if (e.includes("montando")) return 96;
+    return 6;
   };
 
-  const cortar = async () => {
+  const enviar = async () => {
     if (!file) { toast.error("Selecione um vídeo primeiro."); return; }
     if (!SERVICE_URL) { toast.error("Serviço de vídeo não configurado (VITE_VIDEO_EDITOR_URL)."); return; }
+    const completo = modo === "completo";
     setEnviando(true);
     setProgresso(0);
     try {
@@ -137,23 +155,30 @@ export default function VideoEditor() {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token ?? "";
 
-      // 1) Cria o job (org_id é preenchido pelo trigger set_org_id). video_url fica vazio
-      //    porque o vídeo vai direto pro serviço (não pro Storage).
+      // Metadados dos assets (modo completo): id estável + nome de arquivo único.
+      const meta = assets.map((a, i) => {
+        const ext = (a.file.name.split(".").pop() || "bin").toLowerCase();
+        const id = `a${i}`;
+        return { id, tipo: "", descricao: a.descricao.trim(), filename: `${id}.${ext}` };
+      });
+      const assetFiles = completo ? assets.map((a, i) => ({ file: a.file, name: meta[i].filename })) : [];
+
+      // 1) Cria o job (org_id via trigger set_org_id). video_url vazio: vídeo vai direto pro serviço.
       const ins = await db.from("video_jobs")
-        .insert({ nome: file.name, video_url: "", brief: brief.trim() || null, status: "pendente" })
+        .insert({ nome: file.name, video_url: "", brief: brief.trim() || null, status: "pendente", modo })
         .select("id").single();
       if (ins.error) throw ins.error;
       const jobId: string = ins.data.id;
 
-      // 2) Envia o vídeo (multipart) pro serviço com progresso real; ele processa em background.
-      await enviarParaServico(
-        { job_id: jobId, brief: brief.trim(), org_id: orgId ?? "" },
-        file, token, setProgresso,
-      );
+      // 2) Envia tudo pro serviço (corte simples ou edição completa).
+      const fields: Record<string, string> = { job_id: jobId, brief: brief.trim(), org_id: orgId ?? "" };
+      if (completo) fields.assets_json = JSON.stringify(meta);
+      await enviarParaServico(completo ? "/editar" : "/cortar", fields, file, assetFiles, token, setProgresso);
 
-      toast.success("Vídeo enviado para corte. Acompanhe o status abaixo.");
+      toast.success(completo ? "Vídeo enviado para edição completa." : "Vídeo enviado para corte.");
       setFile(null);
       setBrief("");
+      setAssets([]);
       if (inputRef.current) inputRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["video_jobs"] });
     } catch (e) {
@@ -215,15 +240,26 @@ export default function VideoEditor() {
             {/* Envio de vídeo */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2"><Upload className="h-4 w-4" /> Novo corte</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><Upload className="h-4 w-4" /> Novo vídeo</CardTitle>
                 <CardDescription>
-                  Envie um vídeo e a IA transcreve e remove automaticamente pausas, silêncios e vícios de
-                  linguagem ("é...", "tipo..."), gerando uma versão cortada para download.
+                  {modo === "corte"
+                    ? "Corte por IA: transcreve e remove pausas, silêncios e vícios de linguagem, gerando uma versão cortada."
+                    : "Edição completa: corta, adiciona legendas animadas e camadas dinâmicas (prints/b-rolls) automaticamente, no estilo editorial."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Toggle de modo */}
+                <div className="inline-flex rounded-lg border p-1 gap-1">
+                  <Button type="button" size="sm" variant={modo === "corte" ? "default" : "ghost"} onClick={() => setModo("corte")}>
+                    <Scissors className="h-4 w-4 mr-2" /> Só cortar
+                  </Button>
+                  <Button type="button" size="sm" variant={modo === "completo" ? "default" : "ghost"} onClick={() => setModo("completo")}>
+                    <Wand2 className="h-4 w-4 mr-2" /> Edição completa
+                  </Button>
+                </div>
+
                 <div className="space-y-2">
-                  <Label>Vídeo</Label>
+                  <Label>Vídeo (talking-head)</Label>
                   <input
                     ref={inputRef}
                     type="file"
@@ -233,20 +269,57 @@ export default function VideoEditor() {
                   />
                   {file && <p className="text-xs text-muted-foreground">{file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</p>}
                 </div>
+
+                {/* Assets (só na edição completa) */}
+                {modo === "completo" && (
+                  <div className="space-y-2">
+                    <Label>Imagens / prints / b-rolls (opcional)</Label>
+                    <p className="text-xs text-muted-foreground">A IA encaixa cada mídia no momento certo da fala. Descreva cada uma para ajudar (ex.: "print da notícia da Cazé TV").</p>
+                    <div className="space-y-2">
+                      {assets.map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 rounded-md border p-2">
+                          <ImagePlus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="text-xs truncate w-32 shrink-0" title={a.file.name}>{a.file.name}</span>
+                          <input
+                            value={a.descricao}
+                            onChange={(e) => setAssets((prev) => prev.map((x, k) => k === i ? { ...x, descricao: e.target.value } : x))}
+                            placeholder="Descrição da mídia"
+                            className="flex-1 bg-transparent text-sm outline-none border-b border-transparent focus:border-border"
+                          />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAssets((prev) => prev.filter((_, k) => k !== i))}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50">
+                      <ImagePlus className="h-4 w-4" /> Adicionar mídias
+                      <input type="file" accept="image/*,video/*" multiple className="hidden"
+                        onChange={(e) => {
+                          const fs = Array.from(e.target.files ?? []).map((file) => ({ file, descricao: "" }));
+                          setAssets((prev) => [...prev, ...fs]);
+                          e.currentTarget.value = "";
+                        }} />
+                    </label>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Label>Instrução de corte (opcional)</Label>
+                  <Label>{modo === "corte" ? "Instrução de corte (opcional)" : "Instrução de edição (opcional)"}</Label>
                   <Textarea
                     value={brief}
                     onChange={(e) => setBrief(e.target.value)}
-                    placeholder="Ex.: remova pausas e vícios de linguagem, mantenha o ritmo dinâmico."
+                    placeholder={modo === "corte"
+                      ? "Ex.: remova pausas e vícios de linguagem, mantenha o ritmo dinâmico."
+                      : "Ex.: ritmo dinâmico, use os prints nos momentos certos, mantenha legendas grandes."}
                     rows={3}
                   />
                 </div>
-                <Button onClick={cortar} disabled={enviando || !file}>
-                  {enviando ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Scissors className="h-4 w-4 mr-2" />}
+                <Button onClick={enviar} disabled={enviando || !file}>
+                  {enviando ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : modo === "corte" ? <Scissors className="h-4 w-4 mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
                   {enviando
-                    ? progresso !== null ? `Enviando ${progresso}%` : "Iniciando corte..."
-                    : "Cortar vídeo"}
+                    ? progresso !== null ? `Enviando ${progresso}%` : "Iniciando..."
+                    : modo === "corte" ? "Cortar vídeo" : "Editar vídeo"}
                 </Button>
                 {progresso !== null && file && (
                   <div className="space-y-1">
@@ -294,6 +367,9 @@ export default function VideoEditor() {
                     <div key={j.id} className="rounded-lg border p-3 space-y-2">
                       <div className="flex items-center gap-3">
                         <Badge className={`${meta.cls} gap-1`}>{meta.icon} {meta.label}</Badge>
+                        <Badge variant="outline" className="gap-1 hidden sm:inline-flex">
+                          {j.modo === "completo" ? <><Wand2 className="h-3 w-3" /> Editado</> : <><Scissors className="h-3 w-3" /> Cortado</>}
+                        </Badge>
                         <span className="flex-1 min-w-0 truncate text-sm font-medium">{j.nome || "vídeo"}</span>
                         <span className="text-xs text-muted-foreground hidden sm:inline">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
                         {j.status === "erro" && (
@@ -312,12 +388,12 @@ export default function VideoEditor() {
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-muted-foreground capitalize">{j.etapa || "na fila"}…</span>
-                            <span className="tabular-nums text-muted-foreground">{pctEtapa(j.etapa)}% · {decorrido(j.created_at)}</span>
+                            <span className="tabular-nums text-muted-foreground">{pctEtapa(j.etapa, j.modo)}% · {decorrido(j.created_at)}</span>
                           </div>
-                          {/* % aproximado por etapa do pipeline (transcrição → pack → IA → render) */}
+                          {/* % aproximado por etapa do pipeline */}
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                             <div className="h-full rounded-full bg-blue-600 transition-all duration-500"
-                                 style={{ width: `${pctEtapa(j.etapa)}%` }} />
+                                 style={{ width: `${pctEtapa(j.etapa, j.modo)}%` }} />
                           </div>
                         </div>
                       )}

@@ -1,0 +1,39 @@
+{
+  "mediaBase": "",
+  "assets": {
+    "print_caze": "print1.png",
+    "foto_casimiro": "print2.png",
+    "broll_estadio": "broll.mp4",
+    "logo_globo": "logo.png"
+  },
+  "timeline": {
+    "video": "talking_head.mp4",
+    "fps": 30,
+    "segments": [
+      { "start": 0.0, "end": 2.0, "layout": "talking_full", "asset": null },
+      { "start": 2.0, "end": 4.0, "layout": "overlay_card", "asset": "print_caze" },
+      { "start": 4.0, "end": 6.0, "layout": "split_horizontal", "asset": "foto_casimiro" },
+      { "start": 6.0, "end": 8.0, "layout": "image_fullscreen", "asset": "print_caze" },
+      { "start": 8.0, "end": 10.0, "layout": "split_vertical", "asset": "foto_casimiro" },
+      { "start": 10.0, "end": 12.0, "layout": "broll_fullscreen", "asset": "broll_estadio" },
+      { "start": 12.0, "end": 14.0, "layout": "talking_full", "asset": null }
+    ],
+    "stickers": [
+      { "asset": "logo_globo", "start": 0.0, "end": 3.0, "corner": "top-right" }
+    ]
+  },
+  "words": [
+    { "word": "Um", "start": 0.2, "end": 0.5 },
+    { "word": "estagiário", "start": 0.5, "end": 1.1 },
+    { "word": "tirou", "start": 1.1, "end": 1.5 },
+    { "word": "a", "start": 1.5, "end": 1.6 },
+    { "word": "Copa", "start": 1.6, "end": 2.0 },
+    { "word": "do", "start": 2.0, "end": 2.2 },
+    { "word": "Mundo", "start": 2.2, "end": 2.7 },
+    { "word": "da", "start": 2.7, "end": 2.9 },
+    { "word": "Globo", "start": 2.9, "end": 3.5 },
+    { "word": "pagando", "start": 3.5, "end": 4.1 },
+    { "word": "zero", "start": 4.1, "end": 4.6 },
+    { "word": "reais", "start": 4.6, "end": 5.2 }
+  ]
+}

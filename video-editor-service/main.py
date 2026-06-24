@@ -45,10 +45,16 @@ OUTPUT_DIR = pathlib.Path(os.environ.get("OUTPUT_DIR", "./outputs")).resolve()
 # Entrada persistente: mantida só enquanto o job não concluiu (permite reprocessar em caso de erro).
 INPUT_DIR = pathlib.Path(os.environ.get("INPUT_DIR", str(OUTPUT_DIR.parent / "inputs"))).resolve()
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "").rstrip("/")
+# Dir de trabalho por job (vídeo cortado + assets) servido em /work para o Remotion ler via http.
+WORK_DIR = pathlib.Path(os.environ.get("WORK_DIR", str(OUTPUT_DIR.parent / "work"))).resolve()
+REMOTION_DIR = pathlib.Path(os.environ.get("REMOTION_DIR", "./remotion")).resolve()
+# Base http que o render do Remotion (mesmo host) usa para carregar as mídias do job.
+INTERNAL_BASE = os.environ.get("INTERNAL_BASE", "http://127.0.0.1:8080")
 MODEL = "claude-opus-4-8"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 INPUT_DIR.mkdir(parents=True, exist_ok=True)
+WORK_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="PPDash Vídeo Editor Service")
 
@@ -56,8 +62,9 @@ app = FastAPI(title="PPDash Vídeo Editor Service")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
-# Serve os vídeos cortados em /files/<job>.mp4
+# Serve os vídeos cortados em /files/<job>.mp4 e as mídias de trabalho em /work/<job>/...
 app.mount("/files", StaticFiles(directory=str(OUTPUT_DIR)), name="files")
+app.mount("/work", StaticFiles(directory=str(WORK_DIR)), name="work")
 
 
 def svc() -> Client:
@@ -128,8 +135,47 @@ async def cortar(
             f.write(chunk)
 
     db = svc()
-    db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
+    db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "modo": "corte", "erro": None}).eq("id", job_id).execute()
     background.add_task(processar_job, job_id, brief, org_id)
+    return {"ok": True, "job_id": job_id, "status": "processando"}
+
+
+@app.post("/editar")
+async def editar(
+    background: BackgroundTasks,
+    job_id: str = Form(...),
+    brief: str = Form(""),
+    org_id: str = Form(""),
+    assets_json: str = Form("[]"),  # [{id,tipo,descricao,filename}, ...]
+    video: UploadFile = File(...),
+    assets: list[UploadFile] = File(default=[]),
+    authorization: str = Header(default=""),
+):
+    """Edição completa: corte → transcrição → planner → render Remotion."""
+    exigir_usuario(authorization)
+
+    # vídeo de entrada (persistente até concluir)
+    src = input_path(job_id)
+    with open(src, "wb") as f:
+        while chunk := await video.read(1024 * 1024):
+            f.write(chunk)
+
+    # assets vão pro dir de trabalho do job (servido em /work/<job>/assets/...)
+    workjob = WORK_DIR / job_id
+    assets_dir = workjob / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    for up in assets:
+        nome = pathlib.Path(up.filename or "").name
+        if not nome:
+            continue
+        with open(assets_dir / nome, "wb") as f:
+            while chunk := await up.read(1024 * 1024):
+                f.write(chunk)
+    (workjob / "assets_meta.json").write_text(assets_json or "[]", encoding="utf-8")
+
+    db = svc()
+    db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "modo": "completo", "erro": None}).eq("id", job_id).execute()
+    background.add_task(processar_edicao, job_id, brief, org_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
@@ -142,12 +188,14 @@ def reprocessar(background: BackgroundTasks, body: dict, authorization: str = He
     if not input_path(job_id).exists():
         raise HTTPException(409, "O vídeo original não está mais salvo na VPS. Reenvie o vídeo.")
     db = svc()
-    # busca o brief do job para reaproveitar
-    row = db.table("video_jobs").select("brief,org_id").eq("id", job_id).maybe_single().execute()
+    row = db.table("video_jobs").select("brief,org_id,modo").eq("id", job_id).maybe_single().execute()
     brief = (row.data or {}).get("brief") or ""
     org_id = (row.data or {}).get("org_id") or ""
+    modo = (row.data or {}).get("modo") or "corte"
+    if modo == "completo" and not (WORK_DIR / job_id / "assets").exists():
+        raise HTTPException(409, "Os assets deste job não estão mais salvos. Reenvie.")
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
-    background.add_task(processar_job, job_id, brief, org_id)
+    background.add_task(processar_edicao if modo == "completo" else processar_job, job_id, brief, org_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
@@ -159,6 +207,8 @@ def deletar(job_id: str, authorization: str = Header(default="")):
             p.unlink(missing_ok=True)
         except Exception:
             pass
+    import shutil
+    shutil.rmtree(WORK_DIR / job_id, ignore_errors=True)  # assets/vídeo de trabalho (edição)
     svc().table("video_jobs").delete().eq("id", job_id).execute()
     return {"ok": True}
 
@@ -166,78 +216,149 @@ def deletar(job_id: str, authorization: str = Header(default="")):
 # ============================================================
 # Pipeline
 # ============================================================
+def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Path,
+                 out: pathlib.Path, prefixo: str = "") -> dict:
+    """Roda o corte por IA (video-use) e renderiza em `out`. Retorna o EDL. `prefixo` rotula a etapa."""
+    editdir = workdir / "edit"
+    editdir.mkdir(parents=True, exist_ok=True)
+
+    set_etapa(db, job_id, f"{prefixo}transcrevendo áudio")
+    run_helper("transcribe.py", [str(src), "--edit-dir", str(editdir)], cwd=workdir)
+
+    set_etapa(db, job_id, f"{prefixo}organizando transcrição")
+    run_helper("pack_transcripts.py", ["--edit-dir", str(editdir)], cwd=workdir)
+    packed = editdir / "takes_packed.md"
+    if not packed.exists():
+        raise RuntimeError("Falha ao empacotar a transcrição (takes_packed.md não gerado)")
+
+    set_etapa(db, job_id, f"{prefixo}decidindo cortes (IA)")
+    ranges = gerar_ranges(packed.read_text(encoding="utf-8"), "")
+    stem = src.stem
+    edl = {
+        "sources": {stem: str(src)},
+        "ranges": [{"source": stem, "start": r["start"], "end": r["end"]} for r in ranges],
+    }
+    edl_path = editdir / "edl.json"
+    edl_path.write_text(json.dumps(edl), encoding="utf-8")
+
+    total = len(edl["ranges"])
+    seg_re = re.compile(r"^\s*\[(\d+)\]")
+
+    def on_render_line(line: str):
+        m = seg_re.match(line)
+        if m:
+            i = int(m.group(1)) + 1
+            set_etapa(db, job_id, f"{prefixo}cortando vídeo ({i}/{total})" if i < total else f"{prefixo}montando corte")
+
+    run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles", "--preview"], cwd=workdir, on_line=on_render_line)
+    if not out.exists():
+        raise RuntimeError("render.py não gerou o vídeo cortado")
+    return edl
+
+
 def processar_job(job_id: str, brief: str, org_id: str):
+    """Modo 'corte': só remove pausas/vícios e entrega o vídeo cortado."""
     db = svc()
     src = input_path(job_id)
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     try:
-        # video-use organiza tudo dentro de um "edit dir"; transcribe e pack compartilham ele.
-        editdir = workdir / "edit"
-        editdir.mkdir(parents=True, exist_ok=True)
-
-        set_etapa(db, job_id, "transcrevendo áudio")
-        run_helper("transcribe.py", [str(src), "--edit-dir", str(editdir)], cwd=workdir)
-
-        set_etapa(db, job_id, "organizando transcrição")
-        run_helper("pack_transcripts.py", ["--edit-dir", str(editdir)], cwd=workdir)
-        packed = editdir / "takes_packed.md"
-        if not packed.exists():
-            raise RuntimeError("Falha ao empacotar a transcrição (takes_packed.md não gerado)")
-
-        set_etapa(db, job_id, "decidindo cortes (IA)")
-        ranges = gerar_ranges(packed.read_text(encoding="utf-8"), brief)
-        stem = src.stem  # nome da fonte (= nome do transcript gerado pelo video-use)
-        edl = {
-            "sources": {stem: str(src)},
-            "ranges": [{"source": stem, "start": r["start"], "end": r["end"]} for r in ranges],
-        }
-        edl_path = editdir / "edl.json"
-        edl_path.write_text(json.dumps(edl), encoding="utf-8")
-
-        set_etapa(db, job_id, "renderizando vídeo")
         out = OUTPUT_DIR / f"{job_id}.mp4"
-        # Progresso real: render.py imprime "[NN] ..." por trecho extraído. Atualizamos a etapa
-        # a cada trecho para a barra avançar em tempo real (essa é a etapa mais demorada).
-        total = len(edl["ranges"])
-        seg_re = re.compile(r"^\s*\[(\d+)\]")
-
-        def on_render_line(line: str):
-            m = seg_re.match(line)
-            if m:
-                i = int(m.group(1)) + 1
-                set_etapa(db, job_id, f"renderizando vídeo ({i}/{total})" if i < total else "montando vídeo final")
-
-        # --preview = 1080p, CRF 22: ótima qualidade para redes sociais e arquivo bem menor
-        # que o render final (que reencoda em qualidade máxima e infla o tamanho).
-        run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles", "--preview"], cwd=workdir, on_line=on_render_line)
-        if not out.exists():
-            raise RuntimeError("render.py não gerou o final.mp4")
-
-        resultado_url = f"{PUBLIC_BASE}/files/{job_id}.mp4"
-        db.table("video_jobs").update(
-            {"status": "pronto", "etapa": "concluído", "resultado_url": resultado_url, "edl": edl, "erro": None}
-        ).eq("id", job_id).execute()
-        # Deu certo: não precisamos mais do vídeo de entrada — libera espaço na VPS.
-        src.unlink(missing_ok=True)
+        edl = _gerar_corte(db, job_id, src, workdir, out)
+        db.table("video_jobs").update({
+            "status": "pronto", "etapa": "concluído",
+            "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "edl": edl, "erro": None,
+        }).eq("id", job_id).execute()
+        src.unlink(missing_ok=True)  # libera espaço (sucesso)
     except Exception as e:
-        # Deu erro: mantém o vídeo de entrada para permitir reprocessar sem reenviar.
-        db.table("video_jobs").update(
-            {"status": "erro", "etapa": None, "erro": str(e)[:500]}
-        ).eq("id", job_id).execute()
+        db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
     finally:
         import shutil
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def run_helper(script: str, args: list[str], cwd: pathlib.Path, on_line=None):
-    helper = VIDEO_USE_DIR / "helpers" / script
-    cmd = ["python", str(helper), *args]
+def processar_edicao(job_id: str, brief: str, org_id: str):
+    """Modo 'completo': corte → transcrição word-level → planner → render Remotion."""
+    import shutil
+    from transcribe_words import transcrever_words
+    from planner import gerar_timeline
+
+    db = svc()
+    src = input_path(job_id)
+    workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
+    workjob = WORK_DIR / job_id
+    assets_dir = workjob / "assets"
+    try:
+        # 1) Corte → talking_head cortado dentro do dir servido (/work/<job>/talking_head.mp4)
+        workjob.mkdir(parents=True, exist_ok=True)
+        cut = workjob / "talking_head.mp4"
+        _gerar_corte(db, job_id, src, workdir, cut, prefixo="")
+
+        # 2) Transcrição word-level NO vídeo cortado (para legenda + planner)
+        set_etapa(db, job_id, "transcrevendo legendas")
+        transcript = transcrever_words(str(cut))
+        words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
+
+        # 3) Planner → timeline.json
+        set_etapa(db, job_id, "planejando layouts")
+        meta = []
+        meta_path = workjob / "assets_meta.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8") or "[]")
+        assets_list = [{"id": m.get("id"), "tipo": m.get("tipo"), "descricao": m.get("descricao")} for m in meta if m.get("id")]
+        assets_map = {m["id"]: f"assets/{pathlib.Path(m.get('filename','')).name}" for m in meta if m.get("id") and m.get("filename")}
+        timeline = gerar_timeline(transcript, assets_list, "talking_head.mp4", brief)
+
+        # 4) Render Remotion (lê mídias via http em /work/<job>)
+        props = {"timeline": timeline, "words": words, "assets": assets_map, "mediaBase": f"{INTERNAL_BASE}/work/{job_id}"}
+        props_path = workjob / "props.json"
+        props_path.write_text(json.dumps(props), encoding="utf-8")
+
+        set_etapa(db, job_id, "renderizando vídeo")
+        out = OUTPUT_DIR / f"{job_id}.mp4"
+        _render_remotion(db, job_id, props_path, out)
+        if not out.exists():
+            raise RuntimeError("Remotion não gerou o vídeo final")
+
+        db.table("video_jobs").update({
+            "status": "pronto", "etapa": "concluído",
+            "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "timeline": timeline, "erro": None,
+        }).eq("id", job_id).execute()
+        # sucesso: libera espaço (entrada + dir de trabalho com o vídeo cortado + assets)
+        src.unlink(missing_ok=True)
+        shutil.rmtree(workjob, ignore_errors=True)
+    except Exception as e:
+        # erro: mantém entrada + assets para permitir reprocessar
+        db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _render_remotion(db: Client, job_id: str, props_path: pathlib.Path, out: pathlib.Path):
+    """Roda `npx remotion render` reportando o progresso (frames) em tempo real."""
+    pat = re.compile(r"(\d+)\s*/\s*(\d+)")
+
+    def on_line(line: str):
+        # Remotion imprime progresso de frames "Rendered 120/360" (ou similar).
+        if "render" in line.lower() or "/" in line:
+            m = pat.search(line)
+            if m and int(m.group(2)) > 0:
+                pct = round(int(m.group(1)) / int(m.group(2)) * 100)
+                set_etapa(db, job_id, f"renderizando vídeo ({pct}%)")
+
+    run_cmd(
+        ["npx", "remotion", "render", "Main", str(out), f"--props={props_path}"],
+        cwd=REMOTION_DIR, on_line=on_line,
+    )
+
+
+def run_cmd(cmd: list[str], cwd: pathlib.Path, on_line=None):
+    """Roda um comando; se on_line for dado, transmite a saída linha a linha (progresso)."""
+    nome = pathlib.Path(cmd[1] if cmd[0] == "python" else cmd[0]).name
     if on_line is None:
         proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(f"{script} falhou: {proc.stderr[-500:] or proc.stdout[-500:]}")
+            raise RuntimeError(f"{nome} falhou: {proc.stderr[-500:] or proc.stdout[-500:]}")
         return
-    # Modo streaming: lê a saída linha a linha para reportar progresso em tempo real.
     proc = subprocess.Popen(
         cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
@@ -253,7 +374,11 @@ def run_helper(script: str, args: list[str], cwd: pathlib.Path, on_line=None):
             pass
     proc.wait()
     if proc.returncode != 0:
-        raise RuntimeError(f"{script} falhou: {''.join(tail)[-500:]}")
+        raise RuntimeError(f"{nome} falhou: {''.join(tail)[-500:]}")
+
+
+def run_helper(script: str, args: list[str], cwd: pathlib.Path, on_line=None):
+    run_cmd(["python", str(VIDEO_USE_DIR / "helpers" / script), *args], cwd=cwd, on_line=on_line)
 
 
 def gerar_ranges(takes_packed: str, brief: str) -> list[dict]:

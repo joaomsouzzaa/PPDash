@@ -1,25 +1,44 @@
-# Serviço de cortes de vídeo (PPDash → Growth → Vídeo Editor).
-# Inclui FFmpeg e o repo browser-use/video-use já instalado.
+# Serviço de vídeo (PPDash → Growth → Vídeo Editor).
+# Inclui FFmpeg + video-use (corte), faster-whisper (legendas) e Remotion+Node+Chromium (edição).
 FROM python:3.11-slim
 
-# FFmpeg + git (para clonar o video-use)
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg git \
+# FFmpeg, git e dependências do Chromium headless (Remotion)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg git curl ca-certificates \
+    libnss3 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+    libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
+    libasound2 libpango-1.0-0 libcairo2 libatspi2.0-0 fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node 20 (para o Remotion)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Clona e instala o video-use (pipeline transcribe/pack/render)
+# video-use (pipeline de corte)
 RUN git clone --depth 1 https://github.com/browser-use/video-use /app/video-use \
     && pip install --no-cache-dir -e /app/video-use
 ENV VIDEO_USE_DIR=/app/video-use
 
-# Dependências do serviço
+# Dependências Python do serviço (inclui faster-whisper)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+# Pré-baixa o modelo do faster-whisper (evita download no 1º job)
+ENV WHISPER_MODEL=small
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
 
-# As secrets (ANTHROPIC_API_KEY, ELEVENLABS_API_KEY, SUPABASE_*) entram por env no deploy.
+# Projeto Remotion (renderizador da edição) + Chromium do Remotion
+COPY remotion/ /app/remotion/
+RUN cd /app/remotion && npm install --no-audit --no-fund \
+    && npx remotion browser ensure
+ENV REMOTION_DIR=/app/remotion
+
+COPY main.py transcribe_words.py planner.py ./
+COPY planner/ /app/planner/
+
 ENV PORT=8080
 EXPOSE 8080
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]

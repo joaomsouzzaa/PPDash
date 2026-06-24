@@ -1977,10 +1977,12 @@ export type Database = {
           erro: string | null
           etapa: string | null
           id: string
+          modo: string
           nome: string | null
           org_id: string | null
           resultado_url: string | null
           status: string
+          timeline: Json | null
           updated_at: string
           video_url: string
         }
@@ -1992,10 +1994,12 @@ export type Database = {
           erro?: string | null
           etapa?: string | null
           id?: string
+          modo?: string
           nome?: string | null
           org_id?: string | null
           resultado_url?: string | null
           status?: string
+          timeline?: Json | null
           updated_at?: string
           video_url: string
         }
@@ -2007,10 +2011,12 @@ export type Database = {
           erro?: string | null
           etapa?: string | null
           id?: string
+          modo?: string
           nome?: string | null
           org_id?: string | null
           resultado_url?: string | null
           status?: string
+          timeline?: Json | null
           updated_at?: string
           video_url?: string
         }
