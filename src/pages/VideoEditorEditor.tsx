@@ -68,7 +68,12 @@ export default function VideoEditorEditor() {
     return () => p.removeEventListener("frameupdate", cb as any);
   }, [doc]);
 
-  const timeline = useMemo(() => (doc ? clipsParaTimeline(doc) : null), [doc]);
+  // Timeline para o PREVIEW usa o proxy leve (fluido); o render final usa o vídeo full.
+  const timeline = useMemo(() => {
+    if (!doc) return null;
+    const tl = clipsParaTimeline(doc);
+    return { ...tl, video: doc.videoPreview || doc.video };
+  }, [doc]);
   const fps = doc?.fps || 30;
   const durationInFrames = Math.max(1, Math.round((doc?.durationInSeconds || 1) * fps));
   const selected = doc?.clips.find((c) => c.id === selectedId) || null;

@@ -345,6 +345,19 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
         cut = workjob / "talking_head.mp4"
         _gerar_corte(db, job_id, src, workdir, cut, prefixo="")
 
+        # Proxy leve só para o preview no navegador ficar fluido (render final usa o full).
+        set_etapa(db, job_id, "preparando preview")
+        preview = workjob / "talking_head_preview.mp4"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(cut), "-vf", "scale=540:-2",
+                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-movflags", "+faststart",
+                 "-c:a", "aac", "-b:a", "96k", str(preview)],
+                capture_output=True, text=True, check=True,
+            )
+        except Exception:
+            preview = None  # se falhar, o preview usa o vídeo full
+
         set_etapa(db, job_id, "transcrevendo legendas")
         transcript = transcrever_words(str(cut))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
@@ -364,6 +377,7 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
             "words": words,
             "assets": assets_map,
             "video": "talking_head.mp4",
+            "videoPreview": "talking_head_preview.mp4" if preview else "talking_head.mp4",
             "fps": int(timeline.get("fps", 30)) or 30,
             "durationInSeconds": float(timeline.get("durationInSeconds") or (timeline["segments"][-1]["end"] if timeline.get("segments") else 0)),
         }

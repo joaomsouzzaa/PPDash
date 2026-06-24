@@ -83,7 +83,8 @@ export type EditorDoc = {
   clips: Clip[];
   words: Word[];
   assets: Record<string, string>;  // id -> caminho relativo (assets/xxx)
-  video: string;                   // nome do vídeo cortado (talking_head.mp4)
+  video: string;                   // nome do vídeo cortado (talking_head.mp4) — usado no render final
+  videoPreview?: string;           // proxy leve para o preview no navegador (opcional)
   fps: number;
   durationInSeconds: number;
 };
