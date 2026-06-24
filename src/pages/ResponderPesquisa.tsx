@@ -41,6 +41,7 @@ export default function ResponderPesquisa() {
   const [historico, setHistorico] = useState<number[]>([]); // pilha para "voltar"
   const [enviando, setEnviando] = useState(false);
   const [concluido, setConcluido] = useState(false);
+  const [erroCampo, setErroCampo] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -75,10 +76,22 @@ export default function ResponderPesquisa() {
     return idx + 1 >= perguntas.length ? "fim" : idx + 1;
   };
 
-  const setValor = (valor: any) => setRespostas((r) => ({ ...r, [atual.id]: valor }));
+  const setValor = (valor: any) => { setErroCampo(null); setRespostas((r) => ({ ...r, [atual.id]: valor })); };
+
+  const vazio = (v: any) => v === undefined || v === null || v === "";
+
+  // Valida a resposta atual. Retorna mensagem de erro ou null se válida.
+  const validar = (p: Pergunta, v: any): string | null => {
+    if (vazio(v)) return p.obrigatoria ? "Esta pergunta é obrigatória." : null;
+    if (p.tipo === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v))) return "Informe um email válido.";
+    if (p.tipo === "telefone" && (String(v).replace(/\D/g, "").length < 8)) return "Informe um telefone válido.";
+    if (p.tipo === "numero" && isNaN(Number(v))) return "Informe um número válido.";
+    return null;
+  };
 
   const avancar = async () => {
-    if (atual.obrigatoria && (respostas[atual.id] === undefined || respostas[atual.id] === "")) return;
+    const msg = validar(atual, respostas[atual.id]);
+    if (msg) { setErroCampo(msg); return; }
     const prox = proximoIndice(atual, respostas[atual.id]);
     if (prox === "fim") {
       await enviar();
@@ -89,6 +102,7 @@ export default function ResponderPesquisa() {
   };
 
   const voltar = () => {
+    setErroCampo(null);
     setHistorico((h) => {
       const copia = [...h];
       const ant = copia.pop();
@@ -127,7 +141,6 @@ export default function ResponderPesquisa() {
   }
 
   const respostaAtual = respostas[atual.id];
-  const podeAvancar = !atual.obrigatoria || (respostaAtual !== undefined && respostaAtual !== "");
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-muted/30">
@@ -214,9 +227,11 @@ export default function ResponderPesquisa() {
           )}
         </div>
 
+        {erroCampo && <p className="text-sm text-destructive">{erroCampo}</p>}
+
         <div className="flex items-center justify-between pt-3">
           <Button variant="ghost" onClick={voltar} disabled={historico.length === 0}>Voltar</Button>
-          <Button onClick={avancar} disabled={!podeAvancar || enviando}>
+          <Button onClick={avancar} disabled={enviando}>
             {enviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {proximoIndice(atual, respostaAtual) === "fim" ? "Enviar" : "Avançar"}
           </Button>

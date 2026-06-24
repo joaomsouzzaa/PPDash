@@ -243,6 +243,14 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
 
   const salvar = async (novoStatus?: string) => {
     if (!meta.titulo.trim()) { toast.error("Informe o título da pesquisa"); return; }
+    // Ao publicar: validações de consistência.
+    if (novoStatus === "publicada") {
+      if (perguntas.length === 0) { toast.error("Adicione ao menos uma pergunta antes de publicar"); return; }
+      const semTitulo = perguntas.find((p) => !p.titulo.trim());
+      if (semTitulo) { toast.error("Há pergunta sem título"); return; }
+      const semOpcoes = perguntas.find((p) => TIPOS_OPCOES.includes(p.tipo) && p.opcoes.filter((o) => o.label.trim()).length < 2);
+      if (semOpcoes) { toast.error(`A pergunta "${semOpcoes.titulo}" precisa de ao menos 2 opções`); return; }
+    }
     setSalvando(true);
     try {
       const status = novoStatus ?? meta.status;
