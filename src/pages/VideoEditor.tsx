@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Scissors, Upload, Download, RefreshCw, Film, AlertTriangle, Loader2, Clock, CheckCircle2,
+  Trash2, RotateCcw, HardDrive,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
@@ -84,6 +85,19 @@ export default function VideoEditor() {
     },
   });
 
+  // Uso de disco da VPS (atualiza a cada 30s).
+  const { data: disco } = useQuery<{ used_gb: number; total_gb: number; free_gb: number; pct_used: number } | null>({
+    queryKey: ["video_disk"],
+    enabled: !!SERVICE_URL,
+    refetchInterval: 30000,
+    queryFn: async () => {
+      try {
+        const res = await fetch(`${SERVICE_URL}/disk`);
+        return res.ok ? await res.json() : null;
+      } catch { return null; }
+    },
+  });
+
   // Relógio que tica de 1s em 1s enquanto há job em andamento (para o tempo decorrido).
   const [agora, setAgora] = useState(() => Date.now());
   const temAtivo = jobs.some((j) => j.status === "pendente" || j.status === "processando");
@@ -141,6 +155,41 @@ export default function VideoEditor() {
     } finally {
       setEnviando(false);
       setProgresso(null);
+    }
+  };
+
+  const authToken = async () => (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+  const deletarJob = async (j: VideoJob) => {
+    if (!confirm(`Excluir "${j.nome || "este vídeo"}"? Isso remove o arquivo da VPS e libera espaço.`)) return;
+    try {
+      const res = await fetch(`${SERVICE_URL}/jobs/${j.id}`, {
+        method: "DELETE", headers: { Authorization: `Bearer ${await authToken()}` },
+      });
+      if (!res.ok) throw new Error(`Falha ao excluir (${res.status})`);
+      toast.success("Vídeo excluído e espaço liberado.");
+      queryClient.invalidateQueries({ queryKey: ["video_jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["video_disk"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao excluir.");
+    }
+  };
+
+  const reprocessar = async (j: VideoJob) => {
+    try {
+      const res = await fetch(`${SERVICE_URL}/reprocessar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await authToken()}` },
+        body: JSON.stringify({ job_id: j.id }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`${res.status}: ${txt.slice(0, 200)}`);
+      }
+      toast.success("Reprocessando o corte…");
+      queryClient.invalidateQueries({ queryKey: ["video_jobs"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao reprocessar.");
     }
   };
 
@@ -215,7 +264,19 @@ export default function VideoEditor() {
             {/* Histórico de cortes */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2"><Film className="h-4 w-4" /> Meus cortes</CardTitle>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle className="text-base flex items-center gap-2"><Film className="h-4 w-4" /> Meus cortes</CardTitle>
+                  {disco && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground" title="Espaço em disco da VPS">
+                      <HardDrive className="h-3.5 w-3.5" />
+                      <span className="tabular-nums">{disco.used_gb} / {disco.total_gb} GB ({disco.pct_used}%)</span>
+                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                        <div className={`h-full rounded-full ${disco.pct_used > 90 ? "bg-destructive" : disco.pct_used > 75 ? "bg-amber-500" : "bg-green-600"}`}
+                             style={{ width: `${disco.pct_used}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {jobs.length === 0 && (
@@ -228,7 +289,17 @@ export default function VideoEditor() {
                       <div className="flex items-center gap-3">
                         <Badge className={`${meta.cls} gap-1`}>{meta.icon} {meta.label}</Badge>
                         <span className="flex-1 min-w-0 truncate text-sm font-medium">{j.nome || "vídeo"}</span>
-                        <span className="text-xs text-muted-foreground">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
+                        <span className="text-xs text-muted-foreground hidden sm:inline">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
+                        {j.status === "erro" && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Reprocessar corte" onClick={() => reprocessar(j)}>
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {j.status !== "processando" && j.status !== "pendente" && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Excluir e liberar espaço" onClick={() => deletarJob(j)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                       {j.brief && <p className="text-xs text-muted-foreground line-clamp-2">Instrução: {j.brief}</p>}
                       {(j.status === "processando" || j.status === "pendente") && (

@@ -41,10 +41,13 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 VIDEO_USE_DIR = pathlib.Path(os.environ.get("VIDEO_USE_DIR", "./video-use")).resolve()
 OUTPUT_DIR = pathlib.Path(os.environ.get("OUTPUT_DIR", "./outputs")).resolve()
+# Entrada persistente: mantida só enquanto o job não concluiu (permite reprocessar em caso de erro).
+INPUT_DIR = pathlib.Path(os.environ.get("INPUT_DIR", str(OUTPUT_DIR.parent / "inputs"))).resolve()
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "").rstrip("/")
 MODEL = "claude-opus-4-8"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+INPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="PPDash Vídeo Editor Service")
 
@@ -64,9 +67,46 @@ def set_etapa(db: Client, job_id: str, etapa: str):
     db.table("video_jobs").update({"etapa": etapa}).eq("id", job_id).execute()
 
 
+def exigir_usuario(authorization: str):
+    """Valida o token do Supabase; levanta 401 se inválido."""
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(401, "Sem token de autorização")
+    try:
+        user = svc().auth.get_user(token)
+        if not user or not user.user:
+            raise HTTPException(401, "Usuário inválido")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(401, "Token inválido")
+
+
+def input_path(job_id: str) -> pathlib.Path:
+    return INPUT_DIR / f"{job_id}.mp4"
+
+
+def output_path(job_id: str) -> pathlib.Path:
+    return OUTPUT_DIR / f"{job_id}.mp4"
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/disk")
+def disk():
+    """Uso de disco da partição onde ficam os vídeos (para acompanhar na página)."""
+    import shutil as _sh
+    total, used, free = _sh.disk_usage(str(OUTPUT_DIR))
+    gb = 1024 ** 3
+    return {
+        "total_gb": round(total / gb, 1),
+        "used_gb": round(used / gb, 1),
+        "free_gb": round(free / gb, 1),
+        "pct_used": round(used / total * 100),
+    }
 
 
 @app.post("/cortar")
@@ -78,36 +118,57 @@ async def cortar(
     video: UploadFile = File(...),
     authorization: str = Header(default=""),
 ):
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Sem token de autorização")
-    try:
-        user = svc().auth.get_user(token)
-        if not user or not user.user:
-            raise HTTPException(401, "Usuário inválido")
-    except Exception:
-        raise HTTPException(401, "Token inválido")
+    exigir_usuario(authorization)
 
-    # Salva o upload em disco (não cabe mantê-lo em memória para a background task).
-    workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
-    src = workdir / "input.mp4"
+    # Salva o upload de forma persistente (mantido até concluir; permite reprocessar em erro).
+    src = input_path(job_id)
     with open(src, "wb") as f:
         while chunk := await video.read(1024 * 1024):
             f.write(chunk)
 
     db = svc()
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
-    background.add_task(processar_job, job_id, str(workdir), str(src), brief, org_id)
+    background.add_task(processar_job, job_id, brief, org_id)
     return {"ok": True, "job_id": job_id, "status": "processando"}
+
+
+@app.post("/reprocessar")
+def reprocessar(background: BackgroundTasks, body: dict, authorization: str = Header(default="")):
+    exigir_usuario(authorization)
+    job_id = (body or {}).get("job_id")
+    if not job_id:
+        raise HTTPException(400, "job_id obrigatório")
+    if not input_path(job_id).exists():
+        raise HTTPException(409, "O vídeo original não está mais salvo na VPS. Reenvie o vídeo.")
+    db = svc()
+    # busca o brief do job para reaproveitar
+    row = db.table("video_jobs").select("brief,org_id").eq("id", job_id).maybe_single().execute()
+    brief = (row.data or {}).get("brief") or ""
+    org_id = (row.data or {}).get("org_id") or ""
+    db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()
+    background.add_task(processar_job, job_id, brief, org_id)
+    return {"ok": True, "job_id": job_id, "status": "processando"}
+
+
+@app.delete("/jobs/{job_id}")
+def deletar(job_id: str, authorization: str = Header(default="")):
+    exigir_usuario(authorization)
+    for p in (input_path(job_id), output_path(job_id)):
+        try:
+            p.unlink(missing_ok=True)
+        except Exception:
+            pass
+    svc().table("video_jobs").delete().eq("id", job_id).execute()
+    return {"ok": True}
 
 
 # ============================================================
 # Pipeline
 # ============================================================
-def processar_job(job_id: str, workdir_s: str, src_s: str, brief: str, org_id: str):
+def processar_job(job_id: str, brief: str, org_id: str):
     db = svc()
-    workdir = pathlib.Path(workdir_s)
-    src = pathlib.Path(src_s)
+    src = input_path(job_id)
+    workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     try:
         # video-use organiza tudo dentro de um "edit dir"; transcribe e pack compartilham ele.
         editdir = workdir / "edit"
@@ -142,7 +203,10 @@ def processar_job(job_id: str, workdir_s: str, src_s: str, brief: str, org_id: s
         db.table("video_jobs").update(
             {"status": "pronto", "etapa": "concluído", "resultado_url": resultado_url, "edl": edl, "erro": None}
         ).eq("id", job_id).execute()
+        # Deu certo: não precisamos mais do vídeo de entrada — libera espaço na VPS.
+        src.unlink(missing_ok=True)
     except Exception as e:
+        # Deu erro: mantém o vídeo de entrada para permitir reprocessar sem reenviar.
         db.table("video_jobs").update(
             {"status": "erro", "etapa": None, "erro": str(e)[:500]}
         ).eq("id", job_id).execute()
