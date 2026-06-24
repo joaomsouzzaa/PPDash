@@ -372,8 +372,8 @@ export default function VideoEditor() {
                         </Badge>
                         <span className="flex-1 min-w-0 truncate text-sm font-medium">{j.nome || "vídeo"}</span>
                         <span className="text-xs text-muted-foreground hidden sm:inline">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
-                        {j.status === "erro" && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Reprocessar corte" onClick={() => reprocessar(j)}>
+                        {(j.status === "erro" || j.status === "pronto") && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Reprocessar (refazer com os ajustes atuais)" onClick={() => reprocessar(j)}>
                             <RotateCcw className="h-4 w-4" />
                           </Button>
                         )}

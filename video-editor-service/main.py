@@ -268,7 +268,7 @@ def processar_job(job_id: str, brief: str, org_id: str):
             "status": "pronto", "etapa": "concluído",
             "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "edl": edl, "erro": None,
         }).eq("id", job_id).execute()
-        src.unlink(missing_ok=True)  # libera espaço (sucesso)
+        # Mantém a entrada para permitir reprocessar; o usuário libera espaço pela lixeira.
     except Exception as e:
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
     finally:
@@ -323,9 +323,7 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
             "status": "pronto", "etapa": "concluído",
             "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "timeline": timeline, "erro": None,
         }).eq("id", job_id).execute()
-        # sucesso: libera espaço (entrada + dir de trabalho com o vídeo cortado + assets)
-        src.unlink(missing_ok=True)
-        shutil.rmtree(workjob, ignore_errors=True)
+        # Mantém entrada + assets para permitir reprocessar; o usuário libera espaço pela lixeira.
     except Exception as e:
         # erro: mantém entrada + assets para permitir reprocessar
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
