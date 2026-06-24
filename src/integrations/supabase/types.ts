@@ -1315,6 +1315,118 @@ export type Database = {
         }
         Relationships: []
       }
+      pesquisa_perguntas: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          logica: Json
+          obrigatoria: boolean
+          opcoes: Json
+          ordem: number
+          org_id: string | null
+          pesquisa_id: string
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          logica?: Json
+          obrigatoria?: boolean
+          opcoes?: Json
+          ordem?: number
+          org_id?: string | null
+          pesquisa_id: string
+          tipo?: string
+          titulo: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          logica?: Json
+          obrigatoria?: boolean
+          opcoes?: Json
+          ordem?: number
+          org_id?: string | null
+          pesquisa_id?: string
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pesquisa_perguntas_pesquisa_id_fkey"
+            columns: ["pesquisa_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pesquisa_respostas: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string | null
+          pesquisa_id: string
+          respostas: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          pesquisa_id: string
+          respostas?: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          pesquisa_id?: string
+          respostas?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pesquisa_respostas_pesquisa_id_fkey"
+            columns: ["pesquisa_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pesquisas: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          org_id: string | null
+          slug: string
+          status: string
+          titulo: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          org_id?: string | null
+          slug: string
+          status?: string
+          titulo: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          org_id?: string | null
+          slug?: string
+          status?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
       planos: {
         Row: {
           ativo: boolean
