@@ -849,16 +849,57 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [analisando, setAnalisando] = useState(false);
+  const [driveUrl, setDriveUrl] = useState("");
+  const [fonte, setFonte] = useState<"literal" | "assets">("literal");
+  const [montando, setMontando] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const { data: ref } = useQuery({
     queryKey: ["video_ref", tarefaId],
+    refetchInterval: (q) => ((q.state.data as any)?.job_id ? 8000 : false), // acompanha a montagem
     queryFn: async () => {
       const { data } = await db.from("tarefas").select("video_ref").eq("id", tarefaId).maybeSingle();
       const vr = data?.video_ref || null;
       if (vr?.ref_url) setUrl(vr.ref_url);
+      if (vr?.drive_url) setDriveUrl(vr.drive_url);
+      if (vr?.fonte_broll) setFonte(vr.fonte_broll);
       return vr;
     },
   });
+
+  // status do job de montagem (se houver)
+  const { data: job } = useQuery({
+    queryKey: ["video_job_card", (ref as any)?.job_id],
+    enabled: !!(ref as any)?.job_id,
+    refetchInterval: (q) => { const s = (q.state.data as any)?.status; return s === "processando" || s === "pendente" ? 5000 : false; },
+    queryFn: async () => {
+      const { data } = await db.from("video_jobs").select("status,etapa,resultado_url").eq("id", (ref as any).job_id).maybeSingle();
+      return data;
+    },
+  });
+
+  const montar = async () => {
+    if (!driveUrl.trim()) { toast.error("Cole o link do Drive com o vídeo bruto."); return; }
+    if (!SERVICE_URL_VE) { toast.error("Serviço não configurado."); return; }
+    setMontando(true);
+    try {
+      const orgId = await getOrgId();
+      const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      const res = await fetch(`${SERVICE_URL_VE}/montar-edicao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ card_id: tarefaId, drive_url: driveUrl.trim(), fonte_broll: fonte, org_id: orgId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha (${res.status})`);
+      toast.success("Montando a edição — abra o editor quando ficar pronto.");
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao montar a edição.");
+    } finally {
+      setMontando(false);
+    }
+  };
 
   const analisar = async () => {
     if (!url.trim()) { toast.error("Cole o link do vídeo de referência."); return; }
@@ -922,6 +963,42 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
               </ul>
             </>
           )}
+
+          {/* 3B: montar a edição a partir do bruto gravado */}
+          <div className="mt-3 space-y-2 border-t pt-3">
+            <p className="text-xs font-semibold text-muted-foreground">MONTAR EDIÇÃO (após gravar)</p>
+            <Input value={driveUrl} onChange={(e) => setDriveUrl(e.target.value)} placeholder="Link do Drive com o vídeo bruto (compartilhável)" className="text-sm" />
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={fonte} onValueChange={(v) => setFonte(v as any)}>
+                <SelectTrigger className="h-9 w-[260px] text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="literal">Recortar b-rolls da referência (literal)</SelectItem>
+                  <SelectItem value="assets">Só timing (eu coloco as mídias no editor)</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={montar} disabled={montando} size="sm" variant="secondary">
+                {montando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
+                Montar edição
+              </Button>
+              {(ref as any).job_id && (
+                <Button onClick={() => setEditorOpen(true)} size="sm" disabled={job?.status === "processando" || job?.status === "pendente"}>
+                  {job?.status === "processando" || job?.status === "pendente"
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Montando…</>
+                    : <>Abrir editor</>}
+                </Button>
+              )}
+            </div>
+            {job?.status === "erro" && <p className="text-xs text-destructive">Falha ao montar — confira o link do Drive e tente de novo.</p>}
+          </div>
+
+          {/* Popup do editor v2 (mesma origem → sessão compartilhada) */}
+          <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+            <DialogContent className="max-w-[1100px] h-[85vh] p-0">
+              {(ref as any).job_id && (
+                <iframe src={`/video-editor/editar/${(ref as any).job_id}`} title="Editor" className="h-full w-full rounded-md border-0" />
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>

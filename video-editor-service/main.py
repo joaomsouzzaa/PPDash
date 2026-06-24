@@ -100,6 +100,8 @@ def _worker(kind: str, job_id: str, args: tuple):
         processar_edicao(job_id, *args)
     elif kind == "render":
         processar_render(job_id)
+    elif kind == "montar":
+        processar_montar(job_id, *args)
 
 
 def _dispatcher():
@@ -327,6 +329,35 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
         "insertion_plan": data.get("insertion_plan", []),
         "transcript": transcript_txt,
     }
+
+
+@app.post("/montar-edicao")
+def montar_edicao(body: dict, authorization: str = Header(default="")):
+    """v3 Fase 3B: a partir do bruto (Drive) + plano de inserções da referência, monta a edição
+    (corte + clips alinhados) e cria um video_jobs em 'editar' para o humano validar no editor."""
+    exigir_usuario(authorization)
+    b = body or {}
+    card_id = b.get("card_id")
+    drive_url = b.get("drive_url")
+    fonte = b.get("fonte_broll") or "literal"  # "literal" | "assets"
+    org_id = b.get("org_id")
+    if not card_id or not drive_url:
+        raise HTTPException(400, "card_id e drive_url obrigatórios")
+
+    db = svc()
+    job_id = str(uuid.uuid4())
+    db.table("video_jobs").insert({
+        "id": job_id, "org_id": org_id, "nome": "Edição (referência)", "video_url": "",
+        "status": "processando", "etapa": "na fila", "modo": "completo",
+    }).execute()
+    # guarda o job no card para abrir o editor depois
+    row = db.table("tarefas").select("video_ref").eq("id", card_id).maybe_single().execute()
+    vr = (row.data or {}).get("video_ref") or {}
+    vr.update({"drive_url": drive_url, "job_id": job_id, "fonte_broll": fonte})
+    db.table("tarefas").update({"video_ref": vr}).eq("id", card_id).execute()
+
+    enqueue("montar", job_id, card_id, drive_url, fonte, org_id)
+    return {"ok": True, "job_id": job_id}
 
 
 @app.post("/cancelar")
@@ -563,6 +594,127 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
             "status": "editar", "etapa": None, "timeline": editor_doc, "erro": None,
         }).eq("id", job_id).execute()
         # Mantém entrada + /work (vídeo cortado + assets) para o editor e o render.
+    except Exception as e:
+        db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _proxy_preview(cut: pathlib.Path, dest: pathlib.Path) -> bool:
+    """Gera o proxy leve (preview fluido). Retorna True se ok."""
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(cut), "-vf", "scale=540:-2", "-c:v", "libx264",
+             "-preset", "veryfast", "-crf", "30", "-g", "15", "-keyint_min", "15",
+             "-sc_threshold", "0", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "96k", str(dest)],
+            capture_output=True, text=True, check=True,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _alinhar_insercoes(insertion_plan: list, transcript_novo: str) -> list:
+    """Claude mapeia cada inserção da referência para o timestamp equivalente no vídeo novo."""
+    if not insertion_plan:
+        return []
+    client = anthropic.Anthropic()
+    sistema = (
+        "Você recebe um PLANO DE INSERÇÕES de um vídeo de referência (cada item tem tipo, descrição e "
+        "o trecho de fala 'linha' onde aparece) e a TRANSCRIÇÃO do vídeo NOVO (frases com [início-fim] em s). "
+        "Para cada inserção, ache o MOMENTO equivalente na transcrição nova (pela correspondência de sentido "
+        "com 'linha') e devolva start/end no tempo do vídeo NOVO. Responda APENAS JSON: "
+        '{"clips":[{"start":<s>,"end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","ref_start":<s>,"ref_end":<s>}]}'
+    )
+    user = f"PLANO DE INSERÇÕES (referência):\n{json.dumps(insertion_plan, ensure_ascii=False)}\n\nTRANSCRIÇÃO DO VÍDEO NOVO:\n{transcript_novo}"
+    resp = client.messages.create(model=MODEL, max_tokens=8000, system=sistema,
+                                  messages=[{"role": "user", "content": user}])
+    txt = "".join(b.text for b in resp.content if b.type == "text").strip()
+    if txt.startswith("```"):
+        txt = txt.split("```", 2)[1].lstrip("json").strip()
+    try:
+        return (json.loads(txt) or {}).get("clips", [])
+    except Exception:
+        return []
+
+
+def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_id: str):
+    """3B: baixa o bruto do Drive, corta, transcreve, alinha o plano da referência e monta os clips."""
+    import shutil, glob
+    from transcribe_words import transcrever_words
+
+    db = svc()
+    src = input_path(job_id)
+    workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
+    workjob = WORK_DIR / job_id
+    assets_dir = workjob / "assets"
+    try:
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1) Baixa o bruto do Drive (gdown lida com o id do Drive / confirm token)
+        set_etapa(db, job_id, "baixando gravação")
+        import gdown
+        gdown.download(url=drive_url, output=str(src), quiet=True, fuzzy=True)
+        if not src.exists() or src.stat().st_size < 1000:
+            raise RuntimeError("Não consegui baixar o vídeo do Drive (link precisa estar compartilhável).")
+
+        # 2) Corte + proxy + transcrição
+        cut = workjob / "talking_head.mp4"
+        _gerar_corte(db, job_id, src, workdir, cut, prefixo="")
+        set_etapa(db, job_id, "preparando preview")
+        prev_ok = _proxy_preview(cut, workjob / "talking_head_preview.mp4")
+        set_etapa(db, job_id, "transcrevendo legendas")
+        transcript = transcrever_words(str(cut))
+        words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
+        transcript_txt = "\n".join(
+            f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
+            for s in transcript.get("segments", [])
+        )
+
+        # 3) Carrega o plano da referência (do card) e alinha ao vídeo novo
+        set_etapa(db, job_id, "alinhando inserções")
+        row = db.table("tarefas").select("video_ref").eq("id", card_id).maybe_single().execute()
+        vr = (row.data or {}).get("video_ref") or {}
+        plano = vr.get("insertion_plan") or []
+        ref_id = vr.get("ref_id")
+        alinhados = _alinhar_insercoes(plano, transcript_txt)
+
+        # 4) Monta clips + assets
+        TIPO_LAYOUT = {"broll": "broll_fullscreen", "print": "overlay_card", "image": "image_fullscreen", "overlay": "split_horizontal"}
+        clips, assets_map = [], {}
+        ref_glob = glob.glob(str(WORK_DIR / "ref" / str(ref_id) / "ref.*")) if ref_id else []
+        ref_file = next((c for c in ref_glob if not c.endswith(".jpg")), None)
+        for i, a in enumerate(alinhados):
+            layout = TIPO_LAYOUT.get(a.get("tipo"), "overlay_card")
+            asset_id = None
+            if fonte == "literal" and ref_file and a.get("ref_start") is not None:
+                # recorta o b-roll do vídeo de referência por faixa de tempo
+                out = assets_dir / f"ins{i}.mp4"
+                rs, re_ = float(a["ref_start"]), float(a.get("ref_end", a["ref_start"]) or a["ref_start"])
+                if re_ > rs:
+                    subprocess.run(["ffmpeg", "-y", "-ss", str(rs), "-to", str(re_), "-i", ref_file,
+                                    "-c:v", "libx264", "-preset", "veryfast", "-an", str(out)],
+                                   capture_output=True, text=True)
+                    if out.exists():
+                        asset_id = f"ins{i}"
+                        assets_map[asset_id] = f"assets/ins{i}.mp4"
+                        layout = "broll_fullscreen"
+            clips.append({
+                "id": f"c{i}", "asset": asset_id, "layout": layout if asset_id else "broll_fullscreen",
+                "start": round(float(a.get("start", 0)), 3), "end": round(float(a.get("end", 0)), 3),
+                "descricao": a.get("descricao", ""),
+            })
+        # remove clips inválidos (sem tempo) — no modo assets, clips sem asset ficam como marcadores
+        clips = [c for c in clips if c["end"] > c["start"]]
+
+        editor_doc = {
+            "clips": clips, "words": words, "assets": assets_map,
+            "video": "talking_head.mp4",
+            "videoPreview": "talking_head_preview.mp4" if prev_ok else "talking_head.mp4",
+            "fps": 30,
+            "durationInSeconds": float(transcript.get("segments", [{}])[-1].get("end", 0)) if transcript.get("segments") else 0,
+        }
+        db.table("video_jobs").update({"status": "editar", "etapa": None, "timeline": editor_doc, "erro": None}).eq("id", job_id).execute()
     except Exception as e:
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
     finally:

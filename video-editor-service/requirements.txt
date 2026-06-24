@@ -7,3 +7,4 @@ pydantic>=2.6
 python-multipart>=0.0.9
 faster-whisper>=1.0.3
 yt-dlp>=2024.8.6
+gdown>=5.2.0
