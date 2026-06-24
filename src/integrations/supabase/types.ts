@@ -1968,6 +1968,51 @@ export type Database = {
         }
         Relationships: []
       }
+      video_jobs: {
+        Row: {
+          brief: string | null
+          created_at: string
+          created_by: string | null
+          edl: Json | null
+          erro: string | null
+          id: string
+          nome: string | null
+          org_id: string | null
+          resultado_url: string | null
+          status: string
+          updated_at: string
+          video_url: string
+        }
+        Insert: {
+          brief?: string | null
+          created_at?: string
+          created_by?: string | null
+          edl?: Json | null
+          erro?: string | null
+          id?: string
+          nome?: string | null
+          org_id?: string | null
+          resultado_url?: string | null
+          status?: string
+          updated_at?: string
+          video_url: string
+        }
+        Update: {
+          brief?: string | null
+          created_at?: string
+          created_by?: string | null
+          edl?: Json | null
+          erro?: string | null
+          id?: string
+          nome?: string | null
+          org_id?: string | null
+          resultado_url?: string | null
+          status?: string
+          updated_at?: string
+          video_url?: string
+        }
+        Relationships: []
+      }
       webhook_eventos: {
         Row: {
           created_at: string

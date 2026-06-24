@@ -40,6 +40,7 @@ export const MODULOS_CATALOGO: ModuloDef[] = [
       { key: "growth.scraping", nome: "Scraping de Conteúdos", url: "/scraping-conteudos" },
       { key: "growth.metaads", nome: "Meta Ads", url: "/meta-ads" },
       { key: "growth.autodm", nome: "Auto-DM Instagram", url: "/auto-dm" },
+      { key: "growth.videoeditor", nome: "Vídeo Editor", url: "/video-editor" },
       { key: "growth.pesquisas", nome: "Pesquisas", url: "/pesquisas" },
     ],
   },
