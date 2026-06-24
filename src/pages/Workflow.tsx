@@ -14,17 +14,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X } from "lucide-react";
+import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 type Coluna = { id: string; nome: string; ordem: number; agente_id: string | null };
-type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null };
+type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null };
 type Agente = { id: string; nome: string };
 type Resposta = { id: string; autor: string | null; conteudo: string; created_at: string };
 type Anexo = { id: string; tipo: string; url: string | null; status: string; created_at: string };
 type Subtarefa = { id: string; titulo: string; concluida: boolean; ordem: number };
 type ChecklistItem = { id: string; item: string; concluido: boolean; ordem: number };
+type IgConta = { id: string; ig_user_id: string; ig_username: string | null };
+type IgPost = { id: string; tipo: string; status: string; permalink: string | null; erro: string | null; publish_at: string | null; created_at: string };
 
 const PRIORIDADES: Record<string, string> = { urgente: "Urgente", alta: "Alta", normal: "Normal", baixa: "Baixa" };
 // classes Tailwind no estilo ClickUp (vermelho / amarelo / azul / cinza)
@@ -72,7 +75,7 @@ export default function Workflow() {
   // ---- Dialog da tarefa ----
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tarefa | null>(null);
-  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[] };
+  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[], legenda: "" };
   const [form, setForm] = useState({ ...emptyForm });
   const [comentario, setComentario] = useState("");
 
@@ -153,6 +156,63 @@ export default function Workflow() {
   const fmtData = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
   const estaAtrasada = (d: string | null) => !!d && d < new Date().toISOString().slice(0, 10);
 
+  // ---- Publicar no Instagram ----
+  const { data: igContas = [] } = useQuery({
+    queryKey: ["ig_contas_min"],
+    queryFn: async () => {
+      const { data } = await supabase.from("ig_contas").select("id,ig_user_id,ig_username").eq("ativo", true).order("created_at");
+      return (data || []) as IgConta[];
+    },
+  });
+  const { data: igPosts = [] } = useQuery({
+    queryKey: ["ig_posts", editing?.id],
+    enabled: !!editing,
+    refetchInterval: (q) => ((q.state.data as IgPost[] | undefined)?.some((p) => p.status === "pendente" || p.status === "processando") ? 5000 : false),
+    queryFn: async () => {
+      const { data } = await supabase.from("ig_posts").select("id,tipo,status,permalink,erro,publish_at,created_at").eq("tarefa_id", editing!.id).order("created_at", { ascending: false });
+      return (data || []) as IgPost[];
+    },
+  });
+  const [igContaId, setIgContaId] = useState<string>("");
+  const [igSelecao, setIgSelecao] = useState<string[]>([]);  // urls escolhidas, em ordem
+  const [igPublishAt, setIgPublishAt] = useState<string>(""); // datetime-local
+  const [igEnviando, setIgEnviando] = useState(false);
+
+  const toggleMidia = (url: string) =>
+    setIgSelecao((s) => (s.includes(url) ? s.filter((x) => x !== url) : [...s, url]));
+
+  const publicarIg = async (action: "publicar_agora" | "agendar") => {
+    if (!editing) return;
+    if (!igContaId) { toast.error("Selecione a conta do Instagram"); return; }
+    const midias = igSelecao.length ? igSelecao : anexos.filter((a) => a.status === "pronto" && a.url).map((a) => a.url!) ;
+    if (midias.length === 0) { toast.error("Selecione ao menos uma arte pronta"); return; }
+    if (action === "agendar" && !igPublishAt) { toast.error("Escolha a data/hora do agendamento"); return; }
+    const temVideo = anexos.some((a) => midias.includes(a.url!) && a.tipo === "video");
+    const tipo = temVideo ? "reels" : midias.length > 1 ? "carrossel" : "imagem";
+    setIgEnviando(true);
+    const { data, error } = await supabase.functions.invoke("instagram-publish", {
+      body: {
+        action, tarefa_id: editing.id, ig_conta_id: igContaId, tipo,
+        legenda: form.legenda || null, midias,
+        publish_at: action === "agendar" ? new Date(igPublishAt).toISOString() : null,
+      },
+    });
+    setIgEnviando(false);
+    if (error || data?.error) {
+      let msg = data?.error || error?.message || "falhou";
+      try { const b = await (error as any)?.context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      toast.error(`Erro ao publicar: ${msg}`, { duration: 10000 });
+    } else {
+      toast.success(action === "agendar" ? "Post agendado!" : data?.processando ? "Publicando (vídeo processando)…" : "Post publicado!");
+      setIgSelecao([]); setIgPublishAt("");
+    }
+    queryClient.invalidateQueries({ queryKey: ["ig_posts", editing.id] });
+  };
+  const cancelarIgPost = async (id: string) => {
+    await supabase.functions.invoke("instagram-publish", { body: { action: "cancelar", id } });
+    queryClient.invalidateQueries({ queryKey: ["ig_posts", editing!.id] });
+  };
+
   // Etapa de design? (compara pelo nome da coluna selecionada no form)
   const etapaNome = colunas.find((c) => c.id === form.coluna_id)?.nome || "";
   const isDesign = /design|arte/i.test(etapaNome);
@@ -202,7 +262,7 @@ export default function Workflow() {
   };
   const abrirTarefa = (t: Tarefa) => {
     setEditing(t);
-    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [] });
+    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [], legenda: t.legenda || "" });
     setComentario("");
     setOpen(true);
   };
@@ -214,7 +274,7 @@ export default function Workflow() {
       coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, prioridade: form.prioridade,
       data_inicio: form.data_inicio || null, data_vencimento: form.data_vencimento || null,
       tempo_estimado: form.tempo_estimado.trim() ? parseInt(form.tempo_estimado, 10) : null,
-      etiquetas: form.etiquetas,
+      etiquetas: form.etiquetas, legenda: form.legenda || null,
       updated_at: new Date().toISOString(),
     };
     const res = editing
@@ -612,6 +672,88 @@ export default function Workflow() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Legenda + publicação no Instagram */}
+            <div className="space-y-2 border-t border-border pt-3">
+              <Label className="flex items-center gap-2 text-sm"><Send className="h-4 w-4 text-primary" /> Legenda do Instagram</Label>
+              <Textarea rows={3} value={form.legenda} onChange={(e) => setForm({ ...form, legenda: e.target.value })} placeholder="Texto que vai sair na publicação (com emojis, hashtags, etc.)" className="text-sm" />
+            </div>
+
+            {editing && (
+              <div className="space-y-3 border-t border-border pt-3">
+                <Label className="flex items-center gap-2 text-sm"><ImageIcon className="h-4 w-4 text-primary" /> Publicar no Instagram</Label>
+                {(() => {
+                  const prontos = anexos.filter((a) => a.status === "pronto" && a.url);
+                  const midiasMockup = igSelecao.length ? igSelecao : prontos.map((a) => a.url!);
+                  const conta = igContas.find((c) => c.id === igContaId);
+                  return (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {/* Preview / mockup */}
+                      <div className="flex justify-center">
+                        <IgPostMockup imagens={midiasMockup} legenda={form.legenda} username={conta?.ig_username || undefined} />
+                      </div>
+                      {/* Controles */}
+                      <div className="space-y-2">
+                        {igContas.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">Nenhuma conta do Instagram conectada. Conecte na página Growth → Auto-DM / Integrações.</p>
+                        ) : (
+                          <>
+                            <Select value={igContaId} onValueChange={setIgContaId}>
+                              <SelectTrigger className="h-9"><SelectValue placeholder="Conta do Instagram" /></SelectTrigger>
+                              <SelectContent>{igContas.map((c) => <SelectItem key={c.id} value={c.id}>@{c.ig_username || c.ig_user_id}</SelectItem>)}</SelectContent>
+                            </Select>
+
+                            {prontos.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Selecione as mídias (vazio = todas; ordem = ordem de clique p/ carrossel):</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {prontos.map((a) => {
+                                    const idx = igSelecao.indexOf(a.url!);
+                                    return (
+                                      <button type="button" key={a.id} onClick={() => toggleMidia(a.url!)}
+                                        className={`relative h-14 w-14 rounded-md overflow-hidden border-2 ${idx >= 0 ? "border-primary" : "border-transparent"}`}>
+                                        {a.tipo === "video" ? <video src={a.url!} className="h-full w-full object-cover" /> : <img src={a.url!} className="h-full w-full object-cover" alt="" />}
+                                        {idx >= 0 && <span className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-bl">{idx + 1}</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <Button size="sm" disabled={igEnviando} onClick={() => publicarIg("publicar_agora")}>
+                                {igEnviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Publicar agora
+                              </Button>
+                              <Input type="datetime-local" value={igPublishAt} onChange={(e) => setIgPublishAt(e.target.value)} className="h-9 w-auto text-xs" />
+                              <Button size="sm" variant="outline" disabled={igEnviando} onClick={() => publicarIg("agendar")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" /> Agendar
+                              </Button>
+                            </div>
+
+                            {igPosts.length > 0 && (
+                              <div className="space-y-1 pt-2">
+                                {igPosts.map((p) => (
+                                  <div key={p.id} className="flex items-center gap-2 text-xs rounded-md border border-border p-1.5">
+                                    <Badge variant="outline" className="text-[10px]">{p.tipo}</Badge>
+                                    <span className={
+                                      p.status === "publicado" ? "text-green-500" : p.status === "falhou" ? "text-destructive" : "text-amber-500"
+                                    }>{p.status}{p.publish_at && p.status === "pendente" ? ` · ${new Date(p.publish_at).toLocaleString("pt-BR")}` : ""}</span>
+                                    {p.permalink && <a href={p.permalink} target="_blank" rel="noreferrer" className="text-primary underline ml-auto">ver post</a>}
+                                    {p.status === "pendente" && <button type="button" onClick={() => cancelarIgPost(p.id)} className="text-muted-foreground hover:text-destructive ml-auto"><X className="h-3.5 w-3.5" /></button>}
+                                    {p.erro && <span className="text-destructive truncate" title={p.erro}>· {p.erro}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

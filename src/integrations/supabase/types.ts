@@ -496,6 +496,78 @@ export type Database = {
           },
         ]
       }
+      ig_posts: {
+        Row: {
+          created_at: string
+          creation_id: string | null
+          erro: string | null
+          id: string
+          ig_conta_id: string | null
+          ig_media_id: string | null
+          ig_user_id: string | null
+          legenda: string | null
+          midias: Json
+          org_id: string | null
+          permalink: string | null
+          publish_at: string | null
+          published_at: string | null
+          status: string
+          tarefa_id: string | null
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          creation_id?: string | null
+          erro?: string | null
+          id?: string
+          ig_conta_id?: string | null
+          ig_media_id?: string | null
+          ig_user_id?: string | null
+          legenda?: string | null
+          midias?: Json
+          org_id?: string | null
+          permalink?: string | null
+          publish_at?: string | null
+          published_at?: string | null
+          status?: string
+          tarefa_id?: string | null
+          tipo?: string
+        }
+        Update: {
+          created_at?: string
+          creation_id?: string | null
+          erro?: string | null
+          id?: string
+          ig_conta_id?: string | null
+          ig_media_id?: string | null
+          ig_user_id?: string | null
+          legenda?: string | null
+          midias?: Json
+          org_id?: string | null
+          permalink?: string | null
+          publish_at?: string | null
+          published_at?: string | null
+          status?: string
+          tarefa_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ig_posts_ig_conta_id_fkey"
+            columns: ["ig_conta_id"]
+            isOneToOne: false
+            referencedRelation: "ig_contas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ig_posts_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       insights_trafego: {
         Row: {
           cidade_slug: string
@@ -1618,6 +1690,7 @@ export type Database = {
           descricao: string | null
           etiquetas: string[]
           id: string
+          legenda: string | null
           ordem: number | null
           org_id: string | null
           origem: string | null
@@ -1636,6 +1709,7 @@ export type Database = {
           descricao?: string | null
           etiquetas?: string[]
           id?: string
+          legenda?: string | null
           ordem?: number | null
           org_id?: string | null
           origem?: string | null
@@ -1654,6 +1728,7 @@ export type Database = {
           descricao?: string | null
           etiquetas?: string[]
           id?: string
+          legenda?: string | null
           ordem?: number | null
           org_id?: string | null
           origem?: string | null
