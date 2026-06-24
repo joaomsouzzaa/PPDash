@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X } from "lucide-react";
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
+import { getOrgId } from "@/lib/org";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -675,6 +676,9 @@ export default function Workflow() {
               </div>
             )}
 
+            {/* Vídeo de referência → roteiro adaptado (v3 Fase 3A) */}
+            {editing && <ReferenciaVideo tarefaId={editing.id} agenteId={editing.agente_id} />}
+
             {/* Legenda + publicação no Instagram */}
             <div className="space-y-2 border-t border-border pt-3">
               <Label className="flex items-center gap-2 text-sm"><Send className="h-4 w-4 text-primary" /> Legenda do Instagram</Label>
@@ -832,5 +836,94 @@ export default function Workflow() {
         </DialogContent>
       </Dialog>
     </SidebarProvider>
+  );
+}
+
+// ============================================================
+// Vídeo de referência → roteiro adaptado + plano de inserções (v3 Fase 3A)
+// ============================================================
+const SERVICE_URL_VE = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
+
+function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: string | null }) {
+  const db = supabase as any;
+  const qc = useQueryClient();
+  const [url, setUrl] = useState("");
+  const [analisando, setAnalisando] = useState(false);
+
+  const { data: ref } = useQuery({
+    queryKey: ["video_ref", tarefaId],
+    queryFn: async () => {
+      const { data } = await db.from("tarefas").select("video_ref").eq("id", tarefaId).maybeSingle();
+      const vr = data?.video_ref || null;
+      if (vr?.ref_url) setUrl(vr.ref_url);
+      return vr;
+    },
+  });
+
+  const analisar = async () => {
+    if (!url.trim()) { toast.error("Cole o link do vídeo de referência."); return; }
+    if (!SERVICE_URL_VE) { toast.error("Serviço de vídeo não configurado."); return; }
+    setAnalisando(true);
+    try {
+      const orgId = await getOrgId();
+      const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      // busca o slug do agente do card (se houver) para usar a persona certa
+      let agente_slug: string | undefined;
+      if (agenteId) {
+        const { data: ag } = await db.from("agentes").select("slug").eq("id", agenteId).maybeSingle();
+        agente_slug = ag?.slug || undefined;
+      }
+      const res = await fetch(`${SERVICE_URL_VE}/analisar-referencia`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ref_url: url.trim(), org_id: orgId, agente_slug }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha (${res.status})`);
+      const video_ref = {
+        ref_url: url.trim(), ref_id: data.ref_id, roteiro: data.roteiro,
+        insertion_plan: data.insertion_plan || [], transcript: data.transcript || "",
+      };
+      await db.from("tarefas").update({ video_ref, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      if (data.roteiro) {
+        await db.from("tarefa_respostas").insert({ tarefa_id: tarefaId, autor: "Agente de Copy", conteudo: `🎬 Roteiro adaptado da referência:\n\n${data.roteiro}` });
+        qc.invalidateQueries({ queryKey: ["respostas", tarefaId] });
+      }
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      toast.success("Referência analisada — roteiro e plano de inserções gerados.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao analisar a referência.");
+    } finally {
+      setAnalisando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <Label className="flex items-center gap-2 text-sm"><Video className="h-4 w-4 text-primary" /> Vídeo de referência (IA gera o roteiro)</Label>
+      <div className="flex gap-2">
+        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Cole o link (Instagram, YouTube, TikTok…)" className="text-sm" />
+        <Button onClick={analisar} disabled={analisando} size="sm">
+          {analisando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+          {analisando ? "Analisando…" : "Analisar referência"}
+        </Button>
+      </div>
+      {ref?.roteiro && (
+        <div className="space-y-2 rounded-md border p-3 text-sm">
+          <p className="text-xs font-semibold text-muted-foreground">ROTEIRO ADAPTADO</p>
+          <p className="whitespace-pre-wrap text-sm">{ref.roteiro}</p>
+          {Array.isArray(ref.insertion_plan) && ref.insertion_plan.length > 0 && (
+            <>
+              <p className="mt-2 text-xs font-semibold text-muted-foreground">PLANO DE INSERÇÕES ({ref.insertion_plan.length})</p>
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                {ref.insertion_plan.map((p: any, i: number) => (
+                  <li key={i}>• <b>{p.tipo}</b> {Math.round(p.ref_start)}s–{Math.round(p.ref_end)}s — {p.descricao}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

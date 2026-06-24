@@ -229,6 +229,106 @@ async def editar(
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
+@app.post("/analisar-referencia")
+def analisar_referencia(body: dict, authorization: str = Header(default="")):
+    """v3 Fase 3A: baixa um vídeo de referência, analisa (frames + transcrição) e devolve
+    roteiro adaptado ao cliente + plano de inserções (onde/quando cada b-roll/print aparece)."""
+    exigir_usuario(authorization)
+    ref_url = (body or {}).get("ref_url")
+    org_id = (body or {}).get("org_id")
+    agente_slug = (body or {}).get("agente_slug")
+    if not ref_url:
+        raise HTTPException(400, "ref_url obrigatório")
+
+    import base64, glob
+    from transcribe_words import transcrever_words
+
+    ref_id = str(uuid.uuid4())
+    refdir = WORK_DIR / "ref" / ref_id
+    framesdir = refdir / "frames"
+    framesdir.mkdir(parents=True, exist_ok=True)
+
+    # 1) Baixa a referência (yt-dlp) — guarda para o 3B.
+    try:
+        subprocess.run(
+            ["yt-dlp", "-f", "mp4/best", "-o", str(refdir / "ref.%(ext)s"), ref_url],
+            capture_output=True, text=True, check=True, timeout=300,
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(422, f"Não consegui baixar o vídeo: {e.stderr[-200:] if e.stderr else 'erro yt-dlp'}")
+    cand = glob.glob(str(refdir / "ref.*"))
+    ref_file = next((c for c in cand if not c.endswith(".jpg")), None)
+    if not ref_file:
+        raise HTTPException(422, "Download não produziu arquivo de vídeo")
+
+    # 2) Frames (1 a cada 2s, máx 24) + transcrição word-level.
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", ref_file, "-vf", "fps=1/2,scale=512:-2", "-frames:v", "24", str(framesdir / "f%04d.jpg")],
+        capture_output=True, text=True,
+    )
+    frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:24]
+    try:
+        transcript = transcrever_words(ref_file)
+    except Exception:
+        transcript = {"segments": []}
+    transcript_txt = "\n".join(
+        f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
+        for s in transcript.get("segments", [])
+    )
+
+    # 3) Persona do agente + base de conhecimento da org (mesmo padrão do agente-chat).
+    db = svc()
+    persona = ""
+    if org_id:
+        q = db.table("agentes").select("nome,system_prompt,slug").eq("org_id", org_id)
+        ags = (q.execute().data) or []
+        ag = next((a for a in ags if agente_slug and a.get("slug") == agente_slug), None) \
+            or next((a for a in ags if "copy" in (a.get("slug") or a.get("nome") or "").lower()), None) \
+            or (ags[0] if ags else None)
+        if ag:
+            persona = ag.get("system_prompt") or ""
+    base_conh = ""
+    if org_id:
+        bc = (db.table("base_conhecimento").select("titulo,conteudo").eq("org_id", org_id).eq("ativo", True).execute().data) or []
+        base_conh = "\n\n".join(f"## {b['titulo']}\n{b.get('conteudo','')}" for b in bc if (b.get("conteudo") or "").strip())
+
+    # 4) Claude com visão: roteiro adaptado + plano de inserções.
+    sistema = (
+        (persona + "\n\n" if persona else "")
+        + ("# Base de Conhecimento (a verdade sobre a marca/cliente — baseie-se nela)\n" + base_conh + "\n\n" if base_conh else "")
+        + "Você é um estrategista de Reels. Recebe FRAMES + TRANSCRIÇÃO de um vídeo de REFERÊNCIA. "
+        "Produza: (1) um ROTEIRO falado ADAPTADO para o cliente (mesma estrutura/ganchos da referência, "
+        "mas com a mensagem e os exemplos do cliente, usando a base de conhecimento); (2) um PLANO DE INSERÇÕES "
+        "listando onde/quando aparece cada b-roll/print/imagem na referência (timestamps) e a que trecho da fala corresponde. "
+        "Responda APENAS JSON: "
+        '{"roteiro_adaptado":"...","insertion_plan":[{"ref_start":<s>,"ref_end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","linha":"trecho da fala"}]}'
+    )
+    blocos = [{"type": "text", "text": f"TRANSCRIÇÃO DA REFERÊNCIA:\n{transcript_txt or '(sem fala detectada)'}\n\nFrames a seguir (em ordem):"}]
+    for fp in frames:
+        b64 = base64.b64encode(pathlib.Path(fp).read_bytes()).decode()
+        blocos.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}})
+
+    client = anthropic.Anthropic()
+    resp = client.messages.create(
+        model=MODEL, max_tokens=8000,
+        system=sistema, messages=[{"role": "user", "content": blocos}],
+    )
+    texto = "".join(b.text for b in resp.content if b.type == "text").strip()
+    if texto.startswith("```"):
+        texto = texto.split("```", 2)[1].lstrip("json").strip()
+    try:
+        data = json.loads(texto)
+    except Exception:
+        data = {"roteiro_adaptado": texto, "insertion_plan": []}
+
+    return {
+        "ok": True, "ref_id": ref_id, "ref_url": ref_url,
+        "roteiro": data.get("roteiro_adaptado", ""),
+        "insertion_plan": data.get("insertion_plan", []),
+        "transcript": transcript_txt,
+    }
+
+
 @app.post("/cancelar")
 def cancelar(body: dict, authorization: str = Header(default="")):
     """Interrompe um job (em execução ou na fila) e o marca como cancelado."""

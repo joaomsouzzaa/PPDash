@@ -1810,6 +1810,7 @@ export type Database = {
           tempo_estimado: number | null
           titulo: string
           updated_at: string | null
+          video_ref: Json | null
         }
         Insert: {
           agente_id?: string | null
@@ -1829,6 +1830,7 @@ export type Database = {
           tempo_estimado?: number | null
           titulo: string
           updated_at?: string | null
+          video_ref?: Json | null
         }
         Update: {
           agente_id?: string | null
@@ -1848,6 +1850,7 @@ export type Database = {
           tempo_estimado?: number | null
           titulo?: string
           updated_at?: string | null
+          video_ref?: Json | null
         }
         Relationships: []
       }
