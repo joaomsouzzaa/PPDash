@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  ClipboardList, Plus, Trash2, ArrowLeft, Link2, BarChart3, GitBranch, Loader2,
+  ClipboardList, Plus, Trash2, ArrowLeft, Link2, BarChart3, GitBranch, Loader2, GripVertical, Download,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getTenantSlug } from "@/lib/tenant";
@@ -192,6 +192,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
   const [selId, setSelId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [resultadosOpen, setResultadosOpen] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -221,6 +222,17 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
   const removerPergunta = (id: string) => {
     setPerguntas((prev) => prev.filter((p) => p.id !== id).map((p, i) => ({ ...p, ordem: i })));
     if (selId === id) setSelId(null);
+  };
+
+  // Reordena perguntas (arrastar) — move o item de `from` para a posição `to`.
+  const moverPergunta = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return;
+    setPerguntas((prev) => {
+      const arr = [...prev];
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      return arr.map((p, i) => ({ ...p, ordem: i }));
+    });
   };
 
   const addOpcao = (p: Pergunta) => upd(p.id, { opcoes: [...p.opcoes, { id: rid(), label: `Opção ${p.opcoes.length + 1}` }] });
@@ -298,17 +310,23 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
             {/* Coluna esquerda: lista de perguntas */}
             <aside className="w-72 shrink-0 border-r border-border overflow-y-auto p-3 space-y-2">
               {perguntas.map((p, i) => (
-                <button
+                <div
                   key={p.id}
+                  draggable
+                  onDragStart={() => setDragIdx(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => { if (dragIdx !== null) moverPergunta(dragIdx, i); setDragIdx(null); }}
+                  onDragEnd={() => setDragIdx(null)}
                   onClick={() => setSelId(p.id)}
-                  className={`w-full text-left rounded-md border px-3 py-2 text-sm flex items-start gap-2 ${selId === p.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+                  className={`w-full cursor-pointer text-left rounded-md border px-2 py-2 text-sm flex items-start gap-1.5 ${selId === p.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"} ${dragIdx === i ? "opacity-50" : ""}`}
                 >
+                  <GripVertical className="h-4 w-4 text-muted-foreground/60 mt-0.5 cursor-grab shrink-0" />
                   <span className="text-xs font-bold text-muted-foreground mt-0.5">{i + 1}</span>
                   <span className="flex-1 truncate">{p.titulo || "(sem título)"}</span>
                   {TIPOS_BIFURCAVEIS.includes(p.tipo) && p.logica.length > 0 && (
                     <GitBranch className="h-3.5 w-3.5 text-primary shrink-0" />
                   )}
-                </button>
+                </div>
               ))}
               <Button variant="outline" className="w-full" onClick={addPergunta}><Plus className="mr-2 h-4 w-4" /> Adicionar pergunta</Button>
             </aside>
@@ -447,10 +465,38 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
     return found ? found.label : String(valor ?? "");
   };
 
+  const valorCelula = (p: Pergunta, r: { respostas: Record<string, any> }) =>
+    TIPOS_BIFURCAVEIS.includes(p.tipo) ? labelOpcao(p, r.respostas?.[p.id]) : (r.respostas?.[p.id] ?? "");
+
+  // Exporta as respostas em CSV (separador ; e BOM para abrir corretamente no Excel pt-BR).
+  const exportarCSV = () => {
+    const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const cabecalho = ["Data", ...perguntas.map((p, i) => `${i + 1}. ${p.titulo}`)];
+    const linhas = respostas.map((r) => [
+      new Date(r.created_at).toLocaleString("pt-BR"),
+      ...perguntas.map((p) => valorCelula(p, r)),
+    ]);
+    const csv = [cabecalho, ...linhas].map((l) => l.map(esc).join(";")).join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `respostas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Respostas ({respostas.length})</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between pr-8">
+            <span>Respostas ({respostas.length})</span>
+            <Button size="sm" variant="outline" onClick={exportarCSV} disabled={respostas.length === 0}>
+              <Download className="mr-2 h-4 w-4" /> Exportar CSV
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
         {respostas.length === 0 ? (
           <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma resposta ainda.</p>
         ) : (
@@ -466,9 +512,7 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
                 <TableRow key={r.id}>
                   <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString("pt-BR")}</TableCell>
                   {perguntas.map((p) => (
-                    <TableCell key={p.id} className="text-sm">
-                      {TIPOS_BIFURCAVEIS.includes(p.tipo) ? labelOpcao(p, r.respostas?.[p.id]) : (r.respostas?.[p.id] ?? "")}
-                    </TableCell>
+                    <TableCell key={p.id} className="text-sm">{valorCelula(p, r)}</TableCell>
                   ))}
                 </TableRow>
               ))}
