@@ -21,7 +21,7 @@ function paginar(words: Word[]): Page[] {
       cur = { startMs: fromMs, words: [] };
       pages.push(cur);
     }
-    cur.words.push({ text: w.text, fromMs, toMs });
+    cur.words.push({ text: w.word, fromMs, toMs });
   }
   return pages;
 }
