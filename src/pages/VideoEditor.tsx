@@ -110,15 +110,21 @@ export default function VideoEditor() {
     const s = Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
-  // % aproximado do pipeline por etapa (não há % exato dentro de cada passo).
+  // % do pipeline por etapa. O render (etapa mais longa) tem progresso REAL por trecho
+  // ("renderizando vídeo (x/y)") e ocupa uma faixa larga (55→95%) para a barra avançar de verdade.
   const pctEtapa = (etapa: string | null): number => {
     const e = (etapa || "").toLowerCase();
-    if (e.includes("transcre")) return 25;
-    if (e.includes("organiz")) return 45;
-    if (e.includes("decid")) return 65;
-    if (e.includes("renderiz")) return 85;
+    if (e.includes("transcre")) return 15;
+    if (e.includes("organiz")) return 28;
+    if (e.includes("decid")) return 42;
+    if (e.includes("renderiz")) {
+      const m = e.match(/\((\d+)\/(\d+)\)/);
+      if (m) return Math.min(95, Math.round(55 + (Number(m[1]) / Number(m[2])) * 40));
+      return 55;
+    }
+    if (e.includes("montando") || e.includes("finaliz")) return 97;
     if (e.includes("conclu")) return 100;
-    return 8; // na fila / iniciando
+    return 6; // na fila / iniciando
   };
 
   const cortar = async () => {

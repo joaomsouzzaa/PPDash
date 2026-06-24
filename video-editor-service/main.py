@@ -27,6 +27,7 @@ Variáveis de ambiente (ver .env.example):
 import json
 import os
 import pathlib
+import re
 import subprocess
 import tempfile
 import uuid
@@ -195,7 +196,18 @@ def processar_job(job_id: str, brief: str, org_id: str):
 
         set_etapa(db, job_id, "renderizando vídeo")
         out = OUTPUT_DIR / f"{job_id}.mp4"
-        run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles"], cwd=workdir)
+        # Progresso real: render.py imprime "[NN] ..." por trecho extraído. Atualizamos a etapa
+        # a cada trecho para a barra avançar em tempo real (essa é a etapa mais demorada).
+        total = len(edl["ranges"])
+        seg_re = re.compile(r"^\s*\[(\d+)\]")
+
+        def on_render_line(line: str):
+            m = seg_re.match(line)
+            if m:
+                i = int(m.group(1)) + 1
+                set_etapa(db, job_id, f"renderizando vídeo ({i}/{total})" if i < total else "montando vídeo final")
+
+        run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles"], cwd=workdir, on_line=on_render_line)
         if not out.exists():
             raise RuntimeError("render.py não gerou o final.mp4")
 
@@ -215,13 +227,31 @@ def processar_job(job_id: str, brief: str, org_id: str):
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def run_helper(script: str, args: list[str], cwd: pathlib.Path):
+def run_helper(script: str, args: list[str], cwd: pathlib.Path, on_line=None):
     helper = VIDEO_USE_DIR / "helpers" / script
-    proc = subprocess.run(
-        ["python", str(helper), *args], cwd=str(cwd), capture_output=True, text=True
+    cmd = ["python", str(helper), *args]
+    if on_line is None:
+        proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"{script} falhou: {proc.stderr[-500:] or proc.stdout[-500:]}")
+        return
+    # Modo streaming: lê a saída linha a linha para reportar progresso em tempo real.
+    proc = subprocess.Popen(
+        cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
+    tail: list[str] = []
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        tail.append(line)
+        if len(tail) > 40:
+            tail.pop(0)
+        try:
+            on_line(line)
+        except Exception:
+            pass
+    proc.wait()
     if proc.returncode != 0:
-        raise RuntimeError(f"{script} falhou: {proc.stderr[-500:] or proc.stdout[-500:]}")
+        raise RuntimeError(f"{script} falhou: {''.join(tail)[-500:]}")
 
 
 def gerar_ranges(takes_packed: str, brief: str) -> list[dict]:
