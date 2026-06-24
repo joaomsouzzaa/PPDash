@@ -15,7 +15,7 @@ const CORNER_STYLE: Record<string, React.CSSProperties> = {
   "bottom-right": { bottom: 420, right: 48 },
 };
 
-export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase }) => {
+export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview }) => {
   const fps = timeline.fps || FPS_FALLBACK;
   const videoSrc = url(mediaBase, timeline.video);
   const assetUrl = (id: string | null | undefined): string | null =>
@@ -35,6 +35,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase }
             assetSrc: assetUrl(seg.asset),
             asset2Src: assetUrl(seg.asset2 ?? null),
             isVideoAsset,
+            preview,
           };
           return (
             <Series.Sequence key={i} durationInFrames={durFrames}>

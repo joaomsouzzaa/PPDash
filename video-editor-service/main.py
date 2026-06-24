@@ -427,7 +427,9 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
         try:
             subprocess.run(
                 ["ffmpeg", "-y", "-i", str(cut), "-vf", "scale=540:-2",
-                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-movflags", "+faststart",
+                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+                 # keyframe a cada ~0.5s + faststart → busca/scrub suave no preview
+                 "-g", "15", "-keyint_min", "15", "-sc_threshold", "0", "-movflags", "+faststart",
                  "-c:a", "aac", "-b:a", "96k", str(preview)],
                 capture_output=True, text=True, check=True,
             )

@@ -51,6 +51,7 @@ export const mainPropsSchema = z.object({
   words: z.array(wordSchema).default([]),
   assets: assetsMapSchema.default({}),
   mediaBase: z.string().default(""),
+  preview: z.boolean().optional().default(false), // true no Player (usa <Video>); false no render
 });
 
 export type Layout = z.infer<typeof layoutSchema>;

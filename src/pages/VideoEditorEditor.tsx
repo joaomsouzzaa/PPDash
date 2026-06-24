@@ -164,7 +164,7 @@ export default function VideoEditorEditor() {
             <Player
               ref={playerRef}
               component={Main as any}
-              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase }}
+              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase, preview: true }}
               durationInFrames={durationInFrames}
               fps={fps}
               compositionWidth={1080}
