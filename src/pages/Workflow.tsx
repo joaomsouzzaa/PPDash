@@ -892,7 +892,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     enabled: !!(ref as any)?.job_id,
     refetchInterval: (q) => { const s = (q.state.data as any)?.status; return s === "processando" || s === "pendente" ? 5000 : false; },
     queryFn: async () => {
-      const { data } = await db.from("video_jobs").select("status,etapa,resultado_url").eq("id", (ref as any).job_id).maybeSingle();
+      const { data } = await db.from("video_jobs").select("status,etapa,resultado_url,erro").eq("id", (ref as any).job_id).maybeSingle();
       return data;
     },
   });
@@ -971,6 +971,22 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     }
   };
 
+  // % aproximado do pipeline de montagem (etapa pode trazer "(NN%)" real da transcrição/render).
+  const pctMontar = (etapa: string | null): number => {
+    const e = (etapa || "").toLowerCase();
+    const real = e.match(/\((\d+)%\)/);
+    if (real) return Number(real[1]);
+    if (e.includes("baixando")) return 5;
+    if (e.includes("transcrevendo áudio") || e.includes("organiz")) return 15;
+    if (e.includes("decid") || e.includes("cortando") || e.includes("montando corte")) return 30;
+    if (e.includes("preview")) return 45;
+    if (e.includes("transcrevendo legendas")) return 55;
+    if (e.includes("planej") || e.includes("alinhando")) return 88;
+    if (e.includes("renderiz")) return 95;
+    return 8;
+  };
+  const montandoJob = job?.status === "processando" || job?.status === "pendente";
+
   return (
     <div className="space-y-2 border-t border-border pt-3">
       <Label className="flex items-center gap-2 text-sm"><Video className="h-4 w-4 text-primary" /> Vídeo de referência (IA gera o roteiro)</Label>
@@ -1022,14 +1038,26 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
                 Montar edição
               </Button>
               {(ref as any).job_id && (
-                <Button onClick={() => setEditorOpen(true)} size="sm" disabled={job?.status === "processando" || job?.status === "pendente"}>
-                  {job?.status === "processando" || job?.status === "pendente"
-                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Montando…</>
-                    : <>Abrir editor</>}
+                <Button onClick={() => setEditorOpen(true)} size="sm" disabled={montandoJob}>
+                  {montandoJob ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Abrir editor
                 </Button>
               )}
             </div>
-            {job?.status === "erro" && <p className="text-xs text-destructive">Falha ao montar — confira o link do Drive e tente de novo.</p>}
+            {/* Status real da montagem (etapa + % + barra) */}
+            {montandoJob && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="capitalize">{job?.etapa || "na fila"}…</span>
+                  <span className="tabular-nums">{pctMontar(job?.etapa)}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${pctMontar(job?.etapa)}%` }} />
+                </div>
+              </div>
+            )}
+            {job?.status === "erro" && (
+              <p className="text-xs text-destructive break-words">{job?.erro || "Falha ao montar — confira o link do Drive e tente de novo."}</p>
+            )}
           </div>
 
           {/* Popup do editor v2 (mesma origem → sessão compartilhada) */}

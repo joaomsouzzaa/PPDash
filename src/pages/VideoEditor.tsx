@@ -98,6 +98,17 @@ export default function VideoEditor() {
     },
   });
 
+  // Log do job aberto — poll rápido (1.5s) só enquanto o popup está aberto, para o % subir ao vivo.
+  const { data: logJobLive } = useQuery<VideoJob | null>({
+    queryKey: ["video_job_log", logId],
+    enabled: !!logId,
+    refetchInterval: (q) => { const s = (q.state.data as VideoJob | undefined)?.status; return s === "processando" || s === "pendente" ? 1500 : false; },
+    queryFn: async () => {
+      const { data } = await db.from("video_jobs").select("*").eq("id", logId).maybeSingle();
+      return (data || null) as VideoJob | null;
+    },
+  });
+
   // Uso de disco da VPS (atualiza a cada 30s).
   const { data: disco } = useQuery<{ used_gb: number; total_gb: number; free_gb: number; pct_used: number } | null>({
     queryKey: ["video_disk"],
@@ -463,19 +474,26 @@ export default function VideoEditor() {
             <DialogTitle className="flex items-center gap-2 text-base"><ScrollText className="h-4 w-4" /> Log do processamento</DialogTitle>
           </DialogHeader>
           {(() => {
-            const j = jobs.find((x) => x.id === logId);
+            const j = logJobLive || jobs.find((x) => x.id === logId) || null;
             const linhas = j?.log || [];
+            const ativo = j && (j.status === "processando" || j.status === "pendente");
+            const pctAtual = j ? pctEtapa(j.etapa, j.modo) : 0;
             return (
               <div className="max-h-[60vh] overflow-y-auto rounded-md border bg-background/50 p-3 font-mono text-xs space-y-1">
-                {linhas.length === 0 && <p className="text-muted-foreground">Sem registros ainda…</p>}
+                {linhas.length === 0 && !ativo && <p className="text-muted-foreground">Sem registros ainda…</p>}
                 {linhas.map((l, i) => (
                   <div key={i} className={l.msg.startsWith("❌") ? "text-destructive" : ""}>
                     <span className="text-muted-foreground">{l.t}</span> · {l.msg}
                   </div>
                 ))}
-                {j && (j.status === "processando" || j.status === "pendente") && (
-                  <div className="text-muted-foreground animate-pulse">▶ {j.etapa || "na fila"}…</div>
+                {ativo && (
+                  <div className="flex items-center justify-between gap-2 rounded bg-blue-600/10 px-1.5 py-1 text-blue-400">
+                    <span className="animate-pulse truncate">▶ {j!.etapa || "na fila"}…</span>
+                    <span className="tabular-nums shrink-0">{pctAtual}% · {decorrido(j!.created_at)}</span>
+                  </div>
                 )}
+                {j?.status === "pronto" && <div className="text-green-500">✓ concluído</div>}
+                {j?.status === "editar" && <div className="text-violet-400">✓ pronto para editar</div>}
               </div>
             );
           })()}
