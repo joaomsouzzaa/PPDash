@@ -5,7 +5,8 @@ import { z } from "zod";
 
 export const LAYOUTS = [
   "talking_full",
-  "split_horizontal",
+  "split_horizontal",   // asset/b-roll EM CIMA, pessoa embaixo
+  "split_bottom",       // asset/b-roll EMBAIXO, pessoa em cima
   "split_vertical",
   "overlay_card",
   "image_fullscreen",
@@ -91,6 +92,7 @@ export type MainProps = z.infer<typeof mainPropsSchema>;
 export const OVERLAY_LAYOUTS = [
   "overlay_card",
   "split_horizontal",
+  "split_bottom",
   "image_fullscreen",
   "broll_fullscreen",
 ] as const;

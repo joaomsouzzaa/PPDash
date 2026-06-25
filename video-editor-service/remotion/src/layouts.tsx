@@ -52,6 +52,20 @@ const SplitHorizontal: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, i
   </AbsoluteFill>
 );
 
+// B-roll/imagem EMBAIXO, pessoa em cima.
+const SplitBottom: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume }) => (
+  <AbsoluteFill style={{ backgroundColor: "#000" }}>
+    <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "50%", overflow: "hidden" }}>
+      <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />
+    </div>
+    <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "50%", overflow: "hidden" }}>
+      {assetSrc && (isVideoAsset(assetSrc)
+        ? <AssetVid src={assetSrc} preview={preview} />
+        : <Img src={assetSrc} style={cover} />)}
+    </div>
+  </AbsoluteFill>
+);
+
 const SplitVertical: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume }) => (
   <AbsoluteFill style={{ backgroundColor: "#000", flexDirection: "row" }}>
     <div style={{ width: "50%", height: "100%", overflow: "hidden" }}>
@@ -104,6 +118,7 @@ const BrollFullscreen: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, i
 export const LAYOUT_COMPONENTS: Record<Layout, React.FC<Ctx>> = {
   talking_full: TalkingFull,
   split_horizontal: SplitHorizontal,
+  split_bottom: SplitBottom,
   split_vertical: SplitVertical,
   overlay_card: OverlayCard,
   image_fullscreen: ImageFullscreen,

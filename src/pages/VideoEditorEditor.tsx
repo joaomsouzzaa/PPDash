@@ -19,6 +19,7 @@ const VIDEO_EXT = /\.(mp4|mov|webm|mkv|m4v)$/i;
 const LAYOUT_NOME: Record<OverlayLayout, string> = {
   overlay_card: "Card sobreposto (print)",
   split_horizontal: "Split — imagem em cima",
+  split_bottom: "Split — imagem embaixo",
   image_fullscreen: "Imagem em tela cheia",
   broll_fullscreen: "B-roll em tela cheia",
 };

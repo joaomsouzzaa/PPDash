@@ -818,19 +818,27 @@ def _proxy_preview(cut: pathlib.Path, dest: pathlib.Path) -> bool:
         return False
 
 
-def _alinhar_insercoes(insertion_plan: list, transcript_novo: str) -> list:
-    """Claude mapeia cada inserção da referência para o timestamp equivalente no vídeo novo."""
+def _alinhar_insercoes(insertion_plan: list, transcript_ref: str, transcript_novo: str) -> list:
+    """Alinha as inserções da referência ao vídeo NOVO comparando as DUAS transcrições
+    (o roteiro novo segue a mesma sequência da referência) e classifica o layout de cada b-roll."""
     if not insertion_plan:
         return []
     client = anthropic.Anthropic()
     sistema = (
-        "Você recebe um PLANO DE INSERÇÕES de um vídeo de referência (cada item tem tipo, descrição e "
-        "o trecho de fala 'linha' onde aparece) e a TRANSCRIÇÃO do vídeo NOVO (frases com [início-fim] em s). "
-        "Para cada inserção, ache o MOMENTO equivalente na transcrição nova (pela correspondência de sentido "
-        "com 'linha') e devolva start/end no tempo do vídeo NOVO. Responda APENAS JSON: "
-        '{"clips":[{"start":<s>,"end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","ref_start":<s>,"ref_end":<s>}]}'
+        "Você monta a edição de um vídeo NOVO espelhando um vídeo de REFERÊNCIA. O roteiro do novo segue a "
+        "MESMA sequência/sentido da referência. Recebe: (a) PLANO DE INSERÇÕES da referência (cada item tem "
+        "ref_start/ref_end, tipo, descrição e a 'linha' falada), (b) TRANSCRIÇÃO da REFERÊNCIA e (c) TRANSCRIÇÃO "
+        "do vídeo NOVO (frases com [início-fim] em s). Para CADA inserção, ache no vídeo NOVO o trecho equivalente "
+        "(casando o sentido da 'linha'/conteúdo entre as duas transcrições) e devolva start/end NO TEMPO DO NOVO. "
+        "Inclua TODAS as inserções (não pule b-rolls). Classifique o 'layout' observando como aparece na referência:\n"
+        "- 'broll_full' = b-roll ocupa a tela toda;\n- 'split_top' = b-roll na METADE DE CIMA (pessoa embaixo);\n"
+        "- 'split_bottom' = b-roll na METADE DE BAIXO (pessoa em cima);\n- 'print' = print/card; - 'image' = imagem cheia.\n"
+        "Responda APENAS JSON: "
+        '{"clips":[{"start":<s>,"end":<s>,"layout":"broll_full|split_top|split_bottom|print|image","descricao":"...","ref_start":<s>,"ref_end":<s>}]}'
     )
-    user = f"PLANO DE INSERÇÕES (referência):\n{json.dumps(insertion_plan, ensure_ascii=False)}\n\nTRANSCRIÇÃO DO VÍDEO NOVO:\n{transcript_novo}"
+    user = (f"PLANO DE INSERÇÕES (referência):\n{json.dumps(insertion_plan, ensure_ascii=False)}\n\n"
+            f"TRANSCRIÇÃO DA REFERÊNCIA:\n{transcript_ref or '(indisponível)'}\n\n"
+            f"TRANSCRIÇÃO DO VÍDEO NOVO:\n{transcript_novo}")
     resp = client.messages.create(model=MODEL, max_tokens=8000, system=sistema,
                                   messages=[{"role": "user", "content": user}])
     txt = "".join(b.text for b in resp.content if b.type == "text").strip()
@@ -889,34 +897,37 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         vr = (row.data or {}).get("video_ref") or {}
         plano = vr.get("insertion_plan") or []
         ref_id = vr.get("ref_id")
-        alinhados = _alinhar_insercoes(plano, transcript_txt)
+        alinhados = _alinhar_insercoes(plano, vr.get("transcript") or "", transcript_txt)
 
-        # 4) Monta clips + assets
-        TIPO_LAYOUT = {"broll": "broll_fullscreen", "print": "overlay_card", "image": "image_fullscreen", "overlay": "split_horizontal"}
+        # 4) Monta clips + assets. Layout pela classificação; b-roll split é recortado na metade certa.
+        LAY = {"broll_full": "broll_fullscreen", "broll": "broll_fullscreen", "split_top": "split_horizontal",
+               "split_bottom": "split_bottom", "overlay": "split_horizontal", "print": "overlay_card", "image": "image_fullscreen"}
+        CROP = {"split_top": "crop=in_w:in_h/2:0:0", "split_bottom": "crop=in_w:in_h/2:0:in_h/2"}
         clips, assets_map = [], {}
         ref_glob = glob.glob(str(WORK_DIR / "ref" / str(ref_id) / "ref.*")) if ref_id else []
         ref_file = next((c for c in ref_glob if not c.endswith(".jpg")), None)
         for i, a in enumerate(alinhados):
-            layout = TIPO_LAYOUT.get(a.get("tipo"), "overlay_card")
+            tipo = a.get("layout") or a.get("tipo") or "broll_full"
+            layout = LAY.get(tipo, "broll_fullscreen")
             asset_id = None
             if fonte == "literal" and ref_file and a.get("ref_start") is not None:
-                # recorta o b-roll do vídeo de referência por faixa de tempo
                 out = assets_dir / f"ins{i}.mp4"
                 rs, re_ = float(a["ref_start"]), float(a.get("ref_end", a["ref_start"]) or a["ref_start"])
                 if re_ > rs:
-                    subprocess.run(["ffmpeg", "-y", "-ss", str(rs), "-to", str(re_), "-i", ref_file,
-                                    "-c:v", "libx264", "-preset", "veryfast", "-an", str(out)],
+                    # recorta a metade do b-roll (split_top/bottom) ou pega cheio; encode leve p/ preview fluido.
+                    vf = (CROP[tipo] + "," if tipo in CROP else "") + "scale='min(1080,iw)':-2"
+                    subprocess.run(["ffmpeg", "-y", "-ss", str(rs), "-to", str(re_), "-i", ref_file, "-an",
+                                    "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+                                    "-g", "30", "-keyint_min", "30", "-sc_threshold", "0", "-movflags", "+faststart", str(out)],
                                    capture_output=True, text=True)
                     if out.exists():
                         asset_id = f"ins{i}"
                         assets_map[asset_id] = f"assets/ins{i}.mp4"
-                        layout = "broll_fullscreen"
             clips.append({
-                "id": f"c{i}", "asset": asset_id, "layout": layout if asset_id else "broll_fullscreen",
+                "id": f"c{i}", "asset": asset_id, "layout": layout,
                 "start": round(float(a.get("start", 0)), 3), "end": round(float(a.get("end", 0)), 3),
                 "descricao": a.get("descricao", ""),
             })
-        # remove clips inválidos (sem tempo) — no modo assets, clips sem asset ficam como marcadores
         clips = [c for c in clips if c["end"] > c["start"]]
 
         editor_doc = {
