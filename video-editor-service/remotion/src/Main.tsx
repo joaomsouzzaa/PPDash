@@ -15,7 +15,7 @@ const CORNER_STYLE: Record<string, React.CSSProperties> = {
   "bottom-right": { bottom: 420, right: 48 },
 };
 
-export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview }) => {
+export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle }) => {
   const fps = timeline.fps || FPS_FALLBACK;
   const videoSrc = url(mediaBase, timeline.video);
   const assetUrl = (id: string | null | undefined): string | null =>
@@ -61,7 +61,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
       })}
 
       {/* Legenda animada palavra-a-palavra sobre tudo */}
-      <Captions words={words} />
+      <Captions words={words} style={captionStyle} />
     </AbsoluteFill>
   );
 };

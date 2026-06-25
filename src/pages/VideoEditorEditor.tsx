@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { EditorTimeline } from "@/components/video-editor/EditorTimeline";
 import { Main } from "@/video-editor/remotion/Main";
 import {
-  clipsParaTimeline, OVERLAY_LAYOUTS, type Clip, type EditorDoc, type OverlayLayout,
+  clipsParaTimeline, OVERLAY_LAYOUTS, CAPTION_STYLE_DEFAULT,
+  type Clip, type EditorDoc, type OverlayLayout, type CaptionStyle,
 } from "@/video-editor/remotion/schema";
 
 const db = supabase as any;
@@ -85,6 +86,15 @@ export default function VideoEditorEditor() {
   const updateClip = useCallback((id: string, patch: Partial<Clip>) => {
     setClips((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }, [setClips]);
+
+  // Legendas: estilo + edição de texto.
+  const capStyle: CaptionStyle = { ...CAPTION_STYLE_DEFAULT, ...(doc?.captionStyle || {}) };
+  const setCapStyle = useCallback((patch: Partial<CaptionStyle>) => {
+    setDoc((d) => (d ? { ...d, captionStyle: { ...CAPTION_STYLE_DEFAULT, ...(d.captionStyle || {}), ...patch } } : d));
+  }, []);
+  const setWordText = useCallback((i: number, text: string) => {
+    setDoc((d) => (d ? { ...d, words: d.words.map((w, k) => (k === i ? { ...w, word: text } : w)) } : d));
+  }, []);
 
   const addClip = (assetId: string) => {
     if (!doc) return;
@@ -164,7 +174,7 @@ export default function VideoEditorEditor() {
             <Player
               ref={playerRef}
               component={Main as any}
-              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase, preview: true }}
+              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle }}
               durationInFrames={durationInFrames}
               fps={fps}
               compositionWidth={1080}
@@ -215,6 +225,8 @@ export default function VideoEditorEditor() {
             duration={doc.durationInSeconds}
             currentTime={currentTime}
             selectedId={selectedId}
+            words={doc.words}
+            palavrasPorPagina={capStyle.palavrasPorPagina}
             onSeek={seek}
             onSelect={setSelectedId}
             onUpdateClip={updateClip}
@@ -242,8 +254,63 @@ export default function VideoEditorEditor() {
               })}
             </div>
           </div>
+
+          {/* Legendas: estilo + edição de texto */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Legenda</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Cor label="Palavra" value={capStyle.color} onChange={(v) => setCapStyle({ color: v })} />
+              <Cor label="Palavra ativa" value={capStyle.activeColor} onChange={(v) => setCapStyle({ activeColor: v })} />
+              <Cor label="Borda" value={capStyle.borderColor} onChange={(v) => setCapStyle({ borderColor: v })} />
+              <Cor label="Fundo" value={capStyle.bgColor === "transparent" ? "#000000" : capStyle.bgColor}
+                   onChange={(v) => setCapStyle({ bgColor: v })}
+                   extra={<button className="text-[10px] underline text-muted-foreground" onClick={() => setCapStyle({ bgColor: "transparent" })}>sem fundo</button>} />
+              <Num label="Tamanho" value={capStyle.fontSize} min={32} max={140} onChange={(v) => setCapStyle({ fontSize: v })} />
+              <Num label="Borda (px)" value={capStyle.borderWidth} min={0} max={14} onChange={(v) => setCapStyle({ borderWidth: v })} />
+              <Num label="Altura (px)" value={capStyle.posicaoY} min={80} max={900} step={10} onChange={(v) => setCapStyle({ posicaoY: v })} />
+              <Num label="Palavras/linha" value={capStyle.palavrasPorPagina} min={1} max={6} onChange={(v) => setCapStyle({ palavrasPorPagina: v })} />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={capStyle.animar} onChange={(e) => setCapStyle({ animar: e.target.checked })} />
+              Animar palavra ativa (pop)
+            </label>
+
+            <p className="text-xs text-muted-foreground pt-1">Corrigir texto (pontuação / palavra errada):</p>
+            <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto rounded border p-2 bg-background/40">
+              {doc.words.map((w, i) => (
+                <input
+                  key={i}
+                  value={w.word}
+                  onChange={(e) => setWordText(i, e.target.value)}
+                  className="rounded bg-muted px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-violet-500"
+                  style={{ width: `${Math.max(3, w.word.length + 1)}ch` }}
+                />
+              ))}
+              {doc.words.length === 0 && <span className="text-xs text-muted-foreground">Sem legenda detectada.</span>}
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Cor({ label, value, onChange, extra }: { label: string; value: string; onChange: (v: string) => void; extra?: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[11px] text-muted-foreground flex items-center justify-between">{label}{extra}</label>
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-8 w-full cursor-pointer rounded border bg-transparent" />
+    </div>
+  );
+}
+
+function Num({ label, value, onChange, min, max, step = 1 }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[11px] text-muted-foreground">{label}</label>
+      <input type="number" value={value} min={min} max={max} step={step}
+        onChange={(e) => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+        className="h-8 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-violet-500" />
     </div>
   );
 }

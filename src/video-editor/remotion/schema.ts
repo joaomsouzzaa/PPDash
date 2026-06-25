@@ -38,6 +38,21 @@ export const wordSchema = z.object({
 
 export const assetsMapSchema = z.record(z.string(), z.string());
 
+// Estilo editável da legenda (CapCut).
+export const captionStyleSchema = z.object({
+  fontSize: z.number().default(86),
+  color: z.string().default("#FFFFFF"),          // palavra inativa
+  activeColor: z.string().default("#FFE600"),    // palavra ativa
+  bgColor: z.string().default("transparent"),    // fundo atrás do texto
+  borderColor: z.string().default("#000000"),    // contorno
+  borderWidth: z.number().default(5),            // espessura do contorno (px)
+  posicaoY: z.number().default(380),             // distância do rodapé (px)
+  palavrasPorPagina: z.number().default(3),
+  animar: z.boolean().default(true),             // "pop" da palavra ativa
+});
+export type CaptionStyle = z.infer<typeof captionStyleSchema>;
+export const CAPTION_STYLE_DEFAULT: CaptionStyle = captionStyleSchema.parse({});
+
 export const timelineSchema = z.object({
   video: z.string(),
   fps: z.number().default(30),
@@ -52,6 +67,7 @@ export const mainPropsSchema = z.object({
   assets: assetsMapSchema.default({}),
   mediaBase: z.string().default(""),
   preview: z.boolean().optional().default(false), // true no Player (usa <Video>); false no render
+  captionStyle: captionStyleSchema.optional(),
 });
 
 export type Layout = z.infer<typeof layoutSchema>;
@@ -88,6 +104,7 @@ export type EditorDoc = {
   videoPreview?: string;           // proxy leve para o preview no navegador (opcional)
   fps: number;
   durationInSeconds: number;
+  captionStyle?: CaptionStyle;     // estilo editável da legenda
 };
 
 // Deriva a timeline (segmentos contíguos) a partir dos clips de overlay.

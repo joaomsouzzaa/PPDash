@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import type { Clip } from "@/video-editor/remotion/schema";
+import { useRef, useMemo } from "react";
+import type { Clip, Word } from "@/video-editor/remotion/schema";
 
 const MIN_DUR = 0.3; // duração mínima de um clip (s)
 const LAYOUT_LABEL: Record<string, string> = {
@@ -16,13 +16,15 @@ const LAYOUT_COR: Record<string, string> = {
 };
 
 export function EditorTimeline({
-  clips, duration, currentTime, selectedId, pxs = 90,
+  clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs = 90,
   onSeek, onSelect, onUpdateClip,
 }: {
   clips: Clip[];
   duration: number;
   currentTime: number;
   selectedId: string | null;
+  words?: Word[];
+  palavrasPorPagina?: number;
   pxs?: number;
   onSeek: (t: number) => void;
   onSelect: (id: string | null) => void;
@@ -30,6 +32,22 @@ export function EditorTimeline({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const width = Math.max(1, duration) * pxs;
+
+  // Páginas de legenda (mesma lógica do Captions) para a faixa de legendas.
+  const legendas = useMemo(() => {
+    const pages: { start: number; end: number; texto: string }[] = [];
+    let cur: { start: number; end: number; texto: string } | null = null;
+    for (const w of words) {
+      const estoura = cur && (w.end - cur.start > 1.1);
+      if (!cur || cur.texto.split(" ").length >= Math.max(1, palavrasPorPagina) || estoura) {
+        cur = { start: w.start, end: w.end, texto: w.word };
+        pages.push(cur);
+      } else {
+        cur.texto += " " + w.word; cur.end = w.end;
+      }
+    }
+    return pages;
+  }, [words, palavrasPorPagina]);
 
   // Clica na régua/trilha para mover o playhead.
   const seekFromEvent = (clientX: number) => {
@@ -126,6 +144,25 @@ export function EditorTimeline({
               );
             })}
             {/* Playhead */}
+            <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
+          </div>
+
+          {/* Faixa de legendas (blocos por página) */}
+          <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Legendas</div>
+          <div className="relative h-8" style={{ width }}>
+            {legendas.map((p, i) => {
+              const left = p.start * pxs;
+              const w = Math.max(10, (p.end - p.start) * pxs);
+              const ativa = currentTime >= p.start && currentTime < p.end;
+              return (
+                <div key={i}
+                  className={`absolute top-1 h-6 rounded bg-fuchsia-700/70 ${ativa ? "ring-1 ring-white" : ""} overflow-hidden cursor-pointer`}
+                  style={{ left, width: w }} title={p.texto}
+                  onPointerDown={() => onSeek(p.start)}>
+                  <span className="px-1.5 text-[10px] text-white truncate inline-block max-w-full">{p.texto}</span>
+                </div>
+              );
+            })}
             <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
           </div>
         </div>

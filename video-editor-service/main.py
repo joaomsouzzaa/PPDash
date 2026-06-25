@@ -759,6 +759,8 @@ def processar_render(job_id: str):
         timeline = _clips_para_timeline(doc)
         props = {"timeline": timeline, "words": doc.get("words", []), "assets": doc.get("assets", {}),
                  "mediaBase": f"{INTERNAL_BASE}/work/{job_id}"}
+        if doc.get("captionStyle"):
+            props["captionStyle"] = doc["captionStyle"]
         props_path = workjob / "props.json"
         props_path.write_text(json.dumps(props), encoding="utf-8")
 
