@@ -74,8 +74,35 @@ def svc() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
+# Log de progresso ao vivo. Cada job roda no seu próprio processo (fork), então um
+# estado global por processo é seguro (1 job por processo).
+_JOBLOG = {"id": None, "linhas": [], "last": 0.0}
+
+
+def _log_reset(job_id: str):
+    _JOBLOG["id"] = job_id
+    _JOBLOG["linhas"] = []
+    _JOBLOG["last"] = 0.0
+
+
+def _log(db: Client, job_id: str, msg: str, etapa: str | None = None):
+    import time, datetime
+    _JOBLOG["linhas"].append({"t": datetime.datetime.now().strftime("%H:%M:%S"), "msg": msg})
+    upd = {"log": _JOBLOG["linhas"][-400:]}
+    if etapa is not None:
+        upd["etapa"] = etapa
+    now = time.time()
+    # grava sempre que muda a etapa; senão, no máximo a cada ~1.2s (não floodar o banco).
+    if etapa is not None or now - _JOBLOG["last"] > 1.2:
+        _JOBLOG["last"] = now
+        try:
+            db.table("video_jobs").update(upd).eq("id", job_id).execute()
+        except Exception:
+            pass
+
+
 def set_etapa(db: Client, job_id: str, etapa: str):
-    db.table("video_jobs").update({"etapa": etapa}).eq("id", job_id).execute()
+    _log(db, job_id, etapa, etapa=etapa)
 
 
 # ============================================================
@@ -124,6 +151,20 @@ def _dispatcher():
 
 
 _threading.Thread(target=_dispatcher, daemon=True).start()
+
+
+def _recuperar_orfaos():
+    """No boot, qualquer job 'processando'/'pendente' é órfão (o worker morreu com o reinício).
+    Marca como erro para o usuário não ficar achando que está processando."""
+    try:
+        svc().table("video_jobs").update(
+            {"status": "erro", "etapa": None, "erro": "Interrompido (serviço reiniciado). Reprocessar."}
+        ).in_("status", ["processando", "pendente"]).execute()
+    except Exception:
+        pass
+
+
+_recuperar_orfaos()
 
 
 def enqueue(kind: str, job_id: str, *args):
@@ -554,6 +595,7 @@ def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Pa
 def processar_job(job_id: str, brief: str, org_id: str):
     """Modo 'corte': só remove pausas/vícios e entrega o vídeo cortado."""
     db = svc()
+    _log_reset(job_id)
     src = input_path(job_id)
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     try:
@@ -565,6 +607,7 @@ def processar_job(job_id: str, brief: str, org_id: str):
         }).eq("id", job_id).execute()
         # Mantém a entrada para permitir reprocessar; o usuário libera espaço pela lixeira.
     except Exception as e:
+        _log(db, job_id, f"❌ erro: {str(e)[:300]}")
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
     finally:
         import shutil
@@ -619,6 +662,7 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
     from planner import gerar_timeline
 
     db = svc()
+    _log_reset(job_id)
     src = input_path(job_id)
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     workjob = WORK_DIR / job_id
@@ -643,7 +687,7 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
             preview = None  # se falhar, o preview usa o vídeo full
 
         set_etapa(db, job_id, "transcrevendo legendas")
-        transcript = transcrever_words(str(cut))
+        transcript = transcrever_words(str(cut), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
 
         set_etapa(db, job_id, "planejando layouts")
@@ -670,6 +714,7 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
         }).eq("id", job_id).execute()
         # Mantém entrada + /work (vídeo cortado + assets) para o editor e o render.
     except Exception as e:
+        _log(db, job_id, f"❌ erro: {str(e)[:300]}")
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -719,6 +764,7 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
     from transcribe_words import transcrever_words
 
     db = svc()
+    _log_reset(job_id)
     src = input_path(job_id)
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     workjob = WORK_DIR / job_id
@@ -739,7 +785,7 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         set_etapa(db, job_id, "preparando preview")
         prev_ok = _proxy_preview(cut, workjob / "talking_head_preview.mp4")
         set_etapa(db, job_id, "transcrevendo legendas")
-        transcript = transcrever_words(str(cut))
+        transcript = transcrever_words(str(cut), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
         transcript_txt = "\n".join(
             f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
@@ -791,6 +837,7 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         }
         db.table("video_jobs").update({"status": "editar", "etapa": None, "timeline": editor_doc, "erro": None}).eq("id", job_id).execute()
     except Exception as e:
+        _log(db, job_id, f"❌ erro: {str(e)[:300]}")
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -799,6 +846,7 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
 def processar_render(job_id: str):
     """FASE RENDER: lê o editor_doc (clips) do banco, deriva a timeline e renderiza o vídeo final."""
     db = svc()
+    _log_reset(job_id)
     workjob = WORK_DIR / job_id
     try:
         row = db.table("video_jobs").select("timeline").eq("id", job_id).maybe_single().execute()
@@ -829,6 +877,7 @@ def processar_render(job_id: str):
         }).eq("id", job_id).execute()
     except Exception as e:
         # volta para 'editar' para o usuário tentar de novo / ajustar
+        _log(db, job_id, f"❌ erro no render: {str(e)[:300]}")
         db.table("video_jobs").update({"status": "editar", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
 
 

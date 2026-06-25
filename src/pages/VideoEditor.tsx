@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Scissors, Upload, Download, RefreshCw, Film, AlertTriangle, Loader2, Clock, CheckCircle2,
-  Trash2, RotateCcw, HardDrive, Wand2, ImagePlus, X, Ban,
+  Trash2, RotateCcw, HardDrive, Wand2, ImagePlus, X, Ban, ScrollText,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -55,6 +56,7 @@ type VideoJob = {
   brief: string | null;
   status: "pendente" | "processando" | "pronto" | "erro" | "editar";
   etapa: string | null;
+  log: { t: string; msg: string }[] | null;
   modo: "corte" | "completo" | null;
   resultado_url: string | null;
   erro: string | null;
@@ -78,6 +80,7 @@ export default function VideoEditor() {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [progresso, setProgresso] = useState<number | null>(null); // % de upload (null = sem upload em curso)
+  const [logId, setLogId] = useState<string | null>(null); // job com o log aberto
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -125,6 +128,8 @@ export default function VideoEditor() {
   const pct = (e: string) => { const m = e.match(/\((\d+)%\)/); return m ? Number(m[1]) : null; };
   const pctEtapa = (etapa: string | null, modo: VideoJob["modo"]): number => {
     const e = (etapa || "").toLowerCase();
+    const pctReal = e.match(/\((\d+)%\)/);   // % real embutido (transcrição/render/cortando)
+    if (pctReal) return Number(pctReal[1]);
     if (e.includes("conclu")) return 100;
     if (modo === "completo") {
       if (e.includes("transcrevendo áudio") || e.includes("transcrevendo audio")) return 8;
@@ -391,6 +396,9 @@ export default function VideoEditor() {
                         </Badge>
                         <span className="flex-1 min-w-0 truncate text-sm font-medium">{j.nome || "vídeo"}</span>
                         <span className="text-xs text-muted-foreground hidden sm:inline">{new Date(j.created_at).toLocaleString("pt-BR")}</span>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver log" onClick={() => setLogId(j.id)}>
+                          <ScrollText className="h-4 w-4" />
+                        </Button>
                         {(j.status === "processando" || j.status === "pendente") && (
                           <Button variant="ghost" size="sm" className="h-8 text-destructive" title="Cancelar processamento" onClick={() => cancelar(j)}>
                             <Ban className="h-4 w-4 mr-1" /> Cancelar
@@ -447,6 +455,32 @@ export default function VideoEditor() {
           </div>
         </main>
       </div>
+
+      {/* Popup de log ao vivo */}
+      <Dialog open={!!logId} onOpenChange={(o) => !o && setLogId(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base"><ScrollText className="h-4 w-4" /> Log do processamento</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const j = jobs.find((x) => x.id === logId);
+            const linhas = j?.log || [];
+            return (
+              <div className="max-h-[60vh] overflow-y-auto rounded-md border bg-background/50 p-3 font-mono text-xs space-y-1">
+                {linhas.length === 0 && <p className="text-muted-foreground">Sem registros ainda…</p>}
+                {linhas.map((l, i) => (
+                  <div key={i} className={l.msg.startsWith("❌") ? "text-destructive" : ""}>
+                    <span className="text-muted-foreground">{l.t}</span> · {l.msg}
+                  </div>
+                ))}
+                {j && (j.status === "processando" || j.status === "pendente") && (
+                  <div className="text-muted-foreground animate-pulse">▶ {j.etapa || "na fila"}…</div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   );
 }

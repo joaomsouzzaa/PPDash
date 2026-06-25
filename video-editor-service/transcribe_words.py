@@ -26,16 +26,19 @@ def _get_model():
     return _model
 
 
-def transcrever_words(video_path: str, language: str | None = None) -> dict:
+def transcrever_words(video_path: str, language: str | None = None, on_progress=None) -> dict:
+    """on_progress(pct:int) é chamado conforme a transcrição avança (segment.end / duração)."""
     model = _get_model()
-    segments, _info = model.transcribe(
+    segments, info = model.transcribe(
         video_path,
         language=language,            # None = autodetecta (PT detectado normalmente)
         word_timestamps=True,
         vad_filter=True,              # ignora silêncios longos
     )
+    dur = float(getattr(info, "duration", 0) or 0)
     out_segments = []
-    for seg in segments:
+    ultimo = -1
+    for seg in segments:  # gerador: itera conforme transcreve
         words = [
             {"word": w.word.strip(), "start": round(w.start, 3), "end": round(w.end, 3)}
             for w in (seg.words or []) if w.word and w.word.strip()
@@ -46,6 +49,12 @@ def transcrever_words(video_path: str, language: str | None = None) -> dict:
             "text": seg.text.strip(),
             "words": words,
         })
+        if on_progress and dur > 0:
+            pct = min(99, int(seg.end / dur * 100))
+            if pct != ultimo:
+                ultimo = pct
+                try: on_progress(pct)
+                except Exception: pass
     return {"segments": out_segments}
 
 

@@ -1980,6 +1980,7 @@ export type Database = {
           erro: string | null
           etapa: string | null
           id: string
+          log: Json | null
           modo: string
           nome: string | null
           org_id: string | null
@@ -1997,6 +1998,7 @@ export type Database = {
           erro?: string | null
           etapa?: string | null
           id?: string
+          log?: Json | null
           modo?: string
           nome?: string | null
           org_id?: string | null
@@ -2014,6 +2016,7 @@ export type Database = {
           erro?: string | null
           etapa?: string | null
           id?: string
+          log?: Json | null
           modo?: string
           nome?: string | null
           org_id?: string | null
