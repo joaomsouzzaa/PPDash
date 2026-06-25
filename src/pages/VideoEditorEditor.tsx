@@ -92,8 +92,21 @@ export default function VideoEditorEditor() {
   const setCapStyle = useCallback((patch: Partial<CaptionStyle>) => {
     setDoc((d) => (d ? { ...d, captionStyle: { ...CAPTION_STYLE_DEFAULT, ...(d.captionStyle || {}), ...patch } } : d));
   }, []);
-  const setWordText = useCallback((i: number, text: string) => {
-    setDoc((d) => (d ? { ...d, words: d.words.map((w, k) => (k === i ? { ...w, word: text } : w)) } : d));
+  // Edita a legenda de uma página (duplo-clique no bloco da timeline): distribui o texto
+  // editado entre as palavras daquela frase, mantendo os timestamps.
+  const editCaption = useCallback((indices: number[], texto: string) => {
+    const tokens = texto.trim().split(/\s+/).filter(Boolean);
+    setDoc((d) => {
+      if (!d) return d;
+      const words = [...d.words];
+      indices.forEach((gi, k) => {
+        const novo = k < tokens.length
+          ? (k === indices.length - 1 ? tokens.slice(k).join(" ") : tokens[k])  // último recebe o resto
+          : "";
+        words[gi] = { ...words[gi], word: novo };
+      });
+      return { ...d, words };
+    });
   }, []);
 
   const addClip = (assetId: string) => {
@@ -230,6 +243,7 @@ export default function VideoEditorEditor() {
             onSeek={seek}
             onSelect={setSelectedId}
             onUpdateClip={updateClip}
+            onEditCaption={editCaption}
           />
 
           {/* Galeria de assets */}
@@ -275,19 +289,9 @@ export default function VideoEditorEditor() {
               Animar palavra ativa (pop)
             </label>
 
-            <p className="text-xs text-muted-foreground pt-1">Corrigir texto (pontuação / palavra errada):</p>
-            <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto rounded border p-2 bg-background/40">
-              {doc.words.map((w, i) => (
-                <input
-                  key={i}
-                  value={w.word}
-                  onChange={(e) => setWordText(i, e.target.value)}
-                  className="rounded bg-muted px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-violet-500"
-                  style={{ width: `${Math.max(3, w.word.length + 1)}ch` }}
-                />
-              ))}
-              {doc.words.length === 0 && <span className="text-xs text-muted-foreground">Sem legenda detectada.</span>}
-            </div>
+            <p className="text-xs text-muted-foreground pt-1">
+              ✏️ Para corrigir o texto, dê <b>duplo-clique</b> no bloco da legenda na timeline (faixa "Legendas") e digite a correção.
+            </p>
           </div>
         </div>
       </div>

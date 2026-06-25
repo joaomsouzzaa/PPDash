@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useState } from "react";
 import type { Clip, Word } from "@/video-editor/remotion/schema";
 
 const MIN_DUR = 0.3; // duração mínima de um clip (s)
@@ -17,7 +17,7 @@ const LAYOUT_COR: Record<string, string> = {
 
 export function EditorTimeline({
   clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs = 90,
-  onSeek, onSelect, onUpdateClip,
+  onSeek, onSelect, onUpdateClip, onEditCaption,
 }: {
   clips: Clip[];
   duration: number;
@@ -29,25 +29,33 @@ export function EditorTimeline({
   onSeek: (t: number) => void;
   onSelect: (id: string | null) => void;
   onUpdateClip: (id: string, patch: Partial<Clip>) => void;
+  onEditCaption?: (indices: number[], texto: string) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const width = Math.max(1, duration) * pxs;
+  const [editPage, setEditPage] = useState<number | null>(null);  // índice da página em edição
+  const [editText, setEditText] = useState("");
 
-  // Páginas de legenda (mesma lógica do Captions) para a faixa de legendas.
+  // Páginas de legenda (mesma lógica do Captions) — com os índices globais das palavras.
   const legendas = useMemo(() => {
-    const pages: { start: number; end: number; texto: string }[] = [];
-    let cur: { start: number; end: number; texto: string } | null = null;
-    for (const w of words) {
+    const pages: { start: number; end: number; texto: string; indices: number[] }[] = [];
+    let cur: typeof pages[number] | null = null;
+    words.forEach((w, gi) => {
       const estoura = cur && (w.end - cur.start > 1.1);
-      if (!cur || cur.texto.split(" ").length >= Math.max(1, palavrasPorPagina) || estoura) {
-        cur = { start: w.start, end: w.end, texto: w.word };
+      if (!cur || cur.indices.length >= Math.max(1, palavrasPorPagina) || estoura) {
+        cur = { start: w.start, end: w.end, texto: w.word, indices: [gi] };
         pages.push(cur);
       } else {
-        cur.texto += " " + w.word; cur.end = w.end;
+        cur.texto += " " + w.word; cur.end = w.end; cur.indices.push(gi);
       }
-    }
+    });
     return pages;
   }, [words, palavrasPorPagina]);
+
+  const commitEdit = () => {
+    if (editPage !== null && onEditCaption) onEditCaption(legendas[editPage].indices, editText);
+    setEditPage(null);
+  };
 
   // Clica na régua/trilha para mover o playhead.
   const seekFromEvent = (clientX: number) => {
@@ -152,14 +160,29 @@ export function EditorTimeline({
           <div className="relative h-8" style={{ width }}>
             {legendas.map((p, i) => {
               const left = p.start * pxs;
-              const w = Math.max(10, (p.end - p.start) * pxs);
+              const w = Math.max(40, (p.end - p.start) * pxs);
               const ativa = currentTime >= p.start && currentTime < p.end;
+              const editando = editPage === i;
               return (
                 <div key={i}
-                  className={`absolute top-1 h-6 rounded bg-fuchsia-700/70 ${ativa ? "ring-1 ring-white" : ""} overflow-hidden cursor-pointer`}
-                  style={{ left, width: w }} title={p.texto}
-                  onPointerDown={() => onSeek(p.start)}>
-                  <span className="px-1.5 text-[10px] text-white truncate inline-block max-w-full">{p.texto}</span>
+                  className={`absolute top-1 h-6 rounded bg-fuchsia-700/70 ${ativa ? "ring-1 ring-white" : ""} ${editando ? "ring-2 ring-yellow-400" : ""} overflow-hidden`}
+                  style={{ left, width: editando ? Math.max(w, 180) : w, zIndex: editando ? 20 : 1 }}
+                  title={editando ? "" : `${p.texto}  (duplo-clique para editar)`}
+                  onClick={() => !editando && onSeek(p.start)}
+                  onDoubleClick={(e) => { e.stopPropagation(); setEditPage(i); setEditText(p.texto); onSeek(p.start); }}
+                >
+                  {editando ? (
+                    <input
+                      autoFocus
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitEdit(); } if (e.key === "Escape") setEditPage(null); }}
+                      className="h-full w-full bg-fuchsia-950 px-1.5 text-[11px] text-white outline-none"
+                    />
+                  ) : (
+                    <span className="px-1.5 text-[10px] text-white truncate inline-block max-w-full leading-6">{p.texto}</span>
+                  )}
                 </div>
               );
             })}
