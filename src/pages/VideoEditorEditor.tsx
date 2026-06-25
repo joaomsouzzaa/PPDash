@@ -186,6 +186,21 @@ export default function VideoEditorEditor() {
     setSelectedId(null);
   };
 
+  // Divide o clipe de b-roll selecionado no playhead (vira dois).
+  const splitClip = (id: string) => {
+    setClips((cs) => {
+      const i = cs.findIndex((c) => c.id === id);
+      if (i < 0) return cs;
+      const c = cs[i];
+      if (currentTime <= c.start + 0.1 || currentTime >= c.end - 0.1) { toast.error("Posicione o playhead dentro do clipe."); return cs; }
+      const a = { ...c, id: `${c.id}a`, end: round3(currentTime) };
+      const b = { ...c, id: `${c.id}b`, start: round3(currentTime) };
+      const novo = [...cs]; novo.splice(i, 1, a, b);
+      return novo;
+    });
+  };
+  const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
   const seek = (t: number) => {
     setCurrentTime(t);
     playerRef.current?.seekTo(Math.round(t * fps));
@@ -281,14 +296,46 @@ export default function VideoEditorEditor() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1 w-[180px]">
-                <label className="text-[11px] text-muted-foreground flex items-center justify-between">
-                  <span>Enquadramento (vertical)</span><span>{(selected.cropY ?? 50) <= 33 ? "topo" : (selected.cropY ?? 50) >= 66 ? "base" : "centro"}</span>
-                </label>
-                <input type="range" min={0} max={100} value={selected.cropY ?? 50}
-                  onChange={(e) => updateClip(selected.id, { cropY: Number(e.target.value) })} className="w-full" />
-              </div>
+              {/* Proporção do split (só nos layouts split) */}
+              {(["split_horizontal", "split_bottom", "split_vertical"] as string[]).includes(selected.layout) && (
+                <div className="space-y-1 w-[170px]">
+                  <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                    <span>Divisão (vídeo principal)</span><span>{Math.round((selected.splitRatio ?? 0.6) * 100)}%</span>
+                  </label>
+                  <input type="range" min={20} max={80} value={Math.round((selected.splitRatio ?? 0.6) * 100)}
+                    onChange={(e) => updateClip(selected.id, { splitRatio: Number(e.target.value) / 100 })} className="w-full" />
+                </div>
+              )}
+              {/* Recorte (zoom + posição) do b-roll */}
+              {(() => {
+                const cr = selected.crop; const w = cr?.w ?? 1;
+                const zoom = Math.round((1 / w) * 100);
+                const maxX = Math.max(0, 1 - w), maxY = Math.max(0, 1 - (cr?.h ?? 1));
+                const posX = maxX > 0 ? Math.round(((cr?.x ?? 0) / maxX) * 100) : 50;
+                const posY = maxY > 0 ? Math.round(((cr?.y ?? 0) / maxY) * 100) : 50;
+                const setCrop = (zz: number, px: number, py: number) => {
+                  const ww = 1 / (zz / 100), hh = ww;
+                  const mx = Math.max(0, 1 - ww), my = Math.max(0, 1 - hh);
+                  if (zz <= 100) updateClip(selected.id, { crop: undefined });
+                  else updateClip(selected.id, { crop: { x: round3(mx * px / 100), y: round3(my * py / 100), w: round3(ww), h: round3(hh) } });
+                };
+                return (
+                  <div className="space-y-1 w-[200px]">
+                    <label className="text-[11px] text-muted-foreground flex items-center justify-between"><span>Recorte (zoom)</span><span>{zoom}%</span></label>
+                    <input type="range" min={100} max={300} value={zoom} onChange={(e) => setCrop(Number(e.target.value), posX, posY)} className="w-full" />
+                    {zoom > 100 && (
+                      <div className="flex gap-2">
+                        <div className="flex-1"><span className="text-[10px] text-muted-foreground">Posição ↔</span>
+                          <input type="range" min={0} max={100} value={posX} onChange={(e) => setCrop(zoom, Number(e.target.value), posY)} className="w-full" /></div>
+                        <div className="flex-1"><span className="text-[10px] text-muted-foreground">Posição ↕</span>
+                          <input type="range" min={0} max={100} value={posY} onChange={(e) => setCrop(zoom, posX, Number(e.target.value))} className="w-full" /></div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="text-xs text-muted-foreground">{fmt(selected.start)} – {fmt(selected.end)}</div>
+              <Button variant="outline" size="sm" onClick={() => splitClip(selected.id)}>✂ Dividir</Button>
               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeClip(selected.id)}>
                 <Trash2 className="h-4 w-4 mr-1" /> Remover
               </Button>

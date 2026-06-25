@@ -648,7 +648,8 @@ def _clips_para_timeline(doc: dict) -> dict:
             continue
         if start > cursor:
             segs.append({"start": cursor, "end": start, "layout": "talking_full", "asset": None})
-        segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"], "cropY": c.get("cropY")})
+        segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"],
+                     "cropY": c.get("cropY"), "crop": c.get("crop"), "splitRatio": c.get("splitRatio")})
         cursor = end
     if cursor < dur:
         segs.append({"start": cursor, "end": dur, "layout": "talking_full", "asset": None})
@@ -721,7 +722,8 @@ def _montar_timeline(doc: dict):
             ss = m["sourceStart"] + (a - m["outStart"])
             segs.append({"start": round(ss, 3), "end": round(ss + (b - a), 3),
                          "layout": ov["layout"] if ov else "talking_full", "asset": ov["asset"] if ov else None,
-                         "cropY": ov.get("cropY") if ov else None})
+                         "cropY": ov.get("cropY") if ov else None,
+                         "crop": ov.get("crop") if ov else None, "splitRatio": ov.get("splitRatio") if ov else None})
     if not segs:
         segs = [{"start": 0, "end": max(0.1, dur), "layout": "talking_full", "asset": None}]
     words = []
@@ -976,6 +978,8 @@ def processar_render(job_id: str):
             props["videoVolume"] = doc["videoVolume"]
         if doc.get("music"):
             props["music"] = doc["music"]
+        if doc.get("musicClips"):
+            props["musicClips"] = doc["musicClips"]
         props_path = workjob / "props.json"
         props_path.write_text(json.dumps(props), encoding="utf-8")
 

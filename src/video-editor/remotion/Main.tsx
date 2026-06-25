@@ -15,10 +15,13 @@ const CORNER_STYLE: Record<string, React.CSSProperties> = {
   "bottom-right": { bottom: 420, right: 48 },
 };
 
-export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle, videoVolume, music }) => {
+export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle, videoVolume, music, musicClips }) => {
   const fps = timeline.fps || FPS_FALLBACK;
   const videoSrc = url(mediaBase, timeline.video);
-  const musicSrc = music?.asset ? url(mediaBase, music.asset) : null;
+  // Música: lista de pedaços (musicClips) tem prioridade; senão a música única (legado).
+  const trilhas = (musicClips && musicClips.length)
+    ? musicClips
+    : (music?.asset ? [{ id: "m0", asset: music.asset, start: music.start || 0, end: (timeline.durationInSeconds || 0), sourceStart: 0, volume: music.volume ?? 0.5 }] : []);
   const assetUrl = (id: string | null | undefined): string | null =>
     id && assets[id] ? url(mediaBase, assets[id]) : null;
   const isVideoAsset = (s: string | null) => !!s && VIDEO_EXT.test(s);
@@ -39,6 +42,8 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
             preview,
             videoVolume: videoVolume ?? 1,
             cropY: seg.cropY,
+            crop: seg.crop as any,
+            splitRatio: seg.splitRatio,
           };
           return (
             <Series.Sequence key={i} durationInFrames={durFrames}>
@@ -63,12 +68,16 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
         );
       })}
 
-      {/* Música (faixa de áudio) a partir do início definido, no volume escolhido */}
-      {musicSrc && (
-        <Sequence from={Math.round((music?.start || 0) * fps)}>
-          <Audio src={musicSrc} volume={music?.volume ?? 0.5} loop />
-        </Sequence>
-      )}
+      {/* Música em pedaços (cada um com início/fim/volume próprios) */}
+      {trilhas.map((m) => {
+        const from = Math.round((m.start || 0) * fps);
+        const dur = Math.max(1, Math.round(((m.end || 0) - (m.start || 0)) * fps));
+        return (
+          <Sequence key={m.id} from={from} durationInFrames={dur}>
+            <Audio src={url(mediaBase, m.asset)} volume={m.volume ?? 0.5} trimBefore={Math.round((m.sourceStart || 0) * fps)} />
+          </Sequence>
+        );
+      })}
 
       {/* Legenda animada palavra-a-palavra sobre tudo */}
       <Captions words={words} style={captionStyle} />

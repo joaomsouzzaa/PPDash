@@ -23,6 +23,8 @@ export const segmentSchema = z.object({
   asset: z.string().nullable().default(null),
   asset2: z.string().nullable().optional().default(null),
   cropY: z.number().optional(),   // posição vertical do asset (0=topo, 100=base; default 50)
+  crop: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(), // recorte livre (frações 0–1)
+  splitRatio: z.number().optional(), // fração do vídeo principal no split (default 0.6)
 });
 
 export const stickerSchema = z.object({
@@ -63,6 +65,15 @@ export const musicSchema = z.object({
 });
 export type Music = z.infer<typeof musicSchema>;
 
+export const musicClipSchema = z.object({
+  id: z.string(),
+  asset: z.string(),
+  start: z.number(),
+  end: z.number(),
+  sourceStart: z.number().optional().default(0),
+  volume: z.number().optional().default(0.5),
+});
+
 export const timelineSchema = z.object({
   video: z.string(),
   fps: z.number().default(30),
@@ -80,6 +91,7 @@ export const mainPropsSchema = z.object({
   captionStyle: captionStyleSchema.optional(),
   videoVolume: z.number().optional().default(1),  // volume do áudio original (0–1)
   music: musicSchema.nullable().optional().default(null),
+  musicClips: z.array(musicClipSchema).optional(),
 });
 
 export type Layout = z.infer<typeof layoutSchema>;
@@ -107,6 +119,18 @@ export type Clip = {
   start: number;     // segundos
   end: number;       // segundos
   cropY?: number;    // posição vertical do asset (0=topo, 100=base; default 50)
+  crop?: { x: number; y: number; w: number; h: number }; // recorte livre (frações 0–1 do asset)
+  splitRatio?: number; // fração do vídeo principal no split (default 0.6)
+};
+
+// Faixa de música como LISTA (permite cortar/dividir em pedaços).
+export type MusicClip = {
+  id: string;
+  asset: string;       // caminho relativo
+  start: number;       // início na timeline (s)
+  end: number;         // fim na timeline (s)
+  sourceStart?: number;// offset dentro do áudio (s)
+  volume?: number;     // 0–1
 };
 
 // Corte editável (Fase 3): trecho mantido do vídeo ORIGINAL.
@@ -127,7 +151,8 @@ export type EditorDoc = {
   durationInSeconds: number;
   captionStyle?: CaptionStyle;     // estilo editável da legenda
   videoVolume?: number;            // volume do áudio original (0–1)
-  music?: Music | null;            // faixa de música
+  music?: Music | null;            // faixa de música (legado — 1 peça)
+  musicClips?: MusicClip[];        // faixa de música em pedaços (cortável)
   // Fase 3 (cortes como clipes). Quando presente, a timeline é montada a partir destes.
   videoSegments?: VideoSegment[];  // trechos mantidos do ORIGINAL, em ordem
   originalDuration?: number;       // duração do vídeo original (s) — limite do "aparar pra mais"
@@ -145,7 +170,7 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
     const end = Math.min(dur, c.end);
     if (end <= start) continue;
     if (start > cursor) segments.push({ start: cursor, end: start, layout: "talking_full", asset: null });
-    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY });
+    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY, crop: c.crop, splitRatio: c.splitRatio });
     cursor = end;
   }
   if (cursor < dur) segments.push({ start: cursor, end: dur, layout: "talking_full", asset: null });
@@ -188,7 +213,7 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
       if (b - a < 0.02) continue;
       const ov = overlayEm((a + b) / 2);
       const srcStart = m.sourceStart + (a - m.outStart);
-      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY });
+      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY, crop: ov?.crop, splitRatio: ov?.splitRatio });
     }
   }
   if (!segments.length) segments.push({ start: 0, end: Math.max(0.1, durationInSeconds), layout: "talking_full", asset: null });
