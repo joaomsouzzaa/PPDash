@@ -35,6 +35,7 @@ import uuid
 import anthropic
 from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from supabase import Client, create_client
 
@@ -50,6 +51,8 @@ WORK_DIR = pathlib.Path(os.environ.get("WORK_DIR", str(OUTPUT_DIR.parent / "work
 REMOTION_DIR = pathlib.Path(os.environ.get("REMOTION_DIR", "./remotion")).resolve()
 # Base http que o render do Remotion (mesmo host) usa para carregar as mídias do job.
 INTERNAL_BASE = os.environ.get("INTERNAL_BASE", "http://127.0.0.1:8080")
+# Cookies do Instagram (Netscape cookies.txt) para o yt-dlp baixar Reels que exigem login.
+COOKIES_FILE = pathlib.Path(os.environ.get("YTDLP_COOKIES", str(OUTPUT_DIR.parent / "cookies.txt")))
 MODEL = "claude-opus-4-8"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -231,55 +234,85 @@ async def editar(
     return {"ok": True, "job_id": job_id, "status": "processando"}
 
 
+def _baixar_referencia(url: str, out_tmpl: str) -> str:
+    """Baixa o vídeo com yt-dlp; usa cookies do Instagram (se houver) e tenta driblar o bloqueio.
+    Retorna a mensagem de erro (string) em caso de falha; '' se ok."""
+    import glob
+    common = ["-f", "mp4/best", "-o", out_tmpl, "--no-warnings"]
+    if COOKIES_FILE.exists():
+        common += ["--cookies", str(COOKIES_FILE)]
+    erro = ""
+    for extra in (["--impersonate", "chrome"], []):  # 1ª tentativa com impersonate; fallback sem
+        p = subprocess.run(["yt-dlp", *extra, *common, url], capture_output=True, text=True)
+        if p.returncode == 0:
+            return ""
+        erro = (p.stderr or p.stdout or "").strip()
+        if "impersonate" not in erro.lower():  # erro não é por causa do impersonate → não adianta repetir
+            break
+    return erro
+
+
 @app.post("/analisar-referencia")
 def analisar_referencia(body: dict, authorization: str = Header(default="")):
-    """v3 Fase 3A: baixa um vídeo de referência, analisa (frames + transcrição) e devolve
-    roteiro adaptado ao cliente + plano de inserções (onde/quando cada b-roll/print aparece)."""
+    """v3 Fase 3A (streaming NDJSON com progresso): baixa a referência, analisa e devolve
+    roteiro + plano (ou resposta livre no modo watch)."""
     exigir_usuario(authorization)
     ref_url = (body or {}).get("ref_url")
     org_id = (body or {}).get("org_id")
     agente_slug = (body or {}).get("agente_slug")
-    modo = (body or {}).get("modo") or "roteiro"   # "roteiro" | "watch"
+    modo = (body or {}).get("modo") or "roteiro"
     pergunta = (body or {}).get("pergunta") or ""
     if not ref_url:
         raise HTTPException(400, "ref_url obrigatório")
 
-    import base64, glob
-    from transcribe_words import transcrever_words
+    def gen():
+        import base64, glob
+        from transcribe_words import transcrever_words
+        try:
+            ref_id = str(uuid.uuid4())
+            refdir = WORK_DIR / "ref" / ref_id
+            framesdir = refdir / "frames"
+            framesdir.mkdir(parents=True, exist_ok=True)
 
-    ref_id = str(uuid.uuid4())
-    refdir = WORK_DIR / "ref" / ref_id
-    framesdir = refdir / "frames"
-    framesdir.mkdir(parents=True, exist_ok=True)
+            yield json.dumps({"pct": 8, "etapa": "baixando vídeo"}) + "\n"
+            erro = _baixar_referencia(ref_url, str(refdir / "ref.%(ext)s"))
+            cand = glob.glob(str(refdir / "ref.*"))
+            ref_file = next((c for c in cand if not c.endswith(".jpg")), None)
+            if not ref_file:
+                login = "login" in erro.lower() or "cookies" in erro.lower()
+                msg = ("Esse Instagram exige login para baixar. Configure os cookies do Instagram na VPS (me avise) "
+                       "ou tente um link público (YouTube/TikTok)." if login else f"Falha ao baixar: {erro[-200:] or 'erro yt-dlp'}")
+                yield json.dumps({"erro": msg}) + "\n"
+                return
 
-    # 1) Baixa a referência (yt-dlp) — guarda para o 3B.
-    try:
-        subprocess.run(
-            ["yt-dlp", "-f", "mp4/best", "-o", str(refdir / "ref.%(ext)s"), ref_url],
-            capture_output=True, text=True, check=True, timeout=300,
-        )
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(422, f"Não consegui baixar o vídeo: {e.stderr[-200:] if e.stderr else 'erro yt-dlp'}")
-    cand = glob.glob(str(refdir / "ref.*"))
-    ref_file = next((c for c in cand if not c.endswith(".jpg")), None)
-    if not ref_file:
-        raise HTTPException(422, "Download não produziu arquivo de vídeo")
+            yield json.dumps({"pct": 32, "etapa": "extraindo frames"}) + "\n"
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", ref_file, "-vf", "fps=1/2,scale=512:-2", "-frames:v", "24", str(framesdir / "f%04d.jpg")],
+                capture_output=True, text=True,
+            )
+            frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:24]
 
-    # 2) Frames (1 a cada 2s, máx 24) + transcrição word-level.
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", ref_file, "-vf", "fps=1/2,scale=512:-2", "-frames:v", "24", str(framesdir / "f%04d.jpg")],
-        capture_output=True, text=True,
-    )
-    frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:24]
-    try:
-        transcript = transcrever_words(ref_file)
-    except Exception:
-        transcript = {"segments": []}
-    transcript_txt = "\n".join(
-        f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
-        for s in transcript.get("segments", [])
-    )
+            yield json.dumps({"pct": 45, "etapa": "transcrevendo áudio"}) + "\n"
+            try:
+                transcript = transcrever_words(ref_file)
+            except Exception:
+                transcript = {"segments": []}
+            transcript_txt = "\n".join(
+                f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
+                for s in transcript.get("segments", [])
+            )
 
+            yield json.dumps({"pct": 70, "etapa": "analisando com IA"}) + "\n"
+            for linha in _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt):
+                yield linha
+        except Exception as e:
+            yield json.dumps({"erro": str(e)[:300]}) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt):
+    import base64
     # 3) Persona do agente + base de conhecimento da org (mesmo padrão do agente-chat).
     db = svc()
     persona = ""
@@ -338,7 +371,9 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
     texto = "".join(b.text for b in resp.content if b.type == "text").strip()
 
     if modo == "watch":
-        return {"ok": True, "ref_id": ref_id, "ref_url": ref_url, "resposta": texto, "base_vazia": base_vazia}
+        yield json.dumps({"pct": 100, "etapa": "concluído", "ok": True, "ref_id": ref_id,
+                          "ref_url": ref_url, "resposta": texto, "base_vazia": base_vazia}) + "\n"
+        return
 
     # Extrai o bloco ```json (insertion_plan); o resto é o roteiro em markdown.
     insertion_plan = []
@@ -350,11 +385,11 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
         except Exception:
             insertion_plan = []
         roteiro = texto[:m.start()].strip()  # tudo antes do json = roteiro markdown
-    return {
-        "ok": True, "ref_id": ref_id, "ref_url": ref_url,
+    yield json.dumps({
+        "pct": 100, "etapa": "concluído", "ok": True, "ref_id": ref_id, "ref_url": ref_url,
         "roteiro": roteiro, "insertion_plan": insertion_plan,
         "transcript": transcript_txt, "base_vazia": base_vazia,
-    }
+    }) + "\n"
 
 
 @app.post("/montar-edicao")

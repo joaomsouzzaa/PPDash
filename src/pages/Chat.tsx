@@ -9,6 +9,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
+import { analisarReferenciaStream } from "@/lib/videoAnalise";
 import { useSpeechToText } from "@/hooks/use-speech-to-text";
 import { BaseConhecimentoDialog } from "@/components/BaseConhecimentoDialog";
 import { getTenantSlug } from "@/lib/tenant";
@@ -81,16 +82,11 @@ export default function Chat() {
   const analisarVideo = async (convId: string, url: string) => {
     setPensando(agenteAtual?.nome || "Agente");
     setVerbo("executando");
-    if (!SERVICE_URL_VE) throw new Error("Serviço de vídeo não configurado (VITE_VIDEO_EDITOR_URL).");
     const orgId = await getOrgId();
-    const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-    const res = await fetch(`${SERVICE_URL_VE}/analisar-referencia`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ ref_url: url, org_id: orgId, agente_slug: agenteAtual?.slug }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha ao analisar o vídeo (${res.status})`);
+    const data = await analisarReferenciaStream(
+      { ref_url: url, org_id: orgId, agente_slug: agenteAtual?.slug },
+      (p) => setPensando(`${p.etapa} ${p.pct}%`),
+    );
 
     const roteiro: string = data.roteiro || "(sem roteiro)";
     const plano: any[] = Array.isArray(data.insertion_plan) ? data.insertion_plan : [];
@@ -126,16 +122,11 @@ export default function Chat() {
   const assistirVideo = async (convId: string, url: string, pergunta: string) => {
     setPensando(agenteAtual?.nome || "Agente");
     setVerbo("executando");
-    if (!SERVICE_URL_VE) throw new Error("Serviço de vídeo não configurado.");
     const orgId = await getOrgId();
-    const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-    const res = await fetch(`${SERVICE_URL_VE}/analisar-referencia`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ ref_url: url, org_id: orgId, agente_slug: agenteAtual?.slug, modo: "watch", pergunta }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha ao assistir (${res.status})`);
+    const data = await analisarReferenciaStream(
+      { ref_url: url, org_id: orgId, agente_slug: agenteAtual?.slug, modo: "watch", pergunta },
+      (p) => setPensando(`${p.etapa} ${p.pct}%`),
+    );
     const conteudo = data.resposta || "(sem resposta)";
     setMessages((prev) => [...prev, { role: "assistant", conteudo }]);
     await supabase.from("mensagens").insert({ conversa_id: convId, role: "assistant", conteudo });

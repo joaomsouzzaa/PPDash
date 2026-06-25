@@ -17,6 +17,7 @@ import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDo
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
+import { analisarReferenciaStream } from "@/lib/videoAnalise";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -862,6 +863,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [analisando, setAnalisando] = useState(false);
+  const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
   const [driveUrl, setDriveUrl] = useState("");
   const [fonte, setFonte] = useState<"literal" | "assets">("literal");
   const [montando, setMontando] = useState(false);
@@ -935,22 +937,17 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     if (!url.trim()) { toast.error("Cole o link do vídeo de referência."); return; }
     if (!SERVICE_URL_VE) { toast.error("Serviço de vídeo não configurado."); return; }
     setAnalisando(true);
+    setProg({ pct: 0, etapa: "iniciando" });
     try {
       const orgId = await getOrgId();
-      const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-      // busca o slug do agente do card (se houver) para usar a persona certa
       let agente_slug: string | undefined;
       if (agenteId) {
         const { data: ag } = await db.from("agentes").select("slug").eq("id", agenteId).maybeSingle();
         agente_slug = ag?.slug || undefined;
       }
-      const res = await fetch(`${SERVICE_URL_VE}/analisar-referencia`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ref_url: url.trim(), org_id: orgId, agente_slug }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha (${res.status})`);
+      const data = await analisarReferenciaStream(
+        { ref_url: url.trim(), org_id: orgId, agente_slug }, setProg,
+      );
       const video_ref = {
         ref_url: url.trim(), ref_id: data.ref_id, roteiro: data.roteiro,
         insertion_plan: data.insertion_plan || [], transcript: data.transcript || "",
@@ -966,6 +963,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       toast.error(e instanceof Error ? e.message : "Falha ao analisar a referência.");
     } finally {
       setAnalisando(false);
+      setProg(null);
     }
   };
 
@@ -976,9 +974,17 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Cole o link (Instagram, YouTube, TikTok…)" className="text-sm" />
         <Button onClick={analisar} disabled={analisando} size="sm">
           {analisando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-          {analisando ? "Analisando…" : "Analisar referência"}
+          {analisando ? (prog ? `${prog.pct}%` : "Analisando…") : "Analisar referência"}
         </Button>
       </div>
+      {analisando && prog && (
+        <div className="space-y-1">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${prog.pct}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground capitalize">{prog.etapa}… {prog.pct}%</p>
+        </div>
+      )}
       {ref?.roteiro && (
         <div className="space-y-2 rounded-md border p-3 text-sm">
           <p className="text-xs font-semibold text-muted-foreground">ROTEIRO ADAPTADO</p>
