@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState } from "react";
-import type { Clip, Word } from "@/video-editor/remotion/schema";
+import type { Clip, Word, Music } from "@/video-editor/remotion/schema";
 
 const MIN_DUR = 0.3; // duração mínima de um clip (s)
 const LAYOUT_LABEL: Record<string, string> = {
@@ -17,7 +17,7 @@ const LAYOUT_COR: Record<string, string> = {
 
 export function EditorTimeline({
   clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs = 90,
-  onSeek, onSelect, onUpdateClip, onEditCaption,
+  onSeek, onSelect, onUpdateClip, onEditCaption, music = null, onMusicStart,
 }: {
   clips: Clip[];
   duration: number;
@@ -30,6 +30,8 @@ export function EditorTimeline({
   onSelect: (id: string | null) => void;
   onUpdateClip: (id: string, patch: Partial<Clip>) => void;
   onEditCaption?: (indices: number[], texto: string) => void;
+  music?: Music | null;
+  onMusicStart?: (s: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const width = Math.max(1, duration) * pxs;
@@ -188,6 +190,31 @@ export function EditorTimeline({
             })}
             <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
           </div>
+
+          {/* Faixa de música (arraste o bloco para mudar o início) */}
+          {music && (
+            <>
+              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Música</div>
+              <div className="relative h-8" style={{ width }}>
+                <div
+                  className="absolute top-1 h-6 rounded bg-emerald-700/70 cursor-grab active:cursor-grabbing overflow-hidden"
+                  style={{ left: (music.start || 0) * pxs, width: Math.max(60, (duration - (music.start || 0)) * pxs) }}
+                  title="Arraste para mudar o início da música"
+                  onPointerDown={(e) => {
+                    if (!onMusicStart) return;
+                    e.preventDefault();
+                    const startX = e.clientX; const s0 = music.start || 0;
+                    const mv = (ev: PointerEvent) => onMusicStart(Math.max(0, Math.min(duration - 0.5, s0 + (ev.clientX - startX) / pxs)));
+                    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+                    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+                  }}
+                >
+                  <span className="px-1.5 text-[10px] text-white leading-6">🎵 {music.asset.split("/").pop()}</span>
+                </div>
+                <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

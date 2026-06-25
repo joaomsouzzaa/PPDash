@@ -53,6 +53,14 @@ export const captionStyleSchema = z.object({
 export type CaptionStyle = z.infer<typeof captionStyleSchema>;
 export const CAPTION_STYLE_DEFAULT: CaptionStyle = captionStyleSchema.parse({});
 
+// Faixa de música (upload) com volume e ponto de início.
+export const musicSchema = z.object({
+  asset: z.string(),                 // caminho relativo (assets/xxx)
+  volume: z.number().default(0.5),
+  start: z.number().default(0),      // segundos
+});
+export type Music = z.infer<typeof musicSchema>;
+
 export const timelineSchema = z.object({
   video: z.string(),
   fps: z.number().default(30),
@@ -68,6 +76,8 @@ export const mainPropsSchema = z.object({
   mediaBase: z.string().default(""),
   preview: z.boolean().optional().default(false), // true no Player (usa <Video>); false no render
   captionStyle: captionStyleSchema.optional(),
+  videoVolume: z.number().optional().default(1),  // volume do áudio original (0–1)
+  music: musicSchema.nullable().optional().default(null),
 });
 
 export type Layout = z.infer<typeof layoutSchema>;
@@ -105,6 +115,8 @@ export type EditorDoc = {
   fps: number;
   durationInSeconds: number;
   captionStyle?: CaptionStyle;     // estilo editável da legenda
+  videoVolume?: number;            // volume do áudio original (0–1)
+  music?: Music | null;            // faixa de música
 };
 
 // Deriva a timeline (segmentos contíguos) a partir dos clips de overlay.

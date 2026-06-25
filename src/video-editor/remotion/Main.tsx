@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Sequence, Series, Img } from "remotion";
+import { AbsoluteFill, Sequence, Series, Img, Audio } from "remotion";
 import { LAYOUT_COMPONENTS, url, type Ctx } from "./layouts";
 import { Captions } from "./Captions";
 import type { MainProps, Sticker } from "./schema";
@@ -15,9 +15,10 @@ const CORNER_STYLE: Record<string, React.CSSProperties> = {
   "bottom-right": { bottom: 420, right: 48 },
 };
 
-export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle }) => {
+export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle, videoVolume, music }) => {
   const fps = timeline.fps || FPS_FALLBACK;
   const videoSrc = url(mediaBase, timeline.video);
+  const musicSrc = music?.asset ? url(mediaBase, music.asset) : null;
   const assetUrl = (id: string | null | undefined): string | null =>
     id && assets[id] ? url(mediaBase, assets[id]) : null;
   const isVideoAsset = (s: string | null) => !!s && VIDEO_EXT.test(s);
@@ -36,6 +37,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
             asset2Src: assetUrl(seg.asset2 ?? null),
             isVideoAsset,
             preview,
+            videoVolume: videoVolume ?? 1,
           };
           return (
             <Series.Sequence key={i} durationInFrames={durFrames}>
@@ -59,6 +61,13 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
           </Sequence>
         );
       })}
+
+      {/* Música (faixa de áudio) a partir do início definido, no volume escolhido */}
+      {musicSrc && (
+        <Sequence from={Math.round((music?.start || 0) * fps)}>
+          <Audio src={musicSrc} volume={music?.volume ?? 0.5} loop />
+        </Sequence>
+      )}
 
       {/* Legenda animada palavra-a-palavra sobre tudo */}
       <Captions words={words} style={captionStyle} />

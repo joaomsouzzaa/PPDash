@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Play, ImagePlus, Trash2, RefreshCw, Film } from "lucide-react";
+import { ChevronLeft, Play, ImagePlus, Trash2, RefreshCw, Film, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { EditorTimeline } from "@/components/video-editor/EditorTimeline";
@@ -109,6 +109,33 @@ export default function VideoEditorEditor() {
     });
   }, []);
 
+  // Áudio: volume do vídeo original + música (upload/volume/início).
+  const videoVolume = doc?.videoVolume ?? 1;
+  const music = doc?.music ?? null;
+  const setVideoVolume = useCallback((v: number) => setDoc((d) => (d ? { ...d, videoVolume: v } : d)), []);
+  const setMusicVol = useCallback((v: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, volume: v } } : d)), []);
+  const setMusicStart = useCallback((s: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, start: Math.max(0, s) } } : d)), []);
+  const removerMusica = useCallback(() => setDoc((d) => (d ? { ...d, music: null } : d)), []);
+  const [subindoMusica, setSubindoMusica] = useState(false);
+  const uploadMusica = async (file: File) => {
+    setSubindoMusica(true);
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      const form = new FormData();
+      form.append("job_id", jobId);
+      form.append("file", file, file.name);
+      const res = await fetch(`${SERVICE_URL}/upload-asset`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.path) throw new Error(`Falha ao subir música (${res.status})`);
+      setDoc((d) => (d ? { ...d, music: { asset: data.path, volume: 0.5, start: 0 } } : d));
+      toast.success("Música adicionada.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao subir a música.");
+    } finally {
+      setSubindoMusica(false);
+    }
+  };
+
   const addClip = (assetId: string) => {
     if (!doc) return;
     const start = Math.min(currentTime, Math.max(0, doc.durationInSeconds - 3));
@@ -187,7 +214,7 @@ export default function VideoEditorEditor() {
             <Player
               ref={playerRef}
               component={Main as any}
-              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle }}
+              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle, videoVolume, music }}
               durationInFrames={durationInFrames}
               fps={fps}
               compositionWidth={1080}
@@ -244,6 +271,8 @@ export default function VideoEditorEditor() {
             onSelect={setSelectedId}
             onUpdateClip={updateClip}
             onEditCaption={editCaption}
+            music={music}
+            onMusicStart={setMusicStart}
           />
 
           {/* Galeria de assets */}
@@ -292,6 +321,41 @@ export default function VideoEditorEditor() {
             <p className="text-xs text-muted-foreground pt-1">
               ✏️ Para corrigir o texto, dê <b>duplo-clique</b> no bloco da legenda na timeline (faixa "Legendas") e digite a correção.
             </p>
+          </div>
+
+          {/* Áudio: volume do vídeo + música */}
+          <div className="rounded-lg border p-3 space-y-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Áudio</p>
+            <div className="space-y-1">
+              <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                <span>Volume do vídeo (original)</span><span>{Math.round(videoVolume * 100)}%</span>
+              </label>
+              <input type="range" min={0} max={100} value={Math.round(videoVolume * 100)}
+                onChange={(e) => setVideoVolume(Number(e.target.value) / 100)} className="w-full" />
+            </div>
+
+            {!music ? (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50">
+                {subindoMusica ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Adicionar música
+                <input type="file" accept="audio/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMusica(f); e.currentTarget.value = ""; }} />
+              </label>
+            ) : (
+              <div className="space-y-2 rounded-md border p-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="truncate">🎵 {music.asset.split("/").pop()}</span>
+                  <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={removerMusica}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                    <span>Volume da música</span><span>{Math.round(music.volume * 100)}%</span>
+                  </label>
+                  <input type="range" min={0} max={100} value={Math.round(music.volume * 100)}
+                    onChange={(e) => setMusicVol(Number(e.target.value) / 100)} className="w-full" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">Início: {fmt(music.start)} (arraste o bloco na faixa "Música" da timeline).</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

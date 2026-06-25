@@ -421,6 +421,20 @@ def montar_edicao(body: dict, authorization: str = Header(default="")):
     return {"ok": True, "job_id": job_id}
 
 
+@app.post("/upload-asset")
+async def upload_asset(job_id: str = Form(...), file: UploadFile = File(...), authorization: str = Header(default="")):
+    """Sobe uma mídia (ex.: música) para o dir de trabalho do job; devolve o caminho relativo."""
+    exigir_usuario(authorization)
+    assets_dir = WORK_DIR / job_id / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    ext = (pathlib.Path(file.filename or "").suffix or ".bin").lower()
+    nome = f"{uuid.uuid4().hex}{ext}"
+    with open(assets_dir / nome, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            f.write(chunk)
+    return {"ok": True, "path": f"assets/{nome}"}
+
+
 @app.post("/cancelar")
 def cancelar(body: dict, authorization: str = Header(default="")):
     """Interrompe um job (em execução ou na fila) e o marca como cancelado."""
@@ -796,6 +810,10 @@ def processar_render(job_id: str):
                  "mediaBase": f"{INTERNAL_BASE}/work/{job_id}"}
         if doc.get("captionStyle"):
             props["captionStyle"] = doc["captionStyle"]
+        if doc.get("videoVolume") is not None:
+            props["videoVolume"] = doc["videoVolume"]
+        if doc.get("music"):
+            props["music"] = doc["music"]
         props_path = workjob / "props.json"
         props_path.write_text(json.dumps(props), encoding="utf-8")
 
