@@ -22,6 +22,7 @@ export const segmentSchema = z.object({
   layout: layoutSchema,
   asset: z.string().nullable().default(null),
   asset2: z.string().nullable().optional().default(null),
+  cropY: z.number().optional(),   // posição vertical do asset (0=topo, 100=base; default 50)
 });
 
 export const stickerSchema = z.object({
@@ -105,6 +106,7 @@ export type Clip = {
   layout: OverlayLayout;
   start: number;     // segundos
   end: number;       // segundos
+  cropY?: number;    // posição vertical do asset (0=topo, 100=base; default 50)
 };
 
 // Corte editável (Fase 3): trecho mantido do vídeo ORIGINAL.
@@ -143,7 +145,7 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
     const end = Math.min(dur, c.end);
     if (end <= start) continue;
     if (start > cursor) segments.push({ start: cursor, end: start, layout: "talking_full", asset: null });
-    segments.push({ start, end, layout: c.layout, asset: c.asset });
+    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY });
     cursor = end;
   }
   if (cursor < dur) segments.push({ start: cursor, end: dur, layout: "talking_full", asset: null });
@@ -186,7 +188,7 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
       if (b - a < 0.02) continue;
       const ov = overlayEm((a + b) / 2);
       const srcStart = m.sourceStart + (a - m.outStart);
-      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null });
+      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY });
     }
   }
   if (!segments.length) segments.push({ start: 0, end: Math.max(0.1, durationInSeconds), layout: "talking_full", asset: null });

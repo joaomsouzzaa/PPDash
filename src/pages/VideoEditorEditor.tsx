@@ -281,6 +281,13 @@ export default function VideoEditorEditor() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1 w-[180px]">
+                <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span>Enquadramento (vertical)</span><span>{(selected.cropY ?? 50) <= 33 ? "topo" : (selected.cropY ?? 50) >= 66 ? "base" : "centro"}</span>
+                </label>
+                <input type="range" min={0} max={100} value={selected.cropY ?? 50}
+                  onChange={(e) => updateClip(selected.id, { cropY: Number(e.target.value) })} className="w-full" />
+              </div>
               <div className="text-xs text-muted-foreground">{fmt(selected.start)} – {fmt(selected.end)}</div>
               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeClip(selected.id)}>
                 <Trash2 className="h-4 w-4 mr-1" /> Remover

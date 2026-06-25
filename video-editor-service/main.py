@@ -648,7 +648,7 @@ def _clips_para_timeline(doc: dict) -> dict:
             continue
         if start > cursor:
             segs.append({"start": cursor, "end": start, "layout": "talking_full", "asset": None})
-        segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"]})
+        segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"], "cropY": c.get("cropY")})
         cursor = end
     if cursor < dur:
         segs.append({"start": cursor, "end": dur, "layout": "talking_full", "asset": None})
@@ -720,7 +720,8 @@ def _montar_timeline(doc: dict):
             ov = ov_em((a + b) / 2)
             ss = m["sourceStart"] + (a - m["outStart"])
             segs.append({"start": round(ss, 3), "end": round(ss + (b - a), 3),
-                         "layout": ov["layout"] if ov else "talking_full", "asset": ov["asset"] if ov else None})
+                         "layout": ov["layout"] if ov else "talking_full", "asset": ov["asset"] if ov else None,
+                         "cropY": ov.get("cropY") if ov else None})
     if not segs:
         segs = [{"start": 0, "end": max(0.1, dur), "layout": "talking_full", "asset": None}]
     words = []
@@ -878,17 +879,24 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         if not src.exists() or src.stat().st_size < 1000:
             raise RuntimeError("Download do Drive vazio — confira se o link é público ('qualquer pessoa com o link').")
 
-        # 2) Corte + proxy + transcrição
-        cut = workjob / "talking_head.mp4"
-        _gerar_corte(db, job_id, src, workdir, cut, prefixo="")
+        # 2) Faixas de corte (Fase 3: usa o ORIGINAL + faixas) + proxy + transcrição do original
+        edl = _gerar_corte(db, job_id, src, workdir, workjob / "_x.mp4", prefixo="", render_out=False)
+        ranges = edl.get("ranges", [])
+        if not ranges:
+            raise RuntimeError("Não consegui obter as faixas de corte")
         set_etapa(db, job_id, "preparando preview")
-        prev_ok = _proxy_preview(cut, workjob / "talking_head_preview.mp4")
+        orig = workjob / "original.mp4"
+        shutil.copyfile(str(src), str(orig))
+        prev_ok = _proxy_preview(orig, workjob / "original_preview.mp4")
+        original_dur = _ffprobe_dur(orig)
         set_etapa(db, job_id, "transcrevendo legendas")
-        transcript = transcrever_words(str(cut), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
+        transcript = transcrever_words(str(orig), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
+        # transcrição de SAÍDA (palavras dentro das faixas) para alinhar os b-rolls no tempo de saída
+        out_transcript = _remap_transcript_saida(transcript, ranges)
         transcript_txt = "\n".join(
             f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
-            for s in transcript.get("segments", [])
+            for s in out_transcript.get("segments", [])
         )
 
         # 3) Carrega o plano da referência (do card) e alinha ao vídeo novo
@@ -930,12 +938,16 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
             })
         clips = [c for c in clips if c["end"] > c["start"]]
 
+        video_segments = [{"id": f"v{i}", "sourceStart": float(r["start"]), "sourceEnd": float(r["end"])} for i, r in enumerate(ranges)]
+        dur_out = sum(float(r["end"]) - float(r["start"]) for r in ranges)
         editor_doc = {
             "clips": clips, "words": words, "assets": assets_map,
-            "video": "talking_head.mp4",
-            "videoPreview": "talking_head_preview.mp4" if prev_ok else "talking_head.mp4",
+            "video": "original.mp4",
+            "videoPreview": "original_preview.mp4" if prev_ok else "original.mp4",
             "fps": 30,
-            "durationInSeconds": float(transcript.get("segments", [{}])[-1].get("end", 0)) if transcript.get("segments") else 0,
+            "durationInSeconds": dur_out,
+            "videoSegments": video_segments,
+            "originalDuration": original_dur,
         }
         db.table("video_jobs").update({"status": "editar", "etapa": None, "timeline": editor_doc, "erro": None}).eq("id", job_id).execute()
     except Exception as e:

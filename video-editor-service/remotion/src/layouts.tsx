@@ -17,9 +17,12 @@ type Ctx = {
   isVideoAsset: (s: string | null) => boolean;
   preview?: boolean;  // preview (Player) usa <Video> (fluido); render usa OffthreadVideo
   videoVolume?: number; // volume do áudio original (0–1)
+  cropY?: number;       // posição vertical do asset (0=topo, 100=base)
 };
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
+// cover do asset com a posição vertical escolhida (crop manual).
+const assetCover = (cropY?: number): React.CSSProperties => ({ ...cover, objectPosition: `50% ${cropY ?? 50}%` });
 
 // Vídeo do talking-head: <Video> no preview (toca liso no navegador), OffthreadVideo no render.
 const Head: React.FC<{ src: string; from: number; preview?: boolean; volume?: number; style?: React.CSSProperties }> = ({ src, from, preview, volume = 1, style }) => (
@@ -28,23 +31,23 @@ const Head: React.FC<{ src: string; from: number; preview?: boolean; volume?: nu
     : <OffthreadVideo src={src} trimBefore={from} volume={volume} style={style ?? cover} />
 );
 
-// Vídeo de asset (b-roll), mesmo critério.
-const AssetVid: React.FC<{ src: string; preview?: boolean }> = ({ src, preview }) => (
-  preview ? <Video src={src} style={cover} muted /> : <OffthreadVideo src={src} style={cover} muted />
+// Vídeo de asset (b-roll), mesmo critério; aplica a posição vertical (crop).
+const AssetVid: React.FC<{ src: string; preview?: boolean; cropY?: number }> = ({ src, preview, cropY }) => (
+  preview ? <Video src={src} style={assetCover(cropY)} muted /> : <OffthreadVideo src={src} style={assetCover(cropY)} muted />
 );
 
-const TalkingFull: React.FC<Ctx> = ({ videoSrc, videoStartFrame, preview, videoVolume }) => (
+const TalkingFull: React.FC<Ctx> = ({ videoSrc, videoStartFrame, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />
   </AbsoluteFill>
 );
 
-const SplitHorizontal: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume }) => (
+const SplitHorizontal: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "50%", overflow: "hidden" }}>
       {assetSrc && (isVideoAsset(assetSrc)
-        ? <AssetVid src={assetSrc} preview={preview} />
-        : <Img src={assetSrc} style={cover} />)}
+        ? <AssetVid src={assetSrc} preview={preview} cropY={cropY} />
+        : <Img src={assetSrc} style={assetCover(cropY)} />)}
     </div>
     <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "50%", overflow: "hidden" }}>
       <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />
@@ -53,33 +56,33 @@ const SplitHorizontal: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, i
 );
 
 // B-roll/imagem EMBAIXO, pessoa em cima.
-const SplitBottom: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume }) => (
+const SplitBottom: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "50%", overflow: "hidden" }}>
       <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />
     </div>
     <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: "50%", overflow: "hidden" }}>
       {assetSrc && (isVideoAsset(assetSrc)
-        ? <AssetVid src={assetSrc} preview={preview} />
-        : <Img src={assetSrc} style={cover} />)}
+        ? <AssetVid src={assetSrc} preview={preview} cropY={cropY} />
+        : <Img src={assetSrc} style={assetCover(cropY)} />)}
     </div>
   </AbsoluteFill>
 );
 
-const SplitVertical: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume }) => (
+const SplitVertical: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000", flexDirection: "row" }}>
     <div style={{ width: "50%", height: "100%", overflow: "hidden" }}>
       <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />
     </div>
     <div style={{ width: "50%", height: "100%", overflow: "hidden" }}>
       {assetSrc && (isVideoAsset(assetSrc)
-        ? <AssetVid src={assetSrc} preview={preview} />
-        : <Img src={assetSrc} style={cover} />)}
+        ? <AssetVid src={assetSrc} preview={preview} cropY={cropY} />
+        : <Img src={assetSrc} style={assetCover(cropY)} />)}
     </div>
   </AbsoluteFill>
 );
 
-const OverlayCard: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, preview, videoVolume }) => (
+const OverlayCard: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} style={{ ...cover, filter: "blur(24px) brightness(0.5)" }} />
     {assetSrc && (
@@ -96,21 +99,21 @@ const OverlayCard: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, previ
   </AbsoluteFill>
 );
 
-const ImageFullscreen: React.FC<Ctx> = ({ assetSrc, videoSrc, videoStartFrame, preview, videoVolume }) => (
+const ImageFullscreen: React.FC<Ctx> = ({ assetSrc, videoSrc, videoStartFrame, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     {assetSrc
-      ? <Img src={assetSrc} style={cover} />
+      ? <Img src={assetSrc} style={assetCover(cropY)} />
       : <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />}
   </AbsoluteFill>
 );
 
-const BrollFullscreen: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume }) => (
+const BrollFullscreen: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume, cropY }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} style={{ display: "none" }} />
     {assetSrc && isVideoAsset(assetSrc)
       ? <AssetVid src={assetSrc} preview={preview} />
       : assetSrc
-        ? <Img src={assetSrc} style={cover} />
+        ? <Img src={assetSrc} style={assetCover(cropY)} />
         : <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />}
   </AbsoluteFill>
 );

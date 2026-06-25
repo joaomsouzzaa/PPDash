@@ -38,6 +38,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
             isVideoAsset,
             preview,
             videoVolume: videoVolume ?? 1,
+            cropY: seg.cropY,
           };
           return (
             <Series.Sequence key={i} durationInFrames={durFrames}>
