@@ -41,12 +41,26 @@ async function aguardarContainer(token: string, creationId: string, tentativas =
   return false;
 }
 
+function normEtapa(s: string) {
+  return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+// Move o card vinculado ao post para a etapa "Postado" (coluna da org do card).
+async function moverCardPostado(supabase: any, tarefaId: string) {
+  const { data: tarefa } = await supabase.from("tarefas").select("org_id").eq("id", tarefaId).maybeSingle();
+  if (!tarefa) return;
+  const { data: cols } = await supabase.from("kanban_colunas").select("id,nome").eq("org_id", tarefa.org_id);
+  const col = (cols || []).find((c: any) => normEtapa(c.nome).includes("postado"));
+  if (col) await supabase.from("tarefas").update({ coluna_id: col.id, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+}
+
 async function finalizar(supabase: any, token: string, postId: string, mediaId: string) {
   let permalink: string | null = null;
   try { const p = await graphGet(token, `/${mediaId}`, { fields: "permalink" }); permalink = p?.permalink ?? null; } catch { /* ignore */ }
-  await supabase.from("ig_posts").update({
+  const { data: post } = await supabase.from("ig_posts").update({
     status: "publicado", ig_media_id: mediaId, permalink, published_at: new Date().toISOString(), erro: null,
-  }).eq("id", postId);
+  }).eq("id", postId).select("tarefa_id").maybeSingle();
+  if (post?.tarefa_id) { try { await moverCardPostado(supabase, post.tarefa_id); } catch { /* ignore */ } }
 }
 
 async function processarPost(supabase: any, post: any): Promise<{ done: boolean }> {

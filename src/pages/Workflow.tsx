@@ -206,6 +206,9 @@ export default function Workflow() {
     } else {
       toast.success(action === "agendar" ? "Post agendado!" : data?.processando ? "Publicando (vídeo processando)…" : "Post publicado!");
       setIgSelecao([]); setIgPublishAt("");
+      // Move o card: Agendar → "Agendado"; Publicar agora → "Postado".
+      await moverCardEtapa(editing.id, action === "agendar" ? "Agendado" : "Postado");
+      queryClient.invalidateQueries({ queryKey: ["tarefas"] });
     }
     queryClient.invalidateQueries({ queryKey: ["ig_posts", editing.id] });
   };
@@ -844,6 +847,16 @@ export default function Workflow() {
 // ============================================================
 const SERVICE_URL_VE = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
 
+// Move um card para a etapa (coluna) pelo nome (sem acento/maiúsculas).
+const normEtapa = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+async function moverCardEtapa(tarefaId: string, nomeEtapa: string) {
+  const db = supabase as any;
+  const { data: cols } = await db.from("kanban_colunas").select("id,nome");
+  const alvo = normEtapa(nomeEtapa);
+  const col = (cols || []).find((c: any) => normEtapa(c.nome) === alvo) || (cols || []).find((c: any) => normEtapa(c.nome).includes(alvo));
+  if (col) await db.from("tarefas").update({ coluna_id: col.id, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+}
+
 function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: string | null }) {
   const db = supabase as any;
   const qc = useQueryClient();
@@ -892,12 +905,29 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha (${res.status})`);
+      await moverCardEtapa(tarefaId, "Em Revisão (Editado)");
       toast.success("Montando a edição — abra o editor quando ficar pronto.");
       qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      qc.invalidateQueries({ queryKey: ["tarefas"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao montar a edição.");
     } finally {
       setMontando(false);
+    }
+  };
+
+  // Salvar o link do Drive (sem montar) e mover o card de "Para Gravar" → "Para Editar".
+  const salvarDrive = async () => {
+    if (!driveUrl.trim()) { toast.error("Cole o link do Drive."); return; }
+    try {
+      const vr = { ...(ref || {}), drive_url: driveUrl.trim() };
+      await db.from("tarefas").update({ video_ref: vr, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      await moverCardEtapa(tarefaId, "Para Editar");
+      toast.success("Link salvo — card movido para 'Para Editar'.");
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      qc.invalidateQueries({ queryKey: ["tarefas"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
     }
   };
 
@@ -976,6 +1006,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
                   <SelectItem value="assets">Só timing (eu coloco as mídias no editor)</SelectItem>
                 </SelectContent>
               </Select>
+              <Button onClick={salvarDrive} size="sm" variant="outline">Salvar link</Button>
               <Button onClick={montar} disabled={montando} size="sm" variant="secondary">
                 {montando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
                 Montar edição

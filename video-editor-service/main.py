@@ -239,6 +239,8 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
     ref_url = (body or {}).get("ref_url")
     org_id = (body or {}).get("org_id")
     agente_slug = (body or {}).get("agente_slug")
+    modo = (body or {}).get("modo") or "roteiro"   # "roteiro" | "watch"
+    pergunta = (body or {}).get("pergunta") or ""
     if not ref_url:
         raise HTTPException(400, "ref_url obrigatório")
 
@@ -294,40 +296,64 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
         bc = (db.table("base_conhecimento").select("titulo,conteudo").eq("org_id", org_id).eq("ativo", True).execute().data) or []
         base_conh = "\n\n".join(f"## {b['titulo']}\n{b.get('conteudo','')}" for b in bc if (b.get("conteudo") or "").strip())
 
-    # 4) Claude com visão: roteiro adaptado + plano de inserções.
-    sistema = (
-        (persona + "\n\n" if persona else "")
-        + ("# Base de Conhecimento (a verdade sobre a marca/cliente — baseie-se nela)\n" + base_conh + "\n\n" if base_conh else "")
-        + "Você é um estrategista de Reels. Recebe FRAMES + TRANSCRIÇÃO de um vídeo de REFERÊNCIA. "
-        "Produza: (1) um ROTEIRO falado ADAPTADO para o cliente (mesma estrutura/ganchos da referência, "
-        "mas com a mensagem e os exemplos do cliente, usando a base de conhecimento); (2) um PLANO DE INSERÇÕES "
-        "listando onde/quando aparece cada b-roll/print/imagem na referência (timestamps) e a que trecho da fala corresponde. "
-        "Responda APENAS JSON: "
-        '{"roteiro_adaptado":"...","insertion_plan":[{"ref_start":<s>,"ref_end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","linha":"trecho da fala"}]}'
+    base_vazia = not base_conh
+    base_bloco = (
+        "# Base de Conhecimento do cliente (a verdade sobre marca/produto/público — baseie-se nela)\n" + base_conh + "\n\n"
+        if base_conh else
+        "# Base de Conhecimento: VAZIA. Não invente dados do cliente; onde faltar, marque com [colchetes].\n\n"
     )
-    blocos = [{"type": "text", "text": f"TRANSCRIÇÃO DA REFERÊNCIA:\n{transcript_txt or '(sem fala detectada)'}\n\nFrames a seguir (em ordem):"}]
+
+    # 4) Claude com visão.
+    if modo == "watch":
+        # Análise livre do vídeo (responde a pergunta), sem roteiro/card.
+        sistema = (
+            (persona + "\n\n" if persona else "") + base_bloco
+            + "Você assiste a um vídeo (FRAMES + TRANSCRIÇÃO) e responde de forma clara e objetiva, em **markdown**, "
+            "à pergunta do usuário sobre ele. Cite timestamps quando útil."
+        )
+        primeiro = f"Pergunta: {pergunta or 'Descreva o vídeo: estrutura, ganchos, ritmo e o que o torna bom.'}\n\nTRANSCRIÇÃO:\n{transcript_txt or '(sem fala)'}\n\nFrames a seguir:"
+    else:
+        sistema = (
+            (persona + "\n\n" if persona else "") + base_bloco
+            + "Você é um estrategista de Reels. Recebe FRAMES + TRANSCRIÇÃO de um vídeo de REFERÊNCIA e adapta para o cliente.\n"
+            "Saída em DUAS partes, nesta ordem:\n"
+            "1) O ROTEIRO em **markdown bem formatado** (NÃO use JSON aqui), no estilo:\n"
+            "   - uma linha de contexto/premissa que você assumiu (e peça correção se necessário);\n"
+            "   - título `## 🎬 ROTEIRO — ...`;\n"
+            "   - blocos por tempo `**[mm:ss–mm:ss] — NOME DO BLOCO**` com `🎥 B-roll: ...`, `🗣️ \"fala...\"`, `📝 Texto na tela: **...**`;\n"
+            "   - `### 📌 Legenda do post` e `### 📌 Notas de produção`.\n"
+            "   Mantenha a MESMA estrutura psicológica/ganchos da referência, com a mensagem e exemplos do CLIENTE (use a base de conhecimento; sem placeholders se houver base).\n"
+            "2) Depois do roteiro, um ÚNICO bloco ```json com o plano de inserções (e NADA depois dele):\n"
+            '```json\n{"insertion_plan":[{"ref_start":<s>,"ref_end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","linha":"trecho da fala"}]}\n```'
+        )
+        primeiro = f"TRANSCRIÇÃO DA REFERÊNCIA:\n{transcript_txt or '(sem fala detectada)'}\n\nFrames a seguir (em ordem):"
+
+    blocos = [{"type": "text", "text": primeiro}]
     for fp in frames:
         b64 = base64.b64encode(pathlib.Path(fp).read_bytes()).decode()
         blocos.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}})
 
     client = anthropic.Anthropic()
-    resp = client.messages.create(
-        model=MODEL, max_tokens=8000,
-        system=sistema, messages=[{"role": "user", "content": blocos}],
-    )
+    resp = client.messages.create(model=MODEL, max_tokens=8000, system=sistema, messages=[{"role": "user", "content": blocos}])
     texto = "".join(b.text for b in resp.content if b.type == "text").strip()
-    if texto.startswith("```"):
-        texto = texto.split("```", 2)[1].lstrip("json").strip()
-    try:
-        data = json.loads(texto)
-    except Exception:
-        data = {"roteiro_adaptado": texto, "insertion_plan": []}
 
+    if modo == "watch":
+        return {"ok": True, "ref_id": ref_id, "ref_url": ref_url, "resposta": texto, "base_vazia": base_vazia}
+
+    # Extrai o bloco ```json (insertion_plan); o resto é o roteiro em markdown.
+    insertion_plan = []
+    roteiro = texto
+    m = re.search(r"```json\s*(\{.*?\})\s*```", texto, re.DOTALL)
+    if m:
+        try:
+            insertion_plan = (json.loads(m.group(1)) or {}).get("insertion_plan", [])
+        except Exception:
+            insertion_plan = []
+        roteiro = texto[:m.start()].strip()  # tudo antes do json = roteiro markdown
     return {
         "ok": True, "ref_id": ref_id, "ref_url": ref_url,
-        "roteiro": data.get("roteiro_adaptado", ""),
-        "insertion_plan": data.get("insertion_plan", []),
-        "transcript": transcript_txt,
+        "roteiro": roteiro, "insertion_plan": insertion_plan,
+        "transcript": transcript_txt, "base_vazia": base_vazia,
     }
 
 

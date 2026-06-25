@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Send, Bot, MessageSquare, Loader2, Trash2, Mic, MicOff, BookOpen } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
 import { useSpeechToText } from "@/hooks/use-speech-to-text";
@@ -110,10 +112,31 @@ export default function Chat() {
       cardMsg = "\n\n✅ Card criado no Workflow com o roteiro.";
     } catch { /* segue mesmo se o card falhar */ }
 
-    const planoTxt = plano.length
-      ? "\n\n**Plano de inserções:**\n" + plano.map((p) => `• ${p.tipo} ${Math.round(p.ref_start)}s–${Math.round(p.ref_end)}s — ${p.descricao}`).join("\n")
+    const baseAviso = data.base_vazia
+      ? "\n\n> ⚠️ A **Base de Conhecimento** está vazia — cadastre marca/produto/público no 📖 (topo) para eu personalizar o roteiro e tirar os [colchetes]."
       : "";
-    const conteudo = `🎬 Roteiro adaptado da referência:\n\n${roteiro}${planoTxt}${cardMsg}`;
+    const conteudo = `${roteiro}${cardMsg}${baseAviso}`;
+    setMessages((prev) => [...prev, { role: "assistant", conteudo }]);
+    await supabase.from("mensagens").insert({ conversa_id: convId, role: "assistant", conteudo });
+    await supabase.from("conversas").update({ updated_at: new Date().toISOString() }).eq("id", convId);
+    carregarConversas();
+  };
+
+  // /watch <url> [pergunta] — análise livre do vídeo (sem criar card).
+  const assistirVideo = async (convId: string, url: string, pergunta: string) => {
+    setPensando(agenteAtual?.nome || "Agente");
+    setVerbo("executando");
+    if (!SERVICE_URL_VE) throw new Error("Serviço de vídeo não configurado.");
+    const orgId = await getOrgId();
+    const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const res = await fetch(`${SERVICE_URL_VE}/analisar-referencia`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ref_url: url, org_id: orgId, agente_slug: agenteAtual?.slug, modo: "watch", pergunta }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha ao assistir (${res.status})`);
+    const conteudo = data.resposta || "(sem resposta)";
     setMessages((prev) => [...prev, { role: "assistant", conteudo }]);
     await supabase.from("mensagens").insert({ conversa_id: convId, role: "assistant", conteudo });
     await supabase.from("conversas").update({ updated_at: new Date().toISOString() }).eq("id", convId);
@@ -145,6 +168,15 @@ export default function Chat() {
       const novaLista = [...messages, userMsg];
       setMessages(novaLista);
       await supabase.from("mensagens").insert({ conversa_id: convId, role: "user", conteudo: texto });
+
+      // Comando /watch <url> [pergunta] → análise livre (sem criar card).
+      if (/^\/watch\b/i.test(texto)) {
+        const u = texto.match(/https?:\/\/[^\s]+/);
+        if (!u) throw new Error("Use: /watch <link do vídeo> [pergunta]");
+        const perg = texto.replace(/^\/watch\b/i, "").replace(u[0], "").trim();
+        await assistirVideo(convId, u[0], perg);
+        return;
+      }
 
       // Se a mensagem tem um link de vídeo, o agente ANALISA o vídeo (VPS) e cria o card,
       // em vez de mandar pro LLM de texto (que não assiste vídeo).
@@ -294,8 +326,12 @@ export default function Chat() {
               )}
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                    {m.conteudo}
+                  <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground whitespace-pre-wrap" : "bg-muted"}`}>
+                    {m.role === "assistant" ? (
+                      <div className="leading-relaxed [&>*]:my-1.5 [&_h2]:text-base [&_h2]:font-bold [&_h3]:font-semibold [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_hr]:my-3 [&_code]:bg-background/60 [&_code]:px-1 [&_code]:rounded">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.conteudo}</ReactMarkdown>
+                      </div>
+                    ) : m.conteudo}
                   </div>
                 </div>
               ))}
