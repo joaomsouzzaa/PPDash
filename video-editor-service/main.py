@@ -980,6 +980,8 @@ def processar_render(job_id: str):
             props["music"] = doc["music"]
         if doc.get("musicClips"):
             props["musicClips"] = doc["musicClips"]
+        if doc.get("texts"):
+            props["texts"] = doc["texts"]
         props_path = workjob / "props.json"
         props_path.write_text(json.dumps(props), encoding="utf-8")
 

@@ -65,6 +65,22 @@ export const musicSchema = z.object({
 });
 export type Music = z.infer<typeof musicSchema>;
 
+// Camada de texto livre (arrastável no preview).
+export const textLayerSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  start: z.number(),                 // s na timeline de saída
+  end: z.number(),
+  x: z.number().default(0.5),        // posição do CENTRO (fração 0–1 da largura)
+  y: z.number().default(0.5),        // posição do CENTRO (fração 0–1 da altura)
+  fontSize: z.number().default(80),  // px na composição (1080×1920)
+  color: z.string().default("#FFFFFF"),
+  bgColor: z.string().default("transparent"),
+  bold: z.boolean().default(true),
+  align: z.enum(["left", "center", "right"]).default("center"),
+});
+export type TextLayer = z.infer<typeof textLayerSchema>;
+
 export const musicClipSchema = z.object({
   id: z.string(),
   asset: z.string(),
@@ -92,6 +108,7 @@ export const mainPropsSchema = z.object({
   videoVolume: z.number().optional().default(1),  // volume do áudio original (0–1)
   music: musicSchema.nullable().optional().default(null),
   musicClips: z.array(musicClipSchema).optional(),
+  texts: z.array(textLayerSchema).optional(),  // camadas de texto livre
 });
 
 export type Layout = z.infer<typeof layoutSchema>;
@@ -153,6 +170,7 @@ export type EditorDoc = {
   videoVolume?: number;            // volume do áudio original (0–1)
   music?: Music | null;            // faixa de música (legado — 1 peça)
   musicClips?: MusicClip[];        // faixa de música em pedaços (cortável)
+  texts?: TextLayer[];             // camadas de texto livre (arrastáveis)
   // Fase 3 (cortes como clipes). Quando presente, a timeline é montada a partir destes.
   videoSegments?: VideoSegment[];  // trechos mantidos do ORIGINAL, em ordem
   originalDuration?: number;       // duração do vídeo original (s) — limite do "aparar pra mais"

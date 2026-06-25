@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, Sequence, Series, Img, Audio } from "remotion";
 import { LAYOUT_COMPONENTS, url, type Ctx } from "./layouts";
 import { Captions } from "./Captions";
+import { TextLayers } from "./TextLayers";
 import type { MainProps, Sticker } from "./schema";
 
 const FPS_FALLBACK = 30;
@@ -15,7 +16,7 @@ const CORNER_STYLE: Record<string, React.CSSProperties> = {
   "bottom-right": { bottom: 420, right: 48 },
 };
 
-export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle, videoVolume, music, musicClips }) => {
+export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, preview, captionStyle, videoVolume, music, musicClips, texts }) => {
   const fps = timeline.fps || FPS_FALLBACK;
   const videoSrc = url(mediaBase, timeline.video);
   // Música: lista de pedaços (musicClips) tem prioridade; senão a música única (legado).
@@ -81,6 +82,9 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
 
       {/* Legenda animada palavra-a-palavra sobre tudo */}
       <Captions words={words} style={captionStyle} />
+
+      {/* Camadas de texto livre (arrastáveis no editor) */}
+      <TextLayers texts={texts} />
     </AbsoluteFill>
   );
 };

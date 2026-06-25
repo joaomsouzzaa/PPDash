@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState } from "react";
-import type { Clip, Word, Music, VideoSegment } from "@/video-editor/remotion/schema";
+import type { Clip, Word, Music, VideoSegment, TextLayer } from "@/video-editor/remotion/schema";
 
 const MIN_DUR = 0.3; // duração mínima de um clip (s)
 const LAYOUT_LABEL: Record<string, string> = {
@@ -19,6 +19,7 @@ export function EditorTimeline({
   clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs = 90,
   onSeek, onSelect, onUpdateClip, onEditCaption, music = null, onMusicStart,
   videoSegments = null, originalDuration = 0, onTrimSeg, onDeleteSeg, onSplit,
+  texts = [], selectedTextId = null, onSelectText, onUpdateText, onEditTextContent,
 }: {
   clips: Clip[];
   duration: number;
@@ -38,11 +39,34 @@ export function EditorTimeline({
   onTrimSeg?: (id: string, patch: Partial<VideoSegment>) => void;
   onDeleteSeg?: (id: string) => void;
   onSplit?: () => void;
+  texts?: TextLayer[];
+  selectedTextId?: string | null;
+  onSelectText?: (id: string | null) => void;
+  onUpdateText?: (id: string, patch: Partial<TextLayer>) => void;
+  onEditTextContent?: (id: string, texto: string) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const width = Math.max(1, duration) * pxs;
   const [editPage, setEditPage] = useState<number | null>(null);  // índice da página em edição
   const [editText, setEditText] = useState("");
+  const [editTxtId, setEditTxtId] = useState<string | null>(null); // camada de texto em edição
+  const [editTxtVal, setEditTxtVal] = useState("");
+
+  // Arrasta um bloco de texto na timeline (mover início, ou esticar bordas).
+  const startDragText = (e: React.PointerEvent, t: TextLayer, mode: "move" | "l" | "r") => {
+    e.preventDefault(); e.stopPropagation();
+    if (!onUpdateText) return;
+    onSelectText?.(t.id);
+    const startX = e.clientX, s0 = t.start, e0 = t.end;
+    const mv = (ev: PointerEvent) => {
+      const dt = (ev.clientX - startX) / pxs;
+      if (mode === "move") { const len = e0 - s0; const ns = Math.min(duration - len, Math.max(0, s0 + dt)); onUpdateText(t.id, { start: round(ns), end: round(ns + len) }); }
+      else if (mode === "l") onUpdateText(t.id, { start: round(Math.min(e0 - MIN_DUR, Math.max(0, s0 + dt))) });
+      else onUpdateText(t.id, { end: round(Math.max(s0 + MIN_DUR, Math.min(duration, e0 + dt))) });
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
 
   // Páginas de legenda (mesma lógica do Captions) — com os índices globais das palavras.
   const legendas = useMemo(() => {
@@ -246,6 +270,43 @@ export function EditorTimeline({
             })}
             <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
           </div>
+
+          {/* Faixa de texto (camadas arrastáveis) */}
+          {texts && texts.length > 0 && (
+            <>
+              <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Texto</div>
+              <div className="relative h-8" style={{ width }}>
+                {texts.map((t) => {
+                  const left = t.start * pxs;
+                  const w = Math.max(40, (t.end - t.start) * pxs);
+                  const sel = t.id === selectedTextId;
+                  const editando = editTxtId === t.id;
+                  return (
+                    <div key={t.id}
+                      className={`absolute top-1 h-6 rounded bg-sky-700/80 cursor-grab active:cursor-grabbing ${sel ? "ring-2 ring-white" : ""} ${editando ? "ring-2 ring-yellow-400" : ""} overflow-hidden`}
+                      style={{ left, width: editando ? Math.max(w, 180) : w, zIndex: editando ? 20 : 1 }}
+                      title={editando ? "" : `${t.text}  (duplo-clique para editar)`}
+                      onPointerDown={(e) => !editando && startDragText(e, t, "move")}
+                      onDoubleClick={(e) => { e.stopPropagation(); setEditTxtId(t.id); setEditTxtVal(t.text); onSelectText?.(t.id); }}
+                    >
+                      <div className="absolute left-0 top-0 h-full w-2 cursor-ew-resize bg-black/30" onPointerDown={(e) => startDragText(e, t, "l")} />
+                      <div className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-black/30" onPointerDown={(e) => startDragText(e, t, "r")} />
+                      {editando ? (
+                        <input autoFocus value={editTxtVal}
+                          onChange={(e) => setEditTxtVal(e.target.value)}
+                          onBlur={() => { onEditTextContent?.(t.id, editTxtVal); setEditTxtId(null); }}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onEditTextContent?.(t.id, editTxtVal); setEditTxtId(null); } if (e.key === "Escape") setEditTxtId(null); }}
+                          className="h-full w-full bg-sky-950 px-1.5 text-[11px] text-white outline-none" />
+                      ) : (
+                        <span className="px-2 text-[10px] text-white truncate inline-block max-w-full leading-6">T · {t.text}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
+              </div>
+            </>
+          )}
 
           {/* Faixa de música (arraste o bloco para mudar o início) */}
           {music && (

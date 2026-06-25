@@ -3,15 +3,17 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Play, ImagePlus, Trash2, RefreshCw, Film, Plus } from "lucide-react";
+import { ChevronLeft, Play, ImagePlus, Trash2, RefreshCw, Film, Plus, Type } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { EditorTimeline } from "@/components/video-editor/EditorTimeline";
 import { Main } from "@/video-editor/remotion/Main";
 import {
   montarTimeline, OVERLAY_LAYOUTS, CAPTION_STYLE_DEFAULT,
-  type Clip, type EditorDoc, type OverlayLayout, type CaptionStyle, type VideoSegment,
+  type Clip, type EditorDoc, type OverlayLayout, type CaptionStyle, type VideoSegment, type TextLayer,
 } from "@/video-editor/remotion/schema";
+
+const PREVIEW_W = 280, PREVIEW_H = 498, COMP_W = 1080;
 
 const db = supabase as any;
 const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
@@ -33,6 +35,7 @@ export default function VideoEditorEditor() {
   const [nome, setNome] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [renderizando, setRenderizando] = useState(false);
   const primeiraGravacao = useRef(true);
@@ -147,6 +150,29 @@ export default function VideoEditorEditor() {
       return { ...d, videoSegments: novos };
     });
   }, []);
+  // Camadas de texto livre (arrastáveis no preview).
+  const texts = doc?.texts ?? [];
+  const addText = useCallback(() => {
+    setDoc((d) => {
+      if (!d) return d;
+      const start = Math.min(currentTime, Math.max(0, d.durationInSeconds - 3));
+      const novo: TextLayer = {
+        id: `t${Date.now().toString(36)}`, text: "Texto", start: round3(start),
+        end: round3(Math.min(d.durationInSeconds, start + 3)),
+        x: 0.5, y: 0.5, fontSize: 80, color: "#FFFFFF", bgColor: "transparent", bold: true, align: "center",
+      };
+      return { ...d, texts: [...(d.texts || []), novo] };
+    });
+  }, [currentTime]);
+  const updateText = useCallback((id: string, patch: Partial<TextLayer>) => {
+    setDoc((d) => (d ? { ...d, texts: (d.texts || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) } : d));
+  }, []);
+  const removeText = useCallback((id: string) => {
+    setDoc((d) => (d ? { ...d, texts: (d.texts || []).filter((t) => t.id !== id) } : d));
+    setSelectedTextId(null);
+  }, []);
+  const selectedText = texts.find((t) => t.id === selectedTextId) || null;
+
   const [subindoMusica, setSubindoMusica] = useState(false);
   const uploadMusica = async (file: File) => {
     setSubindoMusica(true);
@@ -256,21 +282,29 @@ export default function VideoEditorEditor() {
       <div className="flex flex-1 min-h-0">
         {/* Preview */}
         <div className="flex w-[360px] shrink-0 flex-col items-center justify-center border-r bg-black/40 p-4">
-          <div style={{ width: 280, height: 498 }} className="overflow-hidden rounded-lg border bg-black">
+          <div style={{ width: PREVIEW_W, height: PREVIEW_H, position: "relative" }} className="overflow-hidden rounded-lg border bg-black">
             <Player
               ref={playerRef}
               component={Main as any}
-              inputProps={{ timeline, words: outWords, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle, videoVolume, music }}
+              inputProps={{ timeline, words: outWords, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle, videoVolume, music, texts }}
               durationInFrames={durationInFrames}
               fps={fps}
               compositionWidth={1080}
               compositionHeight={1920}
-              style={{ width: 280, height: 498 }}
+              style={{ width: PREVIEW_W, height: PREVIEW_H }}
               controls
               acknowledgeRemotionLicense
             />
+            {/* Camada interativa: arraste os textos para posicionar */}
+            <TextDragLayer
+              texts={texts} currentTime={currentTime}
+              selectedId={selectedTextId} onSelect={setSelectedTextId} onMove={updateText}
+            />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">Preview ao vivo · {fmt(currentTime)} / {fmt(doc.durationInSeconds)}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={addText}>
+            <Type className="h-4 w-4 mr-1" /> Adicionar texto
+          </Button>
         </div>
 
         {/* Edição */}
@@ -344,6 +378,41 @@ export default function VideoEditorEditor() {
             <p className="text-xs text-muted-foreground">Clique numa imagem na timeline para editar, ou adicione uma da galeria abaixo. Arraste para mover; puxe as bordas para esticar.</p>
           )}
 
+          {/* Painel da camada de texto selecionada */}
+          {selectedText && (
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-sky-500/40 bg-sky-500/5 p-3">
+              <div className="space-y-1 min-w-[220px] flex-1">
+                <label className="text-xs text-muted-foreground">Texto</label>
+                <input value={selectedText.text} onChange={(e) => updateText(selectedText.id, { text: e.target.value })}
+                  className="h-9 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+              <Cor label="Cor" value={selectedText.color} onChange={(v) => updateText(selectedText.id, { color: v })} />
+              <Cor label="Fundo" value={selectedText.bgColor === "transparent" ? "#000000" : selectedText.bgColor}
+                onChange={(v) => updateText(selectedText.id, { bgColor: v })}
+                extra={<button className="text-[10px] underline text-muted-foreground" onClick={() => updateText(selectedText.id, { bgColor: "transparent" })}>sem fundo</button>} />
+              <Num label="Tamanho" value={selectedText.fontSize} min={24} max={220} step={2} onChange={(v) => updateText(selectedText.id, { fontSize: v })} />
+              <div className="space-y-1">
+                <label className="text-[11px] text-muted-foreground">Alinhar</label>
+                <Select value={selectedText.align} onValueChange={(v) => updateText(selectedText.id, { align: v as TextLayer["align"] })}>
+                  <SelectTrigger className="w-[110px] h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="left">Esquerda</SelectItem>
+                    <SelectItem value="center">Centro</SelectItem>
+                    <SelectItem value="right">Direita</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={selectedText.bold} onChange={(e) => updateText(selectedText.id, { bold: e.target.checked })} /> Negrito
+              </label>
+              <div className="text-xs text-muted-foreground">{fmt(selectedText.start)} – {fmt(selectedText.end)}</div>
+              <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeText(selectedText.id)}>
+                <Trash2 className="h-4 w-4 mr-1" /> Remover
+              </Button>
+              <p className="w-full text-[11px] text-muted-foreground">Arraste o texto direto no preview para posicionar. Arraste o bloco na faixa "Texto" para mudar o tempo.</p>
+            </div>
+          )}
+
           {/* Timeline arrastável */}
           <EditorTimeline
             clips={doc.clips}
@@ -363,6 +432,11 @@ export default function VideoEditorEditor() {
             onTrimSeg={trimSeg}
             onDeleteSeg={deleteSeg}
             onSplit={() => splitAt(currentTime)}
+            texts={texts}
+            selectedTextId={selectedTextId}
+            onSelectText={setSelectedTextId}
+            onUpdateText={updateText}
+            onEditTextContent={(id, t) => updateText(id, { text: t })}
           />
 
           {/* Galeria de assets */}
@@ -449,6 +523,54 @@ export default function VideoEditorEditor() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Camada transparente sobre o Player: mostra os textos ativos como caixas arrastáveis.
+function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove }: {
+  texts: TextLayer[];
+  currentTime: number;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onMove: (id: string, patch: Partial<TextLayer>) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const ativos = texts.filter((t) => currentTime >= t.start - 0.001 && currentTime < t.end);
+  const scale = PREVIEW_W / COMP_W; // px da composição → px do preview
+  const startDrag = (e: React.PointerEvent, t: TextLayer) => {
+    e.preventDefault(); e.stopPropagation();
+    onSelect(t.id);
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mv = (ev: PointerEvent) => {
+      const x = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+      const y = Math.min(1, Math.max(0, (ev.clientY - rect.top) / rect.height));
+      onMove(t.id, { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 });
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  return (
+    <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {ativos.map((t) => (
+        <div key={t.id}
+          onPointerDown={(e) => startDrag(e, t)}
+          style={{
+            position: "absolute", left: `${(t.x ?? 0.5) * 100}%`, top: `${(t.y ?? 0.5) * 100}%`,
+            transform: "translate(-50%, -50%)", maxWidth: "90%",
+            fontSize: (t.fontSize ?? 80) * scale, color: t.color, fontWeight: t.bold ? 800 : 500,
+            backgroundColor: t.bgColor && t.bgColor !== "transparent" ? t.bgColor : "transparent",
+            padding: t.bgColor && t.bgColor !== "transparent" ? "0.15em 0.4em" : 0,
+            textAlign: t.align, lineHeight: 1.1, whiteSpace: "pre-wrap",
+            fontFamily: "Inter, system-ui, sans-serif", textShadow: "0 2px 12px rgba(0,0,0,0.55)",
+            pointerEvents: "auto", cursor: "grab", userSelect: "none",
+            outline: t.id === selectedId ? "2px dashed #38bdf8" : "1px dashed rgba(255,255,255,0.35)",
+            outlineOffset: 2, borderRadius: 6,
+          }}>
+          {t.text}
+        </div>
+      ))}
     </div>
   );
 }
