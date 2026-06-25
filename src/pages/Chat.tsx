@@ -6,10 +6,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Send, Bot, MessageSquare, Loader2, Trash2, Mic, MicOff, BookOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getOrgId } from "@/lib/org";
 import { useSpeechToText } from "@/hooks/use-speech-to-text";
 import { BaseConhecimentoDialog } from "@/components/BaseConhecimentoDialog";
 import { getTenantSlug } from "@/lib/tenant";
 import { toast } from "sonner";
+
+// Serviço de vídeo (VPS) que analisa a referência.
+const SERVICE_URL_VE = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
+// Detecta um link de vídeo na mensagem (Instagram/YouTube/TikTok).
+const VIDEO_URL_RE = /(https?:\/\/[^\s]*(?:instagram\.com\/(?:reels?|p)\/|youtu\.be\/|youtube\.com\/|tiktok\.com\/)[^\s]*)/i;
 
 type Agente = { id: string; nome: string; provider: string; modelo: string | null; ativo: boolean; slug: string | null };
 
@@ -69,6 +75,51 @@ export default function Chat() {
     carregarConversas();
   };
 
+  // Analisa um vídeo de referência (VPS), responde no chat e cria o card no Workflow.
+  const analisarVideo = async (convId: string, url: string) => {
+    setPensando(agenteAtual?.nome || "Agente");
+    setVerbo("executando");
+    if (!SERVICE_URL_VE) throw new Error("Serviço de vídeo não configurado (VITE_VIDEO_EDITOR_URL).");
+    const orgId = await getOrgId();
+    const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+    const res = await fetch(`${SERVICE_URL_VE}/analisar-referencia`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ref_url: url, org_id: orgId, agente_slug: agenteAtual?.slug }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data?.detail || `Falha ao analisar o vídeo (${res.status})`);
+
+    const roteiro: string = data.roteiro || "(sem roteiro)";
+    const plano: any[] = Array.isArray(data.insertion_plan) ? data.insertion_plan : [];
+
+    // Cria o card no Workflow já preenchido.
+    let cardMsg = "";
+    try {
+      const db = supabase as any;
+      const { data: cols } = await db.from("kanban_colunas").select("id,nome,agente_id,ordem").order("ordem");
+      const col = (cols || []).find((c: any) => c.agente_id === agenteId) || (cols || [])[0];
+      const video_ref = { ref_url: url, ref_id: data.ref_id, roteiro, insertion_plan: plano, transcript: data.transcript || "" };
+      const titulo = (roteiro.split("\n")[0] || "Roteiro de vídeo").slice(0, 70);
+      const { data: card } = await db.from("tarefas")
+        .insert({ titulo, descricao: roteiro, coluna_id: col?.id || null, agente_id: agenteId, origem: "chat", video_ref })
+        .select("id").single();
+      if (card?.id) {
+        await db.from("tarefa_respostas").insert({ tarefa_id: card.id, autor: agenteAtual?.nome || "Agente", conteudo: `🎬 Roteiro adaptado da referência:\n\n${roteiro}` });
+      }
+      cardMsg = "\n\n✅ Card criado no Workflow com o roteiro.";
+    } catch { /* segue mesmo se o card falhar */ }
+
+    const planoTxt = plano.length
+      ? "\n\n**Plano de inserções:**\n" + plano.map((p) => `• ${p.tipo} ${Math.round(p.ref_start)}s–${Math.round(p.ref_end)}s — ${p.descricao}`).join("\n")
+      : "";
+    const conteudo = `🎬 Roteiro adaptado da referência:\n\n${roteiro}${planoTxt}${cardMsg}`;
+    setMessages((prev) => [...prev, { role: "assistant", conteudo }]);
+    await supabase.from("mensagens").insert({ conversa_id: convId, role: "assistant", conteudo });
+    await supabase.from("conversas").update({ updated_at: new Date().toISOString() }).eq("id", convId);
+    carregarConversas();
+  };
+
   const enviar = async () => {
     const texto = input.trim();
     if (!texto) return;
@@ -94,6 +145,11 @@ export default function Chat() {
       const novaLista = [...messages, userMsg];
       setMessages(novaLista);
       await supabase.from("mensagens").insert({ conversa_id: convId, role: "user", conteudo: texto });
+
+      // Se a mensagem tem um link de vídeo, o agente ANALISA o vídeo (VPS) e cria o card,
+      // em vez de mandar pro LLM de texto (que não assiste vídeo).
+      const videoMatch = texto.match(VIDEO_URL_RE);
+      if (videoMatch) { await analisarVideo(convId, videoMatch[1]); return; }
 
       // Chama o agente via STREAM (NDJSON): cada passo do time chega em tempo real.
       const SB_URL = import.meta.env.VITE_SUPABASE_URL as string;
