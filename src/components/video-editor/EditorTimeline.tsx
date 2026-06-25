@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState } from "react";
-import type { Clip, Word, Music } from "@/video-editor/remotion/schema";
+import type { Clip, Word, Music, VideoSegment } from "@/video-editor/remotion/schema";
 
 const MIN_DUR = 0.3; // duração mínima de um clip (s)
 const LAYOUT_LABEL: Record<string, string> = {
@@ -18,6 +18,7 @@ const LAYOUT_COR: Record<string, string> = {
 export function EditorTimeline({
   clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs = 90,
   onSeek, onSelect, onUpdateClip, onEditCaption, music = null, onMusicStart,
+  videoSegments = null, originalDuration = 0, onTrimSeg, onDeleteSeg, onSplit,
 }: {
   clips: Clip[];
   duration: number;
@@ -32,6 +33,11 @@ export function EditorTimeline({
   onEditCaption?: (indices: number[], texto: string) => void;
   music?: Music | null;
   onMusicStart?: (s: number) => void;
+  videoSegments?: VideoSegment[] | null;
+  originalDuration?: number;
+  onTrimSeg?: (id: string, patch: Partial<VideoSegment>) => void;
+  onDeleteSeg?: (id: string) => void;
+  onSplit?: () => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const width = Math.max(1, duration) * pxs;
@@ -57,6 +63,31 @@ export function EditorTimeline({
   const commitEdit = () => {
     if (editPage !== null && onEditCaption) onEditCaption(legendas[editPage].indices, editText);
     setEditPage(null);
+  };
+
+  // Posições de SAÍDA dos cortes (cumulativo) para a faixa de vídeo editável.
+  const vsegPos = useMemo(() => {
+    let cur = 0;
+    return (videoSegments || []).map((s) => {
+      const len = Math.max(0, s.sourceEnd - s.sourceStart);
+      const p = { seg: s, outStart: cur, len };
+      cur += len;
+      return p;
+    });
+  }, [videoSegments]);
+
+  // Aparar um corte (handles): 'l' muda sourceStart, 'r' muda sourceEnd (1s saída = 1s fonte).
+  const startTrim = (e: React.PointerEvent, seg: VideoSegment, mode: "l" | "r") => {
+    e.preventDefault(); e.stopPropagation();
+    if (!onTrimSeg) return;
+    const startX = e.clientX, s0 = seg.sourceStart, e0 = seg.sourceEnd;
+    const mv = (ev: PointerEvent) => {
+      const dt = (ev.clientX - startX) / pxs;
+      if (mode === "l") onTrimSeg(seg.id, { sourceStart: round(Math.min(e0 - 0.3, Math.max(0, s0 + dt))) });
+      else onTrimSeg(seg.id, { sourceEnd: round(Math.max(s0 + 0.3, Math.min(originalDuration || e0 + dt, e0 + dt))) });
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
 
   // Clica na régua/trilha para mover o playhead.
@@ -117,11 +148,36 @@ export function EditorTimeline({
             ))}
           </div>
 
-          {/* Faixa de vídeo (somente leitura) */}
-          <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Vídeo</div>
-          <div className="mx-0 mb-2 h-10 rounded bg-neutral-700/60 flex items-center px-2 text-xs text-white/80" style={{ width }}>
-            🎬 talking-head
+          {/* Faixa de vídeo */}
+          <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+            Vídeo (cortes)
+            {videoSegments && onSplit && (
+              <button onClick={onSplit} className="rounded bg-neutral-700 px-1.5 py-0.5 text-[10px] text-white hover:bg-neutral-600">✂ dividir no playhead</button>
+            )}
           </div>
+          {videoSegments && videoSegments.length > 0 ? (
+            <div className="relative mb-2 h-10" style={{ width }}>
+              {vsegPos.map(({ seg, outStart, len }) => (
+                <div key={seg.id}
+                  className="group absolute top-0 h-10 rounded bg-neutral-700/80 ring-1 ring-neutral-600 overflow-hidden"
+                  style={{ left: outStart * pxs, width: Math.max(24, len * pxs) }}
+                  title={`corte ${seg.sourceStart.toFixed(1)}s–${seg.sourceEnd.toFixed(1)}s do original`}>
+                  <div className="absolute left-0 top-0 h-full w-2 cursor-ew-resize bg-blue-500/60" onPointerDown={(e) => startTrim(e, seg, "l")} />
+                  <div className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-blue-500/60" onPointerDown={(e) => startTrim(e, seg, "r")} />
+                  <span className="px-3 text-[10px] leading-10 text-white/80">🎬 {len.toFixed(1)}s</span>
+                  {onDeleteSeg && (
+                    <button onClick={() => onDeleteSeg(seg.id)} title="Apagar corte"
+                      className="absolute right-2.5 top-1 hidden rounded bg-black/50 px-1 text-[10px] text-white group-hover:block">✕</button>
+                  )}
+                </div>
+              ))}
+              <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: currentTime * pxs }} />
+            </div>
+          ) : (
+            <div className="mx-0 mb-2 h-10 rounded bg-neutral-700/60 flex items-center px-2 text-xs text-white/80" style={{ width }}>
+              🎬 talking-head
+            </div>
+          )}
 
           {/* Faixa de overlays (clips arrastáveis) + área clicável para scrub */}
           <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">Imagens / B-rolls</div>

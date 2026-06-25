@@ -9,8 +9,8 @@ import { toast } from "sonner";
 import { EditorTimeline } from "@/components/video-editor/EditorTimeline";
 import { Main } from "@/video-editor/remotion/Main";
 import {
-  clipsParaTimeline, OVERLAY_LAYOUTS, CAPTION_STYLE_DEFAULT,
-  type Clip, type EditorDoc, type OverlayLayout, type CaptionStyle,
+  montarTimeline, OVERLAY_LAYOUTS, CAPTION_STYLE_DEFAULT,
+  type Clip, type EditorDoc, type OverlayLayout, type CaptionStyle, type VideoSegment,
 } from "@/video-editor/remotion/schema";
 
 const db = supabase as any;
@@ -69,11 +69,12 @@ export default function VideoEditorEditor() {
     return () => p.removeEventListener("frameupdate", cb as any);
   }, [doc]);
 
-  // Timeline para o PREVIEW usa o proxy leve (fluido); o render final usa o vídeo full.
-  const timeline = useMemo(() => {
-    if (!doc) return null;
-    const tl = clipsParaTimeline(doc);
-    return { ...tl, video: doc.videoPreview || doc.video };
+  // Timeline + palavras de SAÍDA (Fase 3 monta a partir dos cortes; v2 cai no fallback).
+  // Preview usa o proxy leve (fluido); o render final usa o vídeo full.
+  const { timeline, words: outWords } = useMemo(() => {
+    if (!doc) return { timeline: null as any, words: [] as any[] };
+    const r = montarTimeline(doc);
+    return { timeline: { ...r.timeline, video: doc.videoPreview || doc.video }, words: r.words };
   }, [doc]);
   const fps = doc?.fps || 30;
   const durationInFrames = Math.max(1, Math.round((doc?.durationInSeconds || 1) * fps));
@@ -116,6 +117,35 @@ export default function VideoEditorEditor() {
   const setMusicVol = useCallback((v: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, volume: v } } : d)), []);
   const setMusicStart = useCallback((s: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, start: Math.max(0, s) } } : d)), []);
   const removerMusica = useCallback(() => setDoc((d) => (d ? { ...d, music: null } : d)), []);
+
+  // Cortes (Fase 3): aparar/dividir/apagar segmentos do vídeo original.
+  const videoSegments = doc?.videoSegments ?? null;
+  const originalDuration = doc?.originalDuration ?? doc?.durationInSeconds ?? 0;
+  const trimSeg = useCallback((id: string, patch: Partial<VideoSegment>) => {
+    setDoc((d) => (d && d.videoSegments ? { ...d, videoSegments: d.videoSegments.map((s) => (s.id === id ? { ...s, ...patch } : s)) } : d));
+  }, []);
+  const deleteSeg = useCallback((id: string) => {
+    setDoc((d) => (d && d.videoSegments ? { ...d, videoSegments: d.videoSegments.filter((s) => s.id !== id) } : d));
+  }, []);
+  // Divide no tempo de SAÍDA (outTime): acha o segmento e quebra no tempo-fonte correspondente.
+  const splitAt = useCallback((outTime: number) => {
+    setDoc((d) => {
+      if (!d || !d.videoSegments) return d;
+      let cursor = 0; const novos: VideoSegment[] = [];
+      for (const s of d.videoSegments) {
+        const len = s.sourceEnd - s.sourceStart;
+        if (outTime > cursor + 0.1 && outTime < cursor + len - 0.1) {
+          const srcCut = s.sourceStart + (outTime - cursor);
+          novos.push({ id: `${s.id}a`, sourceStart: s.sourceStart, sourceEnd: srcCut });
+          novos.push({ id: `${s.id}b`, sourceStart: srcCut, sourceEnd: s.sourceEnd });
+        } else {
+          novos.push(s);
+        }
+        cursor += len;
+      }
+      return { ...d, videoSegments: novos };
+    });
+  }, []);
   const [subindoMusica, setSubindoMusica] = useState(false);
   const uploadMusica = async (file: File) => {
     setSubindoMusica(true);
@@ -214,7 +244,7 @@ export default function VideoEditorEditor() {
             <Player
               ref={playerRef}
               component={Main as any}
-              inputProps={{ timeline, words: doc.words, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle, videoVolume, music }}
+              inputProps={{ timeline, words: outWords, assets: doc.assets, mediaBase, preview: true, captionStyle: capStyle, videoVolume, music }}
               durationInFrames={durationInFrames}
               fps={fps}
               compositionWidth={1080}
@@ -273,6 +303,11 @@ export default function VideoEditorEditor() {
             onEditCaption={editCaption}
             music={music}
             onMusicStart={setMusicStart}
+            videoSegments={videoSegments}
+            originalDuration={originalDuration}
+            onTrimSeg={trimSeg}
+            onDeleteSeg={deleteSeg}
+            onSplit={() => splitAt(currentTime)}
           />
 
           {/* Galeria de assets */}

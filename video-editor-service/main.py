@@ -553,8 +553,9 @@ def deletar(job_id: str, authorization: str = Header(default="")):
 # Pipeline
 # ============================================================
 def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Path,
-                 out: pathlib.Path, prefixo: str = "") -> dict:
-    """Roda o corte por IA (video-use) e renderiza em `out`. Retorna o EDL. `prefixo` rotula a etapa."""
+                 out: pathlib.Path, prefixo: str = "", render_out: bool = True) -> dict:
+    """Roda o corte por IA (video-use). Se render_out, renderiza em `out`; senão só retorna o EDL
+    (faixas em tempo do ORIGINAL). `prefixo` rotula a etapa."""
     editdir = workdir / "edit"
     editdir.mkdir(parents=True, exist_ok=True)
 
@@ -576,6 +577,9 @@ def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Pa
     }
     edl_path = editdir / "edl.json"
     edl_path.write_text(json.dumps(edl), encoding="utf-8")
+
+    if not render_out:
+        return edl  # só as faixas (Fase 3 usa o original + ranges, não o cut renderizado)
 
     total = len(edl["ranges"])
     seg_re = re.compile(r"^\s*\[(\d+)\]")
@@ -654,6 +658,84 @@ def _clips_para_timeline(doc: dict) -> dict:
             "durationInSeconds": dur, "segments": segs, "stickers": []}
 
 
+def _ffprobe_dur(path: pathlib.Path) -> float:
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                            "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                           capture_output=True, text=True, check=True)
+        return float(r.stdout.strip() or 0)
+    except Exception:
+        return 0.0
+
+
+def _remap_transcript_saida(transcript: dict, ranges: list) -> dict:
+    """Remapeia a transcrição do ORIGINAL para o tempo de SAÍDA (concatenação dos ranges).
+    Usado pelo planner posicionar overlays no tempo de saída."""
+    rs = [(float(r["start"]), float(r["end"])) for r in ranges if float(r["end"]) > float(r["start"])]
+    out_segs = []
+    cum = 0.0
+    for (a, b) in rs:
+        for s in transcript.get("segments", []):
+            ss, se = float(s.get("start", 0)), float(s.get("end", 0))
+            if se > a and ss < b:  # segmento cai dentro do range
+                os_ = cum + (max(ss, a) - a)
+                oe = cum + (min(se, b) - a)
+                out_segs.append({"start": round(os_, 3), "end": round(oe, 3), "text": s.get("text", "")})
+        cum += (b - a)
+    return {"segments": out_segs}
+
+
+def _montar_timeline(doc: dict):
+    """Fase 3: monta a timeline de SAÍDA a partir de videoSegments + overlays e remapeia words.
+    Fallback p/ v2 quando não há videoSegments. Retorna (timeline, words_saida)."""
+    vsegs = [v for v in (doc.get("videoSegments") or []) if float(v["sourceEnd"]) > float(v["sourceStart"])]
+    if not vsegs:
+        return _clips_para_timeline(doc), doc.get("words", [])
+    fps = doc.get("fps", 30)
+    overlays = sorted([c for c in doc.get("clips", []) if float(c["end"]) > float(c["start"])], key=lambda c: c["start"])
+
+    def ov_em(t):
+        for o in overlays:
+            if float(o["start"]) <= t < float(o["end"]):
+                return o
+        return None
+
+    mapped = []
+    out = 0.0
+    for v in vsegs:
+        length = float(v["sourceEnd"]) - float(v["sourceStart"])
+        mapped.append({"outStart": out, "outEnd": out + length, "sourceStart": float(v["sourceStart"])})
+        out += length
+    dur = out
+    segs = []
+    for m in mapped:
+        pts = {m["outStart"], m["outEnd"]}
+        for o in overlays:
+            if m["outStart"] < float(o["start"]) < m["outEnd"]: pts.add(float(o["start"]))
+            if m["outStart"] < float(o["end"]) < m["outEnd"]: pts.add(float(o["end"]))
+        ordp = sorted(pts)
+        for i in range(len(ordp) - 1):
+            a, b = ordp[i], ordp[i + 1]
+            if b - a < 0.02: continue
+            ov = ov_em((a + b) / 2)
+            ss = m["sourceStart"] + (a - m["outStart"])
+            segs.append({"start": round(ss, 3), "end": round(ss + (b - a), 3),
+                         "layout": ov["layout"] if ov else "talking_full", "asset": ov["asset"] if ov else None})
+    if not segs:
+        segs = [{"start": 0, "end": max(0.1, dur), "layout": "talking_full", "asset": None}]
+    words = []
+    for w in doc.get("words", []):
+        for m in mapped:
+            v_end = m["sourceStart"] + (m["outEnd"] - m["outStart"])
+            if m["sourceStart"] <= float(w["start"]) < v_end:
+                os_ = m["outStart"] + (float(w["start"]) - m["sourceStart"])
+                oe = m["outStart"] + (min(float(w["end"]), v_end) - m["sourceStart"])
+                words.append({"word": w["word"], "start": round(os_, 3), "end": round(max(os_ + 0.05, oe), 3)})
+                break
+    return {"video": doc.get("video", "original.mp4"), "fps": fps, "durationInSeconds": dur,
+            "segments": segs, "stickers": []}, words
+
+
 def processar_edicao(job_id: str, brief: str, org_id: str):
     """Modo 'completo' — FASE PREPARAR: corte → transcrição → planner (rascunho). NÃO renderiza.
     Salva o editor_doc em video_jobs.timeline e deixa o job em status 'editar' para o usuário ajustar."""
@@ -668,28 +750,26 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
     workjob = WORK_DIR / job_id
     try:
         workjob.mkdir(parents=True, exist_ok=True)
-        cut = workjob / "talking_head.mp4"
-        _gerar_corte(db, job_id, src, workdir, cut, prefixo="")
 
-        # Proxy leve só para o preview no navegador ficar fluido (render final usa o full).
+        # 1) Corte por IA só para obter as FAIXAS (em tempo do ORIGINAL); NÃO renderiza o cut.
+        edl = _gerar_corte(db, job_id, src, workdir, workjob / "_x.mp4", prefixo="", render_out=False)
+        ranges = edl.get("ranges", [])
+        if not ranges:
+            raise RuntimeError("Não consegui obter as faixas de corte")
+
+        # 2) O ORIGINAL é a base do editor (servido em /work) + proxy leve + duração.
         set_etapa(db, job_id, "preparando preview")
-        preview = workjob / "talking_head_preview.mp4"
-        try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", str(cut), "-vf", "scale=540:-2",
-                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
-                 # keyframe a cada ~0.5s + faststart → busca/scrub suave no preview
-                 "-g", "15", "-keyint_min", "15", "-sc_threshold", "0", "-movflags", "+faststart",
-                 "-c:a", "aac", "-b:a", "96k", str(preview)],
-                capture_output=True, text=True, check=True,
-            )
-        except Exception:
-            preview = None  # se falhar, o preview usa o vídeo full
+        orig = workjob / "original.mp4"
+        shutil.copyfile(str(src), str(orig))
+        prev_ok = _proxy_preview(orig, workjob / "original_preview.mp4")
+        original_dur = _ffprobe_dur(orig)
 
+        # 3) Transcreve o ORIGINAL (tempo do original) → legendas (remapeadas na timeline).
         set_etapa(db, job_id, "transcrevendo legendas")
-        transcript = transcrever_words(str(cut), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
+        transcript = transcrever_words(str(orig), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
 
+        # 4) Planner no transcript de SAÍDA (palavras dentro das faixas) → overlays no tempo de saída.
         set_etapa(db, job_id, "planejando layouts")
         meta = []
         meta_path = workjob / "assets_meta.json"
@@ -697,22 +777,26 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
             meta = json.loads(meta_path.read_text(encoding="utf-8") or "[]")
         assets_list = [{"id": m.get("id"), "tipo": m.get("tipo"), "descricao": m.get("descricao")} for m in meta if m.get("id")]
         assets_map = {m["id"]: f"assets/{pathlib.Path(m.get('filename','')).name}" for m in meta if m.get("id") and m.get("filename")}
-        timeline = gerar_timeline(transcript, assets_list, "talking_head.mp4", brief)
+        out_transcript = _remap_transcript_saida(transcript, ranges)
+        timeline = gerar_timeline(out_transcript, assets_list, "original.mp4", brief)
 
-        # editor_doc: clips (editáveis) + tudo que o preview/render precisam.
+        video_segments = [{"id": f"v{i}", "sourceStart": float(r["start"]), "sourceEnd": float(r["end"])} for i, r in enumerate(ranges)]
+        dur_out = sum(float(r["end"]) - float(r["start"]) for r in ranges)
         editor_doc = {
             "clips": _timeline_para_clips(timeline),
             "words": words,
             "assets": assets_map,
-            "video": "talking_head.mp4",
-            "videoPreview": "talking_head_preview.mp4" if preview else "talking_head.mp4",
+            "video": "original.mp4",
+            "videoPreview": "original_preview.mp4" if prev_ok else "original.mp4",
             "fps": int(timeline.get("fps", 30)) or 30,
-            "durationInSeconds": float(timeline.get("durationInSeconds") or (timeline["segments"][-1]["end"] if timeline.get("segments") else 0)),
+            "durationInSeconds": dur_out,
+            "videoSegments": video_segments,
+            "originalDuration": original_dur,
         }
         db.table("video_jobs").update({
             "status": "editar", "etapa": None, "timeline": editor_doc, "erro": None,
         }).eq("id", job_id).execute()
-        # Mantém entrada + /work (vídeo cortado + assets) para o editor e o render.
+        # Mantém entrada + /work (original + assets) para o editor e o render.
     except Exception as e:
         _log(db, job_id, f"❌ erro: {str(e)[:300]}")
         db.table("video_jobs").update({"status": "erro", "etapa": None, "erro": str(e)[:500]}).eq("id", job_id).execute()
@@ -860,8 +944,8 @@ def processar_render(job_id: str):
         doc = (row.data or {}).get("timeline")
         if not doc or "clips" not in doc:
             raise RuntimeError("Edição não encontrada para este job")
-        timeline = _clips_para_timeline(doc)
-        props = {"timeline": timeline, "words": doc.get("words", []), "assets": doc.get("assets", {}),
+        timeline, out_words = _montar_timeline(doc)   # Fase 3: monta dos cortes + remapeia legendas (fallback v2)
+        props = {"timeline": timeline, "words": out_words, "assets": doc.get("assets", {}),
                  "mediaBase": f"{INTERNAL_BASE}/work/{job_id}"}
         if doc.get("captionStyle"):
             props["captionStyle"] = doc["captionStyle"]

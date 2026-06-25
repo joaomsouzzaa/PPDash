@@ -105,18 +105,28 @@ export type Clip = {
   end: number;       // segundos
 };
 
+// Corte editável (Fase 3): trecho mantido do vídeo ORIGINAL.
+export type VideoSegment = {
+  id: string;
+  sourceStart: number;  // s no vídeo original
+  sourceEnd: number;
+};
+
 // editor_doc salvo em video_jobs.timeline (autosave).
 export type EditorDoc = {
   clips: Clip[];
   words: Word[];
   assets: Record<string, string>;  // id -> caminho relativo (assets/xxx)
-  video: string;                   // nome do vídeo cortado (talking_head.mp4) — usado no render final
+  video: string;                   // v2: vídeo cortado; v3: vídeo ORIGINAL (usado no render)
   videoPreview?: string;           // proxy leve para o preview no navegador (opcional)
   fps: number;
   durationInSeconds: number;
   captionStyle?: CaptionStyle;     // estilo editável da legenda
   videoVolume?: number;            // volume do áudio original (0–1)
   music?: Music | null;            // faixa de música
+  // Fase 3 (cortes como clipes). Quando presente, a timeline é montada a partir destes.
+  videoSegments?: VideoSegment[];  // trechos mantidos do ORIGINAL, em ordem
+  originalDuration?: number;       // duração do vídeo original (s) — limite do "aparar pra mais"
 };
 
 // Deriva a timeline (segmentos contíguos) a partir dos clips de overlay.
@@ -138,3 +148,61 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
   if (!segments.length) segments.push({ start: 0, end: dur, layout: "talking_full", asset: null });
   return { video: doc.video, fps: doc.fps, durationInSeconds: dur, segments, stickers: [] };
 }
+
+// Fase 3: monta a timeline de SAÍDA a partir do vídeo ORIGINAL + videoSegments (cortes) + overlays,
+// e remapeia as palavras (do tempo original → tempo de saída). Fallback p/ v2 quando não há videoSegments.
+export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Word[] } {
+  if (!doc.videoSegments || doc.videoSegments.length === 0) {
+    return { timeline: clipsParaTimeline(doc), words: doc.words || [] };
+  }
+  const fps = doc.fps || 30;
+  const overlays = [...(doc.clips || [])].filter((c) => c.end > c.start).sort((a, b) => a.start - b.start);
+  const overlayEm = (t: number) => overlays.find((o) => o.start <= t && t < o.end) || null;
+
+  // 1) mapeia cada videoSegment para uma janela de SAÍDA (outStart..outEnd) e tempo-fonte.
+  const vsegs = doc.videoSegments.filter((v) => v.sourceEnd > v.sourceStart);
+  let out = 0;
+  const mapped = vsegs.map((v) => {
+    const len = v.sourceEnd - v.sourceStart;
+    const m = { outStart: out, outEnd: out + len, sourceStart: v.sourceStart };
+    out += len;
+    return m;
+  });
+  const durationInSeconds = out;
+
+  // 2) render segments: subdivide cada janela nos limites dos overlays.
+  const segments: Segment[] = [];
+  for (const m of mapped) {
+    const pts = new Set<number>([m.outStart, m.outEnd]);
+    for (const o of overlays) {
+      if (o.start > m.outStart && o.start < m.outEnd) pts.add(o.start);
+      if (o.end > m.outStart && o.end < m.outEnd) pts.add(o.end);
+    }
+    const ord = [...pts].sort((a, b) => a - b);
+    for (let i = 0; i < ord.length - 1; i++) {
+      const a = ord[i], b = ord[i + 1];
+      if (b - a < 0.02) continue;
+      const ov = overlayEm((a + b) / 2);
+      const srcStart = m.sourceStart + (a - m.outStart);
+      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null });
+    }
+  }
+  if (!segments.length) segments.push({ start: 0, end: Math.max(0.1, durationInSeconds), layout: "talking_full", asset: null });
+
+  // 3) remapeia palavras (tempo original → saída).
+  const words: Word[] = [];
+  for (const w of doc.words || []) {
+    for (const m of mapped) {
+      const vEnd = m.sourceStart + (m.outEnd - m.outStart);
+      if (w.start >= m.sourceStart && w.start < vEnd) {
+        const os = m.outStart + (w.start - m.sourceStart);
+        const oe = m.outStart + (Math.min(w.end, vEnd) - m.sourceStart);
+        words.push({ word: w.word, start: round3(os), end: round3(Math.max(os + 0.05, oe)) });
+        break;
+      }
+    }
+  }
+  return { timeline: { video: doc.video, fps, durationInSeconds, segments, stickers: [] }, words };
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
