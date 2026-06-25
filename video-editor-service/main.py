@@ -772,12 +772,19 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
     try:
         assets_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1) Baixa o bruto do Drive (gdown lida com o id do Drive / confirm token)
+        # 1) Baixa o bruto do Drive. Extrai o ID do link e baixa por ID (compatível com qualquer gdown).
         set_etapa(db, job_id, "baixando gravação")
         import gdown
-        gdown.download(url=drive_url, output=str(src), quiet=True, fuzzy=True)
+        mid = re.search(r"/d/([A-Za-z0-9_-]+)", drive_url) or re.search(r"[?&]id=([A-Za-z0-9_-]+)", drive_url)
+        try:
+            if mid:
+                gdown.download(id=mid.group(1), output=str(src), quiet=True)
+            else:
+                gdown.download(url=drive_url, output=str(src), quiet=True)
+        except Exception as e:
+            raise RuntimeError(f"Falha ao baixar do Drive: {str(e)[:150]}. O link precisa ser 'qualquer pessoa com o link'.")
         if not src.exists() or src.stat().st_size < 1000:
-            raise RuntimeError("Não consegui baixar o vídeo do Drive (link precisa estar compartilhável).")
+            raise RuntimeError("Download do Drive vazio — confira se o link é público ('qualquer pessoa com o link').")
 
         # 2) Corte + proxy + transcrição
         cut = workjob / "talking_head.mp4"
