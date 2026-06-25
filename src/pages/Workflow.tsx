@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -874,13 +874,17 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     refetchInterval: (q) => ((q.state.data as any)?.job_id ? 8000 : false), // acompanha a montagem
     queryFn: async () => {
       const { data } = await db.from("tarefas").select("video_ref").eq("id", tarefaId).maybeSingle();
-      const vr = data?.video_ref || null;
-      if (vr?.ref_url) setUrl(vr.ref_url);
-      if (vr?.drive_url) setDriveUrl(vr.drive_url);
-      if (vr?.fonte_broll) setFonte(vr.fonte_broll);
-      return vr;
+      return data?.video_ref || null;
     },
   });
+
+  // Sincroniza os campos com o video_ref salvo (inclusive quando vem do cache do React Query).
+  useEffect(() => {
+    if (!ref) return;
+    if (ref.ref_url) setUrl(ref.ref_url);
+    if (ref.drive_url) setDriveUrl(ref.drive_url);
+    if (ref.fonte_broll) setFonte(ref.fonte_broll);
+  }, [ref]);
 
   // status do job de montagem (se houver)
   const { data: job } = useQuery({
