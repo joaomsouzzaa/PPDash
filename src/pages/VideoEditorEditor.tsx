@@ -301,6 +301,8 @@ export default function VideoEditorEditor() {
             <TextDragLayer
               texts={texts} currentTime={currentTime}
               selectedId={selectedTextId} onSelect={setSelectedTextId} onMove={updateText}
+              words={outWords} captionStyle={capStyle}
+              onMoveCaption={(y) => setCapStyle({ posicaoY: y })}
             />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">Preview ao vivo · {fmt(currentTime)} / {fmt(doc.durationInSeconds)}</p>
@@ -529,17 +531,58 @@ export default function VideoEditorEditor() {
   );
 }
 
-// Camada transparente sobre o Player: mostra os textos ativos como caixas arrastáveis.
-function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove }: {
+// Pagina as palavras igual ao Captions (para achar a legenda ativa no preview).
+function paginarLegenda(words: { word: string; start: number; end: number }[], maxWords: number, maxDurMs = 1100) {
+  const pages: { startMs: number; words: { text: string; fromMs: number; toMs: number }[] }[] = [];
+  let cur: typeof pages[number] | null = null;
+  for (const w of words) {
+    const fromMs = w.start * 1000, toMs = w.end * 1000;
+    const estoura = cur && toMs - cur.startMs > maxDurMs;
+    if (!cur || cur.words.length >= maxWords || estoura) { cur = { startMs: fromMs, words: [] }; pages.push(cur); }
+    cur.words.push({ text: w.word, fromMs, toMs });
+  }
+  return pages;
+}
+
+// Camada transparente sobre o Player: textos ativos como caixas arrastáveis + legenda arrastável (vertical).
+function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption }: {
   texts: TextLayer[];
   currentTime: number;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, patch: Partial<TextLayer>) => void;
+  words?: { word: string; start: number; end: number }[];
+  captionStyle?: CaptionStyle;
+  onMoveCaption?: (posicaoY: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const ativos = texts.filter((t) => currentTime >= t.start - 0.001 && currentTime < t.end);
   const scale = PREVIEW_W / COMP_W; // px da composição → px do preview
+  const scaleH = PREVIEW_H / 1920;
+
+  // Legenda ativa no instante atual (para arrastar verticalmente).
+  const cap = captionStyle;
+  const legendaAtiva = (() => {
+    if (!cap || !onMoveCaption || !words.length) return null;
+    const pages = paginarLegenda(words, Math.max(1, cap.palavrasPorPagina));
+    let idx = -1; const ms = currentTime * 1000;
+    for (let i = 0; i < pages.length; i++) { if (pages[i].startMs <= ms) idx = i; else break; }
+    if (idx < 0) return null;
+    return pages[idx].words.map((w) => w.text).join(" ");
+  })();
+  const startDragCaption = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect || !onMoveCaption) return;
+    const mv = (ev: PointerEvent) => {
+      const distBottom = Math.max(0, rect.bottom - ev.clientY);          // px no preview a partir do rodapé
+      const posY = Math.round(Math.min(1700, Math.max(20, distBottom / scaleH)));
+      onMoveCaption(posY);
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
   const startDrag = (e: React.PointerEvent, t: TextLayer) => {
     e.preventDefault(); e.stopPropagation();
     onSelect(t.id);
@@ -576,6 +619,27 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove }: {
           {t.text}
         </div>
       ))}
+
+      {/* Legenda ativa: arraste verticalmente para reposicionar (atualiza posicaoY) */}
+      {legendaAtiva && cap && (
+        <div
+          onPointerDown={startDragCaption}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute", left: "50%", bottom: (cap.posicaoY ?? 380) * scaleH,
+            transform: "translateX(-50%)", maxWidth: "92%",
+            fontSize: Math.max(9, (cap.fontSize ?? 86) * scale * 0.92), fontWeight: 900,
+            color: cap.color, textTransform: "uppercase", textAlign: "center", lineHeight: 1.1,
+            fontFamily: "Inter, Arial, sans-serif", whiteSpace: "nowrap", overflow: "hidden",
+            touchAction: "none", pointerEvents: "auto", cursor: "ns-resize", userSelect: "none",
+            outline: "2px dashed rgba(255,230,0,0.9)", outlineOffset: 3, borderRadius: 6,
+            padding: "2px 6px", opacity: 0.85,
+          }}
+          title="Arraste para cima/baixo para posicionar a legenda"
+        >
+          {legendaAtiva}
+        </div>
+      )}
     </div>
   );
 }
