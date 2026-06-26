@@ -293,6 +293,8 @@ export default function VideoEditorEditor() {
               compositionHeight={1920}
               style={{ width: PREVIEW_W, height: PREVIEW_H }}
               controls
+              clickToPlay={false}
+              doubleClickToFullscreen={false}
               acknowledgeRemotionLicense
             />
             {/* Camada interativa: arraste os textos para posicionar */}
@@ -541,6 +543,7 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove }: {
   const startDrag = (e: React.PointerEvent, t: TextLayer) => {
     e.preventDefault(); e.stopPropagation();
     onSelect(t.id);
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const mv = (ev: PointerEvent) => {
@@ -556,7 +559,9 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove }: {
       {ativos.map((t) => (
         <div key={t.id}
           onPointerDown={(e) => startDrag(e, t)}
+          onClick={(e) => e.stopPropagation()}
           style={{
+            touchAction: "none",
             position: "absolute", left: `${(t.x ?? 0.5) * 100}%`, top: `${(t.y ?? 0.5) * 100}%`,
             transform: "translate(-50%, -50%)", maxWidth: "90%",
             fontSize: (t.fontSize ?? 80) * scale, color: t.color, fontWeight: t.bold ? 800 : 500,
