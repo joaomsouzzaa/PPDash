@@ -23,6 +23,10 @@ type Ctx = {
   crop?: Crop;          // recorte livre do asset
   splitRatio?: number;  // fração do VÍDEO PRINCIPAL no split (default 0.6 = 60%)
   assetStartFrame?: number; // offset (frames) dentro do asset de vídeo (dividir b-roll)
+  headBox?: Crop;       // caixa do vídeo principal (talking-head) como camada — fundo preto atrás
+  headCrop?: Crop;      // recorte do vídeo principal
+  headCropY?: number;   // posição vertical do vídeo principal
+  headRotation?: number;// rotação do vídeo principal
 };
 
 const cover: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
@@ -58,11 +62,24 @@ export const Asset: React.FC<{ src: string | null; isVideo: boolean; preview?: b
   return isVideo ? vid(st) : <Img src={src} style={st} />;
 };
 
-const TalkingFull: React.FC<Ctx> = ({ videoSrc, videoStartFrame, preview, videoVolume }) => (
-  <AbsoluteFill style={{ backgroundColor: "#000" }}>
-    <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} />
-  </AbsoluteFill>
-);
+const TalkingFull: React.FC<Ctx> = ({ videoSrc, videoStartFrame, preview, videoVolume, headBox, headCrop, headCropY, headRotation }) => {
+  const b = headBox ?? { x: 0, y: 0, w: 1, h: 1 };
+  const semTransform = (!headBox || (b.x === 0 && b.y === 0 && b.w === 1 && b.h === 1)) && !headCrop && !headCropY && !headRotation;
+  if (semTransform) {
+    return <AbsoluteFill style={{ backgroundColor: "#000" }}><Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} /></AbsoluteFill>;
+  }
+  const livre = headCrop && (headCrop.w < 0.999 || headCrop.h < 0.999 || headCrop.x > 0.001 || headCrop.y > 0.001);
+  const inner: React.CSSProperties = livre && headCrop
+    ? { position: "absolute", width: `${100 / headCrop.w}%`, height: `${100 / headCrop.h}%`, left: `${(-headCrop.x * 100) / headCrop.w}%`, top: `${(-headCrop.y * 100) / headCrop.h}%`, objectFit: "cover" }
+    : { ...cover, objectPosition: `50% ${headCropY ?? 50}%` };
+  return (
+    <AbsoluteFill style={{ backgroundColor: "#000" }}>
+      <div style={{ position: "absolute", left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%`, transform: headRotation ? `rotate(${headRotation}deg)` : undefined, overflow: "hidden" }}>
+        <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} style={inner} />
+      </div>
+    </AbsoluteFill>
+  );
+};
 
 // Split: vídeo principal ocupa `ratio` (default 60%); b-roll a outra parte. Direção via assetTop.
 const Split: React.FC<Ctx & { assetTop: boolean }> = ({ videoSrc, videoStartFrame, assetSrc, isVideoAsset, preview, videoVolume, cropY, crop, splitRatio, assetStartFrame, assetTop }) => {

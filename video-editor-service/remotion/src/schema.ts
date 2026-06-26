@@ -116,10 +116,20 @@ export const musicClipSchema = z.object({
   volume: z.number().optional().default(0.5),
 });
 
+// Transform do vídeo principal (talking-head) como camada: caixa/recorte/rotação. Fundo preto atrás.
+export const headTransformSchema = z.object({
+  box: boxSchema.optional(),
+  crop: boxSchema.optional(),
+  cropY: z.number().optional(),
+  rotation: z.number().optional(),
+});
+export type HeadTransform = z.infer<typeof headTransformSchema>;
+
 export const timelineSchema = z.object({
   video: z.string(),
   fps: z.number().default(30),
   durationInSeconds: z.number().optional(),
+  head: headTransformSchema.optional(),
   segments: z.array(segmentSchema),
   stickers: z.array(stickerSchema).default([]),
   freeLayers: z.array(freeLayerSchema).default([]),
@@ -200,6 +210,7 @@ export type EditorDoc = {
   videoPreview?: string;           // proxy leve para o preview no navegador (opcional)
   fps: number;
   durationInSeconds: number;
+  head?: HeadTransform;            // transform do vídeo principal (talking-head) como camada
   captionStyle?: CaptionStyle;     // estilo editável da legenda
   videoVolume?: number;            // volume do áudio original (0–1)
   music?: Music | null;            // faixa de música (legado — 1 peça)
@@ -243,7 +254,7 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
   }
   if (cursor < dur) segments.push({ start: cursor, end: dur, layout: "talking_full", asset: null });
   if (!segments.length) segments.push({ start: 0, end: dur, layout: "talking_full", asset: null });
-  return { video: doc.video, fps: doc.fps, durationInSeconds: dur, segments, stickers: [], freeLayers: buildFreeLayers(doc) };
+  return { video: doc.video, fps: doc.fps, durationInSeconds: dur, head: doc.head, segments, stickers: [], freeLayers: buildFreeLayers(doc) };
 }
 
 // Fase 3: monta a timeline de SAÍDA a partir do vídeo ORIGINAL + videoSegments (cortes) + overlays,
@@ -299,7 +310,7 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
       }
     }
   }
-  return { timeline: { video: doc.video, fps, durationInSeconds, segments, stickers: [], freeLayers: buildFreeLayers(doc) }, words };
+  return { timeline: { video: doc.video, fps, durationInSeconds, head: doc.head, segments, stickers: [], freeLayers: buildFreeLayers(doc) }, words };
 }
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;

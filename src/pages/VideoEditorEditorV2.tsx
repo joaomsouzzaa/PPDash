@@ -73,6 +73,7 @@ export default function VideoEditorEditorV2() {
     );
   }
   const doc = ed.doc, sel = ed.selected, selT = ed.selectedText;
+  const selHead = ed.selectedId === "__head__";
 
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-neutral-100">
@@ -198,7 +199,7 @@ export default function VideoEditorEditorV2() {
         {/* Canvas central */}
         <main ref={canvasArea} className="relative flex flex-1 flex-col items-center justify-center overflow-auto bg-neutral-900 p-4">
           {/* Toolbar flutuante de ícones do elemento selecionado (arrastável pela alça) */}
-          {(sel || selT) && (
+          {(sel || selT || selHead) && (
             <div className="absolute z-10 flex items-center gap-1"
               style={tbPos ? { left: tbPos.x, top: tbPos.y } : { top: 8, left: "50%", transform: "translateX(-50%)" }}>
               <button onPointerDown={startDragToolbar} title="Arraste para mover a barra"
@@ -207,6 +208,7 @@ export default function VideoEditorEditorV2() {
               </button>
               {sel && <ClipToolbar ed={ed} sel={sel} onAddLayer={() => setAba("midia")} />}
               {selT && !sel && <TextToolbar ed={ed} selT={selT} />}
+              {selHead && <HeadToolbar ed={ed} />}
             </div>
           )}
 
@@ -222,6 +224,8 @@ export default function VideoEditorEditorV2() {
               style={{ width: cv.w * zf, height: cv.h * zf }}
               clickToPlay={false} doubleClickToFullscreen={false} acknowledgeRemotionLicense
             />
+            {/* Vídeo principal (talking-head) como camada — clicável atrás das mídias */}
+            <HeadTransformOverlay ed={ed} W={cv.w * zf} H={cv.h * zf} />
             {/* Seleção por clique + caixas de transform das camadas livres (mídia flutuante) */}
             <FreeLayersOverlay ed={ed} W={cv.w * zf} H={cv.h * zf} />
             {sel && !isFree(sel) && <BrollTransform clip={sel} currentTime={ed.currentTime} onUpdate={ed.updateClip} W={cv.w * zf} H={cv.h * zf} />}
@@ -430,6 +434,41 @@ function FreeLayersOverlay({ ed, W, H }: { ed: ReturnType<typeof useEditorDoc>; 
         <FreeTransformBox key={c.id} containerRef={ref} clip={c} selected={c.id === ed.selectedId}
           onSelect={() => ed.setSelectedId(c.id)} onUpdate={ed.updateClip} W={W} H={H} />
       ))}
+    </div>
+  );
+}
+
+// Vídeo principal (talking-head) como camada: clicar na área dele (quando em tela cheia) seleciona,
+// e mostra a mesma caixa de transform (mover/redimensionar/recortar/rotacionar). Fundo preto atrás.
+function HeadTransformOverlay({ ed, W, H }: { ed: ReturnType<typeof useEditorDoc>; W: number; H: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const segs = ed.timeline?.segments || [];
+  const seg = segs.find((s: any) => ed.currentTime >= s.start - 0.001 && ed.currentTime < s.end);
+  if (!seg || seg.layout !== "talking_full") return null;  // só quando o head ocupa a tela cheia
+  const selHead = ed.selectedId === "__head__";
+  const headClip = { id: "__head__", box: ed.head.box, crop: ed.head.crop, rotation: ed.head.rotation };
+  return (
+    <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {!selHead && (
+        <div onPointerDown={(e) => { e.stopPropagation(); ed.setSelectedId("__head__"); }}
+          style={{ position: "absolute", inset: 0, pointerEvents: "auto", cursor: "pointer" }}
+          title="Clique para selecionar o vídeo principal" />
+      )}
+      {selHead && (
+        <FreeTransformBox containerRef={ref} clip={headClip} selected onSelect={() => ed.setSelectedId("__head__")}
+          onUpdate={(_id, patch) => ed.updateHead(patch)} W={W} H={H} />
+      )}
+    </div>
+  );
+}
+
+// Toolbar do vídeo principal selecionado.
+function HeadToolbar({ ed }: { ed: ReturnType<typeof useEditorDoc> }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border border-neutral-700 bg-neutral-800/95 px-1.5 py-1 shadow-xl backdrop-blur">
+      <span className="px-1.5 text-[11px] text-neutral-400">Vídeo principal</span>
+      <button title="Tela cheia (resetar)" onClick={() => ed.updateHead({ box: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Maximize2 className="h-4 w-4" /></button>
+      <button title="Remover recorte" onClick={() => ed.updateHead({ crop: undefined, cropY: 50 })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button>
     </div>
   );
 }

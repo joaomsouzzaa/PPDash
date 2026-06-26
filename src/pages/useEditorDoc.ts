@@ -98,6 +98,12 @@ export function useEditorDoc(jobId: string) {
     });
   }, [allZ]);
 
+  // Transform do vídeo principal (talking-head) como camada.
+  const head = doc?.head ?? {};
+  const updateHead = useCallback((patch: Partial<NonNullable<EditorDoc["head"]>>) => {
+    setDoc((d) => (d ? { ...d, head: { ...(d.head || {}), ...patch } } : d));
+  }, []);
+
   const capStyle: CaptionStyle = { ...CAPTION_STYLE_DEFAULT, ...(doc?.captionStyle || {}) };
   const setCapStyle = useCallback((patch: Partial<CaptionStyle>) => {
     setDoc((d) => (d ? { ...d, captionStyle: { ...CAPTION_STYLE_DEFAULT, ...(d.captionStyle || {}), ...patch } } : d));
@@ -271,7 +277,7 @@ export function useEditorDoc(jobId: string) {
     playerRef, doc, nome, carregando, mediaBase, fps, durationInFrames,
     timeline, outWords, currentTime, seek,
     selectedId, setSelectedId, selected, updateClip, addClip, removeClip, splitClip,
-    bringToFront, sendToBack, makeFree,
+    bringToFront, sendToBack, makeFree, head, updateHead,
     selectedTextId, setSelectedTextId, texts, selectedText, addText, updateText, removeText,
     capStyle, setCapStyle, editCaption,
     videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, removerMusica, uploadMusica, subindoMusica,
