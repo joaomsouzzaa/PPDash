@@ -47,6 +47,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
             splitRatio: seg.splitRatio,
             assetStartFrame: seg.assetStart ? Math.round(seg.assetStart * fps) : undefined,
             headBox: timeline.head?.box,
+            headMedia: timeline.head?.media,
             headCrop: timeline.head?.crop,
             headCropY: timeline.head?.cropY,
             headRotation: timeline.head?.rotation,
@@ -65,7 +66,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
         if (!src) return null;
         const from = Math.round(fl.start * fps);
         const dur = Math.max(1, Math.round((fl.end - fl.start) * fps));
-        const b = fl.box;
+        const b = fl.box; const m = fl.media ?? fl.box;  // box = janela visível; media = mídia por baixo (recorte seco)
         return (
           <Sequence key={`fl-${fl.id}`} from={from} durationInFrames={dur}>
             <AbsoluteFill style={{ pointerEvents: "none" }}>
@@ -76,8 +77,14 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
                 transform: fl.rotation ? `rotate(${fl.rotation}deg)` : undefined,
                 overflow: "hidden", zIndex: fl.zIndex ?? 0,
               }}>
-                <Asset src={src} isVideo={fl.kind === "video"} preview={preview}
-                  cropY={fl.cropY} crop={fl.crop} fromFrame={fl.assetStart ? Math.round(fl.assetStart * fps) : undefined} />
+                <div style={{
+                  position: "absolute",
+                  left: `${((m.x - b.x) / b.w) * 100}%`, top: `${((m.y - b.y) / b.h) * 100}%`,
+                  width: `${(m.w / b.w) * 100}%`, height: `${(m.h / b.h) * 100}%`,
+                }}>
+                  <Asset src={src} isVideo={fl.kind === "video"} preview={preview}
+                    fromFrame={fl.assetStart ? Math.round(fl.assetStart * fps) : undefined} />
+                </div>
               </div>
             </AbsoluteFill>
           </Sequence>

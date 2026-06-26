@@ -63,6 +63,23 @@ export default function VideoEditorEditorV2() {
     return () => ro.disconnect();
   }, [ed.carregando]);
 
+  // Atalhos de teclado: desfazer/refazer + copiar/recortar/colar a camada selecionada.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === "z") { e.preventDefault(); e.shiftKey ? ed.redo() : ed.undo(); }
+      else if (k === "y") { e.preventDefault(); ed.redo(); }
+      else if (k === "c") { e.preventDefault(); ed.copySelection(); }
+      else if (k === "x") { e.preventDefault(); ed.cutSelection(); }
+      else if (k === "v") { e.preventDefault(); ed.pasteClipboard(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ed.undo, ed.redo, ed.copySelection, ed.cutSelection, ed.pasteClipboard]);
+
   if (ed.carregando) return <div className="flex h-screen items-center justify-center text-muted-foreground bg-neutral-950">Carregando edição…</div>;
   if (!ed.doc || !ed.timeline) {
     return (
@@ -296,8 +313,8 @@ function ClipToolbar({ ed, sel, onAddLayer }: { ed: ReturnType<typeof useEditorD
       {!livre && <Btn icon={Move} title="Posição livre (mover/redimensionar na tela)" onClick={() => ed.makeFree(sel.id)} />}
       <Btn icon={BringToFront} title="Trazer para frente" onClick={() => ed.bringToFront(sel.id)} />
       <Btn icon={SendToBack} title="Enviar para trás" onClick={() => ed.sendToBack(sel.id)} />
-      <Btn icon={Maximize2} title="Camada em tela cheia" onClick={() => ed.updateClip(sel.id, { box: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} />
-      <Btn icon={Crop} title="Remover recorte" onClick={() => ed.updateClip(sel.id, { crop: undefined, cropY: 50 })} />
+      <Btn icon={Maximize2} title="Camada em tela cheia" onClick={() => ed.updateClip(sel.id, { box: { x: 0, y: 0, w: 1, h: 1 }, media: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} />
+      <Btn icon={Crop} title="Remover recorte" onClick={() => ed.updateClip(sel.id, { box: sel.media ?? sel.box })} />
       {/* Recortar / ajustes */}
       <Popover>
         <PopoverTrigger asChild><button title="Recortar / ajustar" className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button></PopoverTrigger>
@@ -446,7 +463,7 @@ function HeadTransformOverlay({ ed, W, H }: { ed: ReturnType<typeof useEditorDoc
   const seg = segs.find((s: any) => ed.currentTime >= s.start - 0.001 && ed.currentTime < s.end);
   if (!seg || seg.layout !== "talking_full") return null;  // só quando o head ocupa a tela cheia
   const selHead = ed.selectedId === "__head__";
-  const headClip = { id: "__head__", box: ed.head.box, crop: ed.head.crop, rotation: ed.head.rotation };
+  const headClip = { id: "__head__", box: ed.head.box, media: ed.head.media, rotation: ed.head.rotation };
   return (
     <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
       {!selHead && (
@@ -467,8 +484,8 @@ function HeadToolbar({ ed }: { ed: ReturnType<typeof useEditorDoc> }) {
   return (
     <div className="flex items-center gap-0.5 rounded-lg border border-neutral-700 bg-neutral-800/95 px-1.5 py-1 shadow-xl backdrop-blur">
       <span className="px-1.5 text-[11px] text-neutral-400">Vídeo principal</span>
-      <button title="Tela cheia (resetar)" onClick={() => ed.updateHead({ box: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Maximize2 className="h-4 w-4" /></button>
-      <button title="Remover recorte" onClick={() => ed.updateHead({ crop: undefined, cropY: 50 })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button>
+      <button title="Tela cheia (resetar)" onClick={() => ed.updateHead({ box: { x: 0, y: 0, w: 1, h: 1 }, media: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Maximize2 className="h-4 w-4" /></button>
+      <button title="Remover recorte" onClick={() => ed.updateHead({ box: ed.head.media ?? ed.head.box })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button>
     </div>
   );
 }
@@ -479,11 +496,13 @@ function HeadToolbar({ ed }: { ed: ReturnType<typeof useEditorDoc> }) {
 //  • corpo = mover · alça superior = rotacionar
 function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W, H }: {
   containerRef: React.RefObject<HTMLDivElement>;
-  clip: { id: string; box?: { x: number; y: number; w: number; h: number }; crop?: { x: number; y: number; w: number; h: number }; rotation?: number };
+  clip: { id: string; box?: { x: number; y: number; w: number; h: number }; media?: { x: number; y: number; w: number; h: number }; rotation?: number };
   selected: boolean; onSelect: () => void; onUpdate: (id: string, patch: any) => void; W: number; H: number;
 }) {
   const box = clip.box ?? { x: 0, y: 0, w: 1, h: 1 };
+  const media = clip.media ?? box;  // mídia por baixo (recorte seco encolhe box, mídia fica)
   const left = box.x * W, top = box.y * H, w = box.w * W, h = box.h * H;
+  const r3 = (b: { x: number; y: number; w: number; h: number }) => ({ x: round3(b.x), y: round3(b.y), w: round3(b.w), h: round3(b.h) });
 
   const drag = (fn: (dxF: number, dyF: number, ev: PointerEvent) => void) => (e: React.PointerEvent) => {
     e.preventDefault(); e.stopPropagation(); onSelect();
@@ -494,33 +513,36 @@ function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W,
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
 
-  // Mover a caixa toda.
+  // Mover: desloca box E mídia juntos.
   const startMove = drag((dxF, dyF) => {
-    onUpdate(clip.id, { box: { ...box, x: round3(clamp(box.x + dxF, -box.w + 0.05, 0.95)), y: round3(clamp(box.y + dyF, -box.h + 0.05, 0.95)) } });
+    onUpdate(clip.id, { box: r3({ ...box, x: box.x + dxF, y: box.y + dyF }), media: r3({ ...media, x: media.x + dxF, y: media.y + dyF }) });
   });
-  // Redimensionar pelo canto MANTENDO A PROPORÇÃO (canto oposto fixo) — não altera o recorte.
+  // Redimensionar pelo canto MANTENDO A PROPORÇÃO: escala box E mídia juntos (canto oposto fixo).
   const startResize = (corner: "tl" | "tr" | "bl" | "br") => drag((dxF, dyF) => {
-    const ar = box.h / box.w;                  // mantém bh/bw constante (sem distorcer/recortar)
+    const ar = box.h / box.w;
     const dw = (corner === "tl" || corner === "bl") ? -dxF : dxF;
     const bw = box.w + dw;
     if (bw < 0.05) return;
     const bh = bw * ar;
+    const s = bw / box.w;                                   // fator de escala
     const right = box.x + box.w, bottom = box.y + box.h;
-    const x = (corner === "tl" || corner === "bl") ? right - bw : box.x;
-    const y = (corner === "tl" || corner === "tr") ? bottom - bh : box.y;
-    onUpdate(clip.id, { box: { x: round3(x), y: round3(y), w: round3(bw), h: round3(bh) } });
+    const ax = (corner === "tl" || corner === "bl") ? right : box.x;   // âncora (canto oposto, fixo)
+    const ay = (corner === "tl" || corner === "tr") ? bottom : box.y;
+    const nbx = (corner === "tl" || corner === "bl") ? right - bw : box.x;
+    const nby = (corner === "tl" || corner === "tr") ? bottom - bh : box.y;
+    onUpdate(clip.id, {
+      box: r3({ x: nbx, y: nby, w: bw, h: bh }),
+      media: r3({ x: ax + (media.x - ax) * s, y: ay + (media.y - ay) * s, w: media.w * s, h: media.h * s }),
+    });
   });
-  // Recorte por LADO (estilo Canva): cada ponto no meio da borda corta só aquele lado.
+  // Recorte SECO por LADO: encolhe só aquele lado da box; a mídia NÃO se move nem dá zoom.
   const startCropEdge = (side: "l" | "r" | "t" | "b") => drag((dxF, dyF) => {
-    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-    const ddx = (dxF * W / w) * c0.w, ddy = (dyF * H / h) * c0.h;
-    let { x, y, w: cw, h: ch } = c0;
-    if (side === "l") { const nx = clamp(c0.x + ddx, 0, c0.x + c0.w - 0.1); x = nx; cw = c0.x + c0.w - nx; }
-    if (side === "r") { cw = clamp(c0.w + ddx, 0.1, 1 - c0.x); }
-    if (side === "t") { const ny = clamp(c0.y + ddy, 0, c0.y + c0.h - 0.1); y = ny; ch = c0.y + c0.h - ny; }
-    if (side === "b") { ch = clamp(c0.h + ddy, 0.1, 1 - c0.y); }
-    if (cw >= 0.999 && ch >= 0.999) { onUpdate(clip.id, { crop: undefined }); return; }
-    onUpdate(clip.id, { crop: { x: round3(x), y: round3(y), w: round3(cw), h: round3(ch) } });
+    let { x, y, w: bw, h: bh } = box;
+    if (side === "r") { bw = clamp(box.w + dxF, 0.05, media.x + media.w - box.x); }
+    if (side === "l") { const nx = clamp(box.x + dxF, media.x, box.x + box.w - 0.05); x = nx; bw = box.x + box.w - nx; }
+    if (side === "b") { bh = clamp(box.h + dyF, 0.05, media.y + media.h - box.y); }
+    if (side === "t") { const ny = clamp(box.y + dyF, media.y, box.y + box.h - 0.05); y = ny; bh = box.y + box.h - ny; }
+    onUpdate(clip.id, { box: r3({ x, y, w: bw, h: bh }) });
   });
   // Rotacionar (alça superior).
   const startRotate = (e: React.PointerEvent) => {

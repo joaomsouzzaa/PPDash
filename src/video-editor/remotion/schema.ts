@@ -30,7 +30,8 @@ export const segmentSchema = z.object({
   crop: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(), // recorte livre (frações 0–1)
   splitRatio: z.number().optional(), // fração do vídeo principal no split (default 0.6)
   assetStart: z.number().optional(), // offset (s) dentro do asset de vídeo (p/ dividir b-roll sem reiniciar)
-  box: boxSchema.optional(),      // posição/tamanho livre (camada flutuante; quando presente, ignora layout)
+  box: boxSchema.optional(),      // janela VISÍVEL (clip) da camada livre — quando presente, ignora layout
+  media: boxSchema.optional(),    // retângulo da MÍDIA por baixo (recorte seco: encolhe box, mídia fica parada)
   rotation: z.number().optional(),// rotação em graus
   zIndex: z.number().optional(),  // ordem de empilhamento entre camadas livres
 });
@@ -43,6 +44,7 @@ export const freeLayerSchema = z.object({
   start: z.number(),
   end: z.number(),
   box: boxSchema,
+  media: boxSchema.optional(),
   rotation: z.number().optional(),
   zIndex: z.number().optional(),
   crop: boxSchema.optional(),
@@ -119,6 +121,7 @@ export const musicClipSchema = z.object({
 // Transform do vídeo principal (talking-head) como camada: caixa/recorte/rotação. Fundo preto atrás.
 export const headTransformSchema = z.object({
   box: boxSchema.optional(),
+  media: boxSchema.optional(),
   crop: boxSchema.optional(),
   cropY: z.number().optional(),
   rotation: z.number().optional(),
@@ -176,7 +179,8 @@ export type Clip = {
   crop?: { x: number; y: number; w: number; h: number }; // recorte livre (frações 0–1 do asset)
   splitRatio?: number; // fração do vídeo principal no split (default 0.6)
   assetStart?: number; // offset (s) dentro do asset de vídeo (dividir b-roll sem reiniciar)
-  box?: { x: number; y: number; w: number; h: number }; // posição/tamanho livre; quando presente, vira camada flutuante (ignora layout)
+  box?: { x: number; y: number; w: number; h: number }; // janela VISÍVEL (clip); quando presente, vira camada flutuante (ignora layout)
+  media?: { x: number; y: number; w: number; h: number }; // retângulo da MÍDIA por baixo (recorte seco)
   rotation?: number;   // rotação em graus
   zIndex?: number;     // ordem de empilhamento entre camadas livres
 };
@@ -231,7 +235,7 @@ function buildFreeLayers(doc: EditorDoc): FreeLayer[] {
       id: c.id, asset: c.asset,
       kind: FREE_VIDEO_EXT.test(doc.assets[c.asset] || "") ? "video" as const : "image" as const,
       start: c.start, end: c.end,
-      box: c.box!, rotation: c.rotation, zIndex: c.zIndex,
+      box: c.box!, media: c.media, rotation: c.rotation, zIndex: c.zIndex,
       crop: c.crop, cropY: c.cropY, assetStart: c.assetStart,
     }));
 }

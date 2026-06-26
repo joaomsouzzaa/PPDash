@@ -255,6 +255,72 @@ export function useEditorDoc(jobId: string) {
     } finally { setSubindoMusica(false); }
   }, [jobId]);
 
+  // Histórico desfazer/refazer. Agrupa rajadas de mudança (ex.: arrastar) por debounce.
+  const histPast = useRef<EditorDoc[]>([]);
+  const histFuture = useRef<EditorDoc[]>([]);
+  const committed = useRef<EditorDoc | null>(null);
+  const applyingHist = useRef(false);
+  useEffect(() => {
+    if (!doc) return;
+    if (committed.current === null) { committed.current = doc; return; }
+    if (applyingHist.current) { applyingHist.current = false; committed.current = doc; return; }
+    const t = setTimeout(() => {
+      if (committed.current && committed.current !== doc) {
+        histPast.current.push(committed.current);
+        if (histPast.current.length > 60) histPast.current.shift();
+        histFuture.current = [];
+        committed.current = doc;
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [doc]);
+  const undo = useCallback(() => {
+    if (!histPast.current.length) return;
+    const prev = histPast.current.pop()!;
+    applyingHist.current = true;
+    setDoc((cur) => { if (cur) histFuture.current.push(cur); return prev; });
+  }, []);
+  const redo = useCallback(() => {
+    if (!histFuture.current.length) return;
+    const next = histFuture.current.pop()!;
+    applyingHist.current = true;
+    setDoc((cur) => { if (cur) histPast.current.push(cur); return next; });
+  }, []);
+
+  // Área de transferência: copiar/recortar/colar a camada (clip livre ou texto) selecionada.
+  const clipboard = useRef<{ kind: "clip"; data: Clip } | { kind: "text"; data: TextLayer } | null>(null);
+  const copySelection = useCallback(() => {
+    if (selectedId && selectedId !== "__head__") {
+      const c = doc?.clips.find((x) => x.id === selectedId); if (c) { clipboard.current = { kind: "clip", data: c }; toast.success("Camada copiada"); }
+    } else if (selectedTextId) {
+      const t = (doc?.texts || []).find((x) => x.id === selectedTextId); if (t) { clipboard.current = { kind: "text", data: t }; toast.success("Texto copiado"); }
+    }
+  }, [selectedId, selectedTextId, doc]);
+  const cutSelection = useCallback(() => {
+    copySelection();
+    if (selectedId && selectedId !== "__head__") removeClip(selectedId);
+    else if (selectedTextId) removeText(selectedTextId);
+  }, [copySelection, selectedId, selectedTextId, removeClip, removeText]);
+  const pasteClipboard = useCallback(() => {
+    const cb = clipboard.current; if (!cb) return;
+    setDoc((d) => {
+      if (!d) return d;
+      const start = Math.min(currentTime, Math.max(0, d.durationInSeconds - 0.3));
+      if (cb.kind === "clip") {
+        const c = cb.data; const len = c.end - c.start;
+        const z = Math.max(0, ...allZ(d)) + 1;
+        const novo: Clip = { ...c, id: `c${Date.now().toString(36)}`, start: round3(start), end: round3(Math.min(d.durationInSeconds, start + len)), zIndex: z };
+        setSelectedId(novo.id);
+        return { ...d, clips: [...d.clips, novo] };
+      }
+      const t = cb.data; const len = t.end - t.start;
+      const z = Math.max(0, ...allZ(d)) + 1;
+      const novo: TextLayer = { ...t, id: `t${Date.now().toString(36)}`, start: round3(start), end: round3(Math.min(d.durationInSeconds, start + len)), zIndex: z };
+      setSelectedTextId(novo.id);
+      return { ...d, texts: [...(d.texts || []), novo] };
+    });
+  }, [currentTime]);
+
   const renderizar = useCallback(async (onDone: () => void) => {
     if (!SERVICE_URL) { toast.error("Serviço não configurado."); return; }
     setRenderizando(true);
@@ -278,6 +344,7 @@ export function useEditorDoc(jobId: string) {
     timeline, outWords, currentTime, seek,
     selectedId, setSelectedId, selected, updateClip, addClip, removeClip, splitClip,
     bringToFront, sendToBack, makeFree, head, updateHead,
+    undo, redo, copySelection, cutSelection, pasteClipboard,
     selectedTextId, setSelectedTextId, texts, selectedText, addText, updateText, removeText,
     capStyle, setCapStyle, editCaption,
     videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, removerMusica, uploadMusica, subindoMusica,
