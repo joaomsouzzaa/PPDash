@@ -1064,7 +1064,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
           <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
             <DialogContent className="max-w-[1100px] h-[85vh] p-0">
               {(ref as any).job_id && (
-                <iframe src={`/video-editor/editar/${(ref as any).job_id}`} title="Editor" className="h-full w-full rounded-md border-0" />
+                <iframe src={`/video-editor/editar2/${(ref as any).job_id}`} title="Editor" className="h-full w-full rounded-md border-0" />
               )}
             </DialogContent>
           </Dialog>

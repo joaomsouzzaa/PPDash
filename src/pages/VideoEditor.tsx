@@ -416,9 +416,14 @@ export default function VideoEditor() {
                           </Button>
                         )}
                         {(j.status === "editar" || (j.status === "pronto" && j.modo === "completo")) && (
-                          <Button variant="secondary" size="sm" className="h-8" onClick={() => navigate(`/video-editor/editar/${j.id}`)}>
-                            <Wand2 className="h-4 w-4 mr-1" /> Editar
-                          </Button>
+                          <>
+                            <Button variant="secondary" size="sm" className="h-8" onClick={() => navigate(`/video-editor/editar2/${j.id}`)}>
+                              <Wand2 className="h-4 w-4 mr-1" /> Editar (novo)
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate(`/video-editor/editar/${j.id}`)} title="Editor antigo">
+                              antigo
+                            </Button>
+                          </>
                         )}
                         {(j.status === "erro" || j.status === "pronto") && (
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Reprocessar (refazer com os ajustes atuais)" onClick={() => reprocessar(j)}>
