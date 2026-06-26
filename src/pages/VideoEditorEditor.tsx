@@ -302,8 +302,6 @@ export default function VideoEditorEditor() {
               acknowledgeRemotionLicense
             />
             {/* Camada interativa: arraste os textos para posicionar */}
-            {/* Crop interativo do b-roll selecionado: arraste p/ mover, scroll p/ zoom */}
-            <CropDragLayer clip={selected} currentTime={currentTime} onUpdateClip={updateClip} />
             <TextDragLayer
               texts={texts} currentTime={currentTime}
               selectedId={selectedTextId} onSelect={setSelectedTextId} onMove={updateText}
@@ -690,88 +688,6 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words
           {legendaAtiva}
         </div>
       )}
-    </div>
-  );
-}
-
-const r3 = (n: number) => Math.round(n * 1000) / 1000;
-const clamp01 = (n: number, max = 1) => Math.min(max, Math.max(0, n));
-
-// Região onde o b-roll aparece (fração do preview), por layout + proporção do split.
-function brollRegion(layout: string, ratio?: number): { left: number; top: number; w: number; h: number } | null {
-  const r = Math.min(0.9, Math.max(0.1, ratio ?? 0.6));
-  switch (layout) {
-    case "split_horizontal": return { left: 0, top: 0, w: 1, h: 1 - r };  // b-roll em cima
-    case "split_bottom": return { left: 0, top: r, w: 1, h: 1 - r };      // b-roll embaixo
-    case "split_vertical": return { left: r, top: 0, w: 1 - r, h: 1 };
-    case "broll_fullscreen": case "image_fullscreen": return { left: 0, top: 0, w: 1, h: 1 };
-    default: return null;  // overlay_card (print centralizado) não tem crop livre
-  }
-}
-
-// Camada de crop interativo: com um b-roll selecionado e ativo, arraste p/ mover e use o scroll p/ zoom.
-function CropDragLayer({ clip, currentTime, onUpdateClip }: {
-  clip: Clip | null;
-  currentTime: number;
-  onUpdateClip: (id: string, patch: Partial<Clip>) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  if (!clip) return null;
-  const ativo = currentTime >= clip.start - 0.001 && currentTime < clip.end;
-  const region = brollRegion(clip.layout, clip.splitRatio);
-  if (!ativo || !region) return null;
-  const crop = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-  const zoomed = crop.w < 0.999 || crop.h < 0.999;
-
-  const startPan = (e: React.PointerEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
-    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-    if (c0.w >= 0.999 && c0.h >= 0.999) return;            // sem zoom não há o que mover
-    const regWpx = region.w * PREVIEW_W, regHpx = region.h * PREVIEW_H;
-    const sx = e.clientX, sy = e.clientY;
-    const mv = (ev: PointerEvent) => {
-      const dx = ev.clientX - sx, dy = ev.clientY - sy;
-      const nx = clamp01(c0.x - (dx / regWpx) * c0.w, 1 - c0.w);
-      const ny = clamp01(c0.y - (dy / regHpx) * c0.h, 1 - c0.h);
-      onUpdateClip(clip.id, { crop: { ...c0, x: r3(nx), y: r3(ny) } });
-    };
-    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
-  };
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-    const f = e.deltaY < 0 ? 0.9 : 1.1;
-    const nw = Math.min(1, Math.max(0.25, c0.w * f)), nh = nw;
-    const cx = c0.x + c0.w / 2, cy = c0.y + c0.h / 2;
-    const nx = clamp01(cx - nw / 2, 1 - nw), ny = clamp01(cy - nh / 2, 1 - nh);
-    if (nw >= 0.999 && nh >= 0.999) onUpdateClip(clip.id, { crop: undefined });
-    else onUpdateClip(clip.id, { crop: { x: r3(nx), y: r3(ny), w: r3(nw), h: r3(nh) } });
-  };
-
-  // Superfície sobre a região do b-roll (deixa 34px no rodapé p/ os controles do player).
-  const left = region.left * PREVIEW_W, top = region.top * PREVIEW_H;
-  let w = region.w * PREVIEW_W, h = region.h * PREVIEW_H;
-  const botCap = PREVIEW_H - 34;
-  if (top + h > botCap) h = Math.max(24, botCap - top);
-  return (
-    <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      <div
-        onPointerDown={startPan}
-        onWheel={onWheel}
-        style={{
-          position: "absolute", left, top, width: w, height: h,
-          pointerEvents: "auto", cursor: zoomed ? "grab" : "zoom-in", touchAction: "none",
-          outline: "2px dashed rgba(56,189,248,0.9)", outlineOffset: -2, borderRadius: 4,
-          background: "rgba(56,189,248,0.06)",
-        }}
-        title={zoomed ? "Arraste para mover · scroll para zoom" : "Scroll para dar zoom e cortar · depois arraste para mover"}
-      >
-        <span style={{ position: "absolute", top: 2, left: 4, fontSize: 9, color: "#fff", background: "rgba(0,0,0,0.5)", padding: "1px 4px", borderRadius: 4, pointerEvents: "none" }}>
-          {zoomed ? "✥ mover · scroll zoom" : "⌕ scroll p/ cortar"}
-        </span>
-      </div>
     </div>
   );
 }
