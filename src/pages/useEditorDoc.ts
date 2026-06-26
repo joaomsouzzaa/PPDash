@@ -3,7 +3,7 @@ import type { PlayerRef } from "@remotion/player";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  montarTimeline, CAPTION_STYLE_DEFAULT,
+  montarTimeline, CAPTION_STYLE_DEFAULT, isFree,
   type Clip, type EditorDoc, type CaptionStyle, type VideoSegment, type TextLayer,
 } from "@/video-editor/remotion/schema";
 
@@ -69,6 +69,35 @@ export function useEditorDoc(jobId: string) {
     setClips((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }, [setClips]);
 
+  // Z-order unificado entre camadas livres (clips com box) e textos.
+  const allZ = (d: EditorDoc): number[] =>
+    [...d.clips.filter(isFree).map((c) => c.zIndex ?? 0), ...(d.texts || []).map((t) => t.zIndex ?? 0)];
+  const applyZ = useCallback((id: string, pick: (zs: number[]) => number) => {
+    setDoc((d) => {
+      if (!d) return d;
+      const z = pick(allZ(d));
+      if (d.clips.some((c) => c.id === id)) return { ...d, clips: d.clips.map((c) => (c.id === id ? { ...c, zIndex: z } : c)) };
+      return { ...d, texts: (d.texts || []).map((t) => (t.id === id ? { ...t, zIndex: z } : t)) };
+    });
+  }, []);
+  const bringToFront = useCallback((id: string) => applyZ(id, (zs) => Math.max(0, ...zs) + 1), [applyZ]);
+  const sendToBack = useCallback((id: string) => applyZ(id, (zs) => Math.min(0, ...zs) - 1), [applyZ]);
+  // Converte um clip em layout para camada livre: box a partir da região atual do layout.
+  const makeFree = useCallback((id: string) => {
+    setDoc((d) => {
+      if (!d) return d;
+      const c = d.clips.find((x) => x.id === id);
+      if (!c || isFree(c)) return d;
+      const r = Math.min(0.9, Math.max(0.1, c.splitRatio ?? 0.6));
+      let box = { x: 0, y: 0, w: 1, h: 1 };
+      if (c.layout === "split_horizontal") box = { x: 0, y: 0, w: 1, h: 1 - r };
+      else if (c.layout === "split_bottom") box = { x: 0, y: r, w: 1, h: 1 - r };
+      else if (c.layout === "overlay_card") box = { x: 0.12, y: 0.18, w: 0.76, h: 0.5 };
+      const z = Math.max(0, ...allZ(d)) + 1;
+      return { ...d, clips: d.clips.map((x) => (x.id === id ? { ...x, box, zIndex: z } : x)) };
+    });
+  }, [allZ]);
+
   const capStyle: CaptionStyle = { ...CAPTION_STYLE_DEFAULT, ...(doc?.captionStyle || {}) };
   const setCapStyle = useCallback((patch: Partial<CaptionStyle>) => {
     setDoc((d) => (d ? { ...d, captionStyle: { ...CAPTION_STYLE_DEFAULT, ...(d.captionStyle || {}), ...patch } } : d));
@@ -125,10 +154,11 @@ export function useEditorDoc(jobId: string) {
     setDoc((d) => {
       if (!d) return d;
       const start = Math.min(currentTime, Math.max(0, d.durationInSeconds - 3));
+      const z = Math.max(0, ...allZ(d)) + 1;
       const novo: TextLayer = {
         id: `t${Date.now().toString(36)}`, text: "Texto", start: round3(start),
         end: round3(Math.min(d.durationInSeconds, start + 3)),
-        x: 0.5, y: 0.5, fontSize: 80, color: "#FFFFFF", bgColor: "transparent", bold: true, align: "center",
+        x: 0.5, y: 0.5, fontSize: 80, color: "#FFFFFF", bgColor: "transparent", bold: true, align: "center", zIndex: z,
       };
       return { ...d, texts: [...(d.texts || []), novo] };
     });
@@ -239,6 +269,7 @@ export function useEditorDoc(jobId: string) {
     playerRef, doc, nome, carregando, mediaBase, fps, durationInFrames,
     timeline, outWords, currentTime, seek,
     selectedId, setSelectedId, selected, updateClip, addClip, removeClip, splitClip,
+    bringToFront, sendToBack, makeFree,
     selectedTextId, setSelectedTextId, texts, selectedText, addText, updateText, removeText,
     capStyle, setCapStyle, editCaption,
     videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, removerMusica, uploadMusica, subindoMusica,

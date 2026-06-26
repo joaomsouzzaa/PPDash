@@ -16,6 +16,10 @@ export const LAYOUTS = [
 
 export const layoutSchema = z.enum(LAYOUTS);
 
+// Caixa de posição/tamanho de uma camada livre (frações 0–1 do frame 1080×1920).
+export const boxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+export type Box = z.infer<typeof boxSchema>;
+
 export const segmentSchema = z.object({
   start: z.number(),
   end: z.number(),
@@ -26,7 +30,26 @@ export const segmentSchema = z.object({
   crop: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(), // recorte livre (frações 0–1)
   splitRatio: z.number().optional(), // fração do vídeo principal no split (default 0.6)
   assetStart: z.number().optional(), // offset (s) dentro do asset de vídeo (p/ dividir b-roll sem reiniciar)
+  box: boxSchema.optional(),      // posição/tamanho livre (camada flutuante; quando presente, ignora layout)
+  rotation: z.number().optional(),// rotação em graus
+  zIndex: z.number().optional(),  // ordem de empilhamento entre camadas livres
 });
+
+// Camada livre (mídia flutuante) na timeline de saída — empilhável por zIndex.
+export const freeLayerSchema = z.object({
+  id: z.string(),
+  asset: z.string(),
+  kind: z.enum(["image", "video"]),
+  start: z.number(),
+  end: z.number(),
+  box: boxSchema,
+  rotation: z.number().optional(),
+  zIndex: z.number().optional(),
+  crop: boxSchema.optional(),
+  cropY: z.number().optional(),
+  assetStart: z.number().optional(),
+});
+export type FreeLayer = z.infer<typeof freeLayerSchema>;
 
 export const stickerSchema = z.object({
   asset: z.string(),
@@ -79,6 +102,8 @@ export const textLayerSchema = z.object({
   bgColor: z.string().default("transparent"),
   bold: z.boolean().default(true),
   align: z.enum(["left", "center", "right"]).default("center"),
+  w: z.number().optional(),          // largura opcional da caixa (fração 0–1); sem isto usa maxWidth 90%
+  zIndex: z.number().optional(),     // ordem de empilhamento (unificada com camadas de mídia)
 });
 export type TextLayer = z.infer<typeof textLayerSchema>;
 
@@ -97,6 +122,7 @@ export const timelineSchema = z.object({
   durationInSeconds: z.number().optional(),
   segments: z.array(segmentSchema),
   stickers: z.array(stickerSchema).default([]),
+  freeLayers: z.array(freeLayerSchema).default([]),
 });
 
 export const mainPropsSchema = z.object({
@@ -140,7 +166,13 @@ export type Clip = {
   crop?: { x: number; y: number; w: number; h: number }; // recorte livre (frações 0–1 do asset)
   splitRatio?: number; // fração do vídeo principal no split (default 0.6)
   assetStart?: number; // offset (s) dentro do asset de vídeo (dividir b-roll sem reiniciar)
+  box?: { x: number; y: number; w: number; h: number }; // posição/tamanho livre; quando presente, vira camada flutuante (ignora layout)
+  rotation?: number;   // rotação em graus
+  zIndex?: number;     // ordem de empilhamento entre camadas livres
 };
+
+// Uma camada é "livre" (flutuante, sobreponível, com z-index) quando tem box.
+export const isFree = (c: { box?: unknown }): boolean => !!c.box;
 
 // Faixa de música como LISTA (permite cortar/dividir em pedaços).
 export type MusicClip = {
@@ -178,11 +210,27 @@ export type EditorDoc = {
   originalDuration?: number;       // duração do vídeo original (s) — limite do "aparar pra mais"
 };
 
+const FREE_VIDEO_EXT = /\.(mp4|mov|webm|mkv|m4v)$/i;
+
+// Constrói as camadas livres (clips com box) — empilháveis por zIndex. start/end já são tempo de saída.
+function buildFreeLayers(doc: EditorDoc): FreeLayer[] {
+  return (doc.clips || [])
+    .filter((c) => isFree(c) && c.end > c.start && doc.assets[c.asset])
+    .map((c) => ({
+      id: c.id, asset: c.asset,
+      kind: FREE_VIDEO_EXT.test(doc.assets[c.asset] || "") ? "video" as const : "image" as const,
+      start: c.start, end: c.end,
+      box: c.box!, rotation: c.rotation, zIndex: c.zIndex,
+      crop: c.crop, cropY: c.cropY, assetStart: c.assetStart,
+    }));
+}
+
 // Deriva a timeline (segmentos contíguos) a partir dos clips de overlay.
 // Onde um clip está ativo usa seu layout/asset; nos vãos usa talking_full.
+// Clips com box (camadas livres) saem do fluxo de Series e viram freeLayers.
 export function clipsParaTimeline(doc: EditorDoc): Timeline {
   const dur = doc.durationInSeconds;
-  const ordenados = [...doc.clips].filter((c) => c.end > c.start).sort((a, b) => a.start - b.start);
+  const ordenados = [...doc.clips].filter((c) => c.end > c.start && !isFree(c)).sort((a, b) => a.start - b.start);
   const segments: Segment[] = [];
   let cursor = 0;
   for (const c of ordenados) {
@@ -195,7 +243,7 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
   }
   if (cursor < dur) segments.push({ start: cursor, end: dur, layout: "talking_full", asset: null });
   if (!segments.length) segments.push({ start: 0, end: dur, layout: "talking_full", asset: null });
-  return { video: doc.video, fps: doc.fps, durationInSeconds: dur, segments, stickers: [] };
+  return { video: doc.video, fps: doc.fps, durationInSeconds: dur, segments, stickers: [], freeLayers: buildFreeLayers(doc) };
 }
 
 // Fase 3: monta a timeline de SAÍDA a partir do vídeo ORIGINAL + videoSegments (cortes) + overlays,
@@ -205,7 +253,7 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
     return { timeline: clipsParaTimeline(doc), words: doc.words || [] };
   }
   const fps = doc.fps || 30;
-  const overlays = [...(doc.clips || [])].filter((c) => c.end > c.start).sort((a, b) => a.start - b.start);
+  const overlays = [...(doc.clips || [])].filter((c) => c.end > c.start && !isFree(c)).sort((a, b) => a.start - b.start);
   const overlayEm = (t: number) => overlays.find((o) => o.start <= t && t < o.end) || null;
 
   // 1) mapeia cada videoSegment para uma janela de SAÍDA (outStart..outEnd) e tempo-fonte.
@@ -251,7 +299,7 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
       }
     }
   }
-  return { timeline: { video: doc.video, fps, durationInSeconds, segments, stickers: [] }, words };
+  return { timeline: { video: doc.video, fps, durationInSeconds, segments, stickers: [], freeLayers: buildFreeLayers(doc) }, words };
 }
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;

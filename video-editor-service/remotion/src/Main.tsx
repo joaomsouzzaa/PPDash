@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Sequence, Series, Img, Audio } from "remotion";
-import { LAYOUT_COMPONENTS, url, type Ctx } from "./layouts";
+import { LAYOUT_COMPONENTS, url, Asset, type Ctx } from "./layouts";
 import { Captions } from "./Captions";
 import { TextLayers } from "./TextLayers";
 import type { MainProps, Sticker } from "./schema";
@@ -54,6 +54,31 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
           );
         })}
       </Series>
+
+      {/* Camadas livres de mídia (flutuantes, empilháveis por zIndex) */}
+      {[...(timeline.freeLayers || [])].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)).map((fl) => {
+        const src = assetUrl(fl.asset);
+        if (!src) return null;
+        const from = Math.round(fl.start * fps);
+        const dur = Math.max(1, Math.round((fl.end - fl.start) * fps));
+        const b = fl.box;
+        return (
+          <Sequence key={`fl-${fl.id}`} from={from} durationInFrames={dur}>
+            <AbsoluteFill style={{ pointerEvents: "none" }}>
+              <div style={{
+                position: "absolute",
+                left: `${b.x * 100}%`, top: `${b.y * 100}%`,
+                width: `${b.w * 100}%`, height: `${b.h * 100}%`,
+                transform: fl.rotation ? `rotate(${fl.rotation}deg)` : undefined,
+                overflow: "hidden", zIndex: fl.zIndex ?? 0,
+              }}>
+                <Asset src={src} isVideo={fl.kind === "video"} preview={preview}
+                  cropY={fl.cropY} crop={fl.crop} fromFrame={fl.assetStart ? Math.round(fl.assetStart * fps) : undefined} />
+              </div>
+            </AbsoluteFill>
+          </Sequence>
+        );
+      })}
 
       {/* Stickers sobre qualquer layout */}
       {timeline.stickers.map((s: Sticker, i) => {

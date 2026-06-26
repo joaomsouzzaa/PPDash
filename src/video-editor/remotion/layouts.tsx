@@ -36,7 +36,7 @@ const Head: React.FC<{ src: string; from: number; preview?: boolean; volume?: nu
 );
 
 // Asset (imagem ou vídeo) com recorte: livre (crop {x,y,w,h}) OU posição vertical (cropY).
-const Asset: React.FC<{ src: string | null; isVideo: boolean; preview?: boolean; cropY?: number; crop?: Crop; fromFrame?: number }> = ({ src, isVideo, preview, cropY, crop, fromFrame }) => {
+export const Asset: React.FC<{ src: string | null; isVideo: boolean; preview?: boolean; cropY?: number; crop?: Crop; fromFrame?: number }> = ({ src, isVideo, preview, cropY, crop, fromFrame }) => {
   if (!src) return null;
   const from = fromFrame && fromFrame > 0 ? fromFrame : undefined;
   // loop (só no render): se o b-roll for mais curto que o trecho, repete em vez de ficar preto.

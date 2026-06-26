@@ -13,14 +13,15 @@ export const TextLayers: React.FC<{ texts?: TextLayer[] }> = ({ texts }) => {
         const dur = Math.max(1, Math.round(((t.end || 0) - (t.start || 0)) * fps));
         return (
           <Sequence key={t.id} from={from} durationInFrames={dur}>
-            <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: t.zIndex ?? 0 }}>
               <div
                 style={{
                   position: "absolute",
                   left: `${(t.x ?? 0.5) * 100}%`,
                   top: `${(t.y ?? 0.5) * 100}%`,
                   transform: "translate(-50%, -50%)",
-                  maxWidth: "90%",
+                  width: t.w != null ? `${t.w * 100}%` : undefined,
+                  maxWidth: t.w != null ? undefined : "90%",
                   fontSize: t.fontSize ?? 80,
                   color: t.color ?? "#FFFFFF",
                   backgroundColor: t.bgColor && t.bgColor !== "transparent" ? t.bgColor : "transparent",
