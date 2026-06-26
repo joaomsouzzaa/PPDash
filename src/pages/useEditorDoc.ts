@@ -194,8 +194,11 @@ export function useEditorDoc(jobId: string) {
   }, [doc]);
   const togglePlay = useCallback(() => {
     const p = playerRef.current; if (!p) return;
-    if (p.isPlaying()) p.pause(); else p.play();
-  }, []);
+    try {
+      const playing = typeof p.isPlaying === "function" ? p.isPlaying() : isPlaying;
+      if (playing) p.pause(); else p.play();
+    } catch { /* noop */ }
+  }, [isPlaying]);
 
   const [subindoMusica, setSubindoMusica] = useState(false);
   const uploadMusica = useCallback(async (file: File) => {

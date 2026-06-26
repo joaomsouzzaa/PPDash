@@ -206,9 +206,10 @@ export default function VideoEditorEditorV2() {
               style={{ width: cv.w * zf, height: cv.h * zf }}
               clickToPlay={false} doubleClickToFullscreen={false} acknowledgeRemotionLicense
             />
+            {sel && <BrollTransform clip={sel} currentTime={ed.currentTime} onUpdate={ed.updateClip} W={cv.w * zf} H={cv.h * zf} />}
             <TextDragLayer texts={ed.texts} currentTime={ed.currentTime} selectedId={ed.selectedTextId}
               onSelect={ed.setSelectedTextId} onMove={ed.updateText} words={ed.outWords} captionStyle={ed.capStyle}
-              onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={aba === "legenda"} />
+              onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={true} />
           </div>
         </main>
       </div>
@@ -319,6 +320,79 @@ function ClipToolbar({ ed, sel, onAddLayer }: { ed: ReturnType<typeof useEditorD
 function fmtMs(s: number) {
   const m = Math.floor(s / 60), ss = Math.floor(s % 60), cs = Math.floor((s % 1) * 100);
   return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}:${String(cs).padStart(2, "0")}`;
+}
+
+const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
+// Região onde o b-roll aparece (fração do preview), por layout + proporção do split.
+function brollRegion(layout: string, ratio?: number): { left: number; top: number; w: number; h: number } | null {
+  const r = Math.min(0.9, Math.max(0.1, ratio ?? 0.6));
+  switch (layout) {
+    case "split_horizontal": return { left: 0, top: 0, w: 1, h: 1 - r };
+    case "split_bottom": return { left: 0, top: r, w: 1, h: 1 - r };
+    case "split_vertical": return { left: r, top: 0, w: 1 - r, h: 1 };
+    case "broll_fullscreen": case "image_fullscreen": return { left: 0, top: 0, w: 1, h: 1 };
+    default: return null;
+  }
+}
+
+// Caixa de transform do b-roll no preview: arrastar p/ reposicionar + alças de canto p/ zoom/recorte.
+function BrollTransform({ clip, currentTime, onUpdate, W, H }: {
+  clip: NonNullable<ReturnType<typeof useEditorDoc>["selected"]>;
+  currentTime: number; onUpdate: (id: string, patch: any) => void; W: number; H: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const ativo = currentTime >= clip.start - 0.001 && currentTime < clip.end;
+  const region = brollRegion(clip.layout, clip.splitRatio);
+  if (!ativo || !region) return null;
+  const left = region.left * W, top = region.top * H, w = region.w * W, h = region.h * H;
+
+  // Arrastar = reposicionar (pan). Com zoom: move dentro do recorte; sem zoom: ajusta posição vertical (cropY).
+  const startPan = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+    const c0 = clip.crop; const cy0 = clip.cropY ?? 50; const sx = e.clientX, sy = e.clientY;
+    const mv = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (c0 && c0.w < 0.999) {
+        onUpdate(clip.id, { crop: { ...c0, x: round3(clamp(c0.x - (dx / w) * c0.w, 0, 1 - c0.w)), y: round3(clamp(c0.y - (dy / h) * c0.h, 0, 1 - c0.h)) } });
+      } else {
+        onUpdate(clip.id, { cropY: Math.round(clamp(cy0 - (dy / h) * 100, 0, 100)) });
+      }
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  // Alça de canto = zoom (escala pela distância ao centro). Zoom 100% remove o recorte.
+  const startScale = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+    const rect = ref.current?.getBoundingClientRect(); if (!rect) return;
+    const cx = rect.left + left + w / 2, cy = rect.top + top + h / 2;
+    const d0 = Math.max(8, Math.hypot(e.clientX - cx, e.clientY - cy));
+    const z0 = 1 / (clip.crop?.w ?? 1);
+    const mv = (ev: PointerEvent) => {
+      const z = clamp((z0 * Math.hypot(ev.clientX - cx, ev.clientY - cy)) / d0, 1, 4);
+      if (z <= 1.001) { onUpdate(clip.id, { crop: undefined }); return; }
+      const ww = 1 / z; const c = clip.crop;
+      const cxF = c ? c.x + c.w / 2 : 0.5, cyF = c ? c.y + c.h / 2 : 0.5;
+      onUpdate(clip.id, { crop: { x: round3(clamp(cxF - ww / 2, 0, 1 - ww)), y: round3(clamp(cyF - ww / 2, 0, 1 - ww)), w: round3(ww), h: round3(ww) } });
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  const handle = (cur: string): React.CSSProperties => ({ position: "absolute", width: 14, height: 14, borderRadius: "50%", background: "#fff", border: "2px solid #38bdf8", pointerEvents: "auto", cursor: cur, touchAction: "none" });
+  return (
+    <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      <div onPointerDown={startPan}
+        style={{ position: "absolute", left, top, width: w, height: h, pointerEvents: "auto", cursor: "move", touchAction: "none", outline: "2px solid #38bdf8" }}
+        title="Arraste para reposicionar o b-roll · alças nos cantos para zoom/recorte">
+        <div onPointerDown={startScale} style={{ ...handle("nwse-resize"), left: -7, top: -7 }} />
+        <div onPointerDown={startScale} style={{ ...handle("nesw-resize"), right: -7, top: -7 }} />
+        <div onPointerDown={startScale} style={{ ...handle("nesw-resize"), left: -7, bottom: -7 }} />
+        <div onPointerDown={startScale} style={{ ...handle("nwse-resize"), right: -7, bottom: -7 }} />
+      </div>
+    </div>
+  );
 }
 
 // Toolbar flutuante para o texto selecionado.
