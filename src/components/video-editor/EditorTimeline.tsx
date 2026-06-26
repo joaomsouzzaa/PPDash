@@ -16,7 +16,7 @@ const LAYOUT_COR: Record<string, string> = {
 };
 
 export function EditorTimeline({
-  clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs = 90,
+  clips, duration, currentTime, selectedId, words = [], palavrasPorPagina = 3, pxs: pxsInit = 90,
   onSeek, onSelect, onUpdateClip, onEditCaption, music = null, onMusicStart,
   videoSegments = null, originalDuration = 0, onTrimSeg, onDeleteSeg, onSplit,
   texts = [], selectedTextId = null, onSelectText, onUpdateText, onEditTextContent,
@@ -46,7 +46,23 @@ export function EditorTimeline({
   onEditTextContent?: (id: string, texto: string) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pxs, setPxs] = useState(pxsInit);  // zoom da timeline (px por segundo)
   const width = Math.max(1, duration) * pxs;
+
+  // Ajusta o zoom para a timeline inteira caber na largura visível.
+  const ajustarZoom = () => {
+    const w = scrollRef.current?.clientWidth || 800;
+    setPxs(Math.max(4, Math.min(200, (w - 16) / Math.max(1, duration))));
+  };
+
+  // Scrub: arrasta na régua/trilha e o playhead (e o preview) acompanha.
+  const startScrub = (clientX: number) => {
+    seekFromEvent(clientX);
+    const mv = (ev: PointerEvent) => seekFromEvent(ev.clientX);
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
   const [editPage, setEditPage] = useState<number | null>(null);  // índice da página em edição
   const [editText, setEditText] = useState("");
   const [editTxtId, setEditTxtId] = useState<string | null>(null); // camada de texto em edição
@@ -158,12 +174,20 @@ export function EditorTimeline({
 
   return (
     <div className="select-none">
-      <div className="overflow-x-auto rounded-lg border bg-muted/30">
+      {/* Controles de zoom da timeline */}
+      <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="uppercase tracking-wide">Timeline</span>
+        <button onClick={() => setPxs((p) => Math.max(4, Math.round(p / 1.4)))} className="rounded border px-1.5 py-0.5 hover:bg-muted">−</button>
+        <input type="range" min={4} max={200} value={pxs} onChange={(e) => setPxs(Number(e.target.value))} className="w-28" />
+        <button onClick={() => setPxs((p) => Math.min(200, Math.round(p * 1.4)))} className="rounded border px-1.5 py-0.5 hover:bg-muted">+</button>
+        <button onClick={ajustarZoom} className="rounded border px-2 py-0.5 hover:bg-muted">Ajustar à tela</button>
+      </div>
+      <div ref={scrollRef} className="overflow-x-auto rounded-lg border bg-muted/30">
         <div style={{ width }} className="relative">
           {/* Régua */}
           <div
             className="relative h-6 border-b cursor-pointer text-[10px] text-muted-foreground"
-            onPointerDown={(e) => seekFromEvent(e.clientX)}
+            onPointerDown={(e) => startScrub(e.clientX)}
           >
             {ticks.map((s) => (
               <div key={s} className="absolute top-0 h-full border-l border-border/60 pl-1" style={{ left: s * pxs }}>
@@ -209,7 +233,7 @@ export function EditorTimeline({
             ref={trackRef}
             className="relative h-14 bg-background/40"
             style={{ width }}
-            onPointerDown={(e) => { if (e.target === e.currentTarget) { onSelect(null); seekFromEvent(e.clientX); } }}
+            onPointerDown={(e) => { if (e.target === e.currentTarget) { onSelect(null); startScrub(e.clientX); } }}
           >
             {clips.map((c) => {
               const left = c.start * pxs;

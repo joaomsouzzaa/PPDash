@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Player, type PlayerRef } from "@remotion/player";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ChevronLeft, Play, ImagePlus, Trash2, RefreshCw, Film, Plus, Type } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,10 +21,10 @@ const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined
 const VIDEO_EXT = /\.(mp4|mov|webm|mkv|m4v)$/i;
 const LAYOUT_NOME: Record<OverlayLayout, string> = {
   overlay_card: "Card sobreposto (print)",
-  split_horizontal: "Split — imagem em cima",
-  split_bottom: "Split — imagem embaixo",
-  image_fullscreen: "Imagem em tela cheia",
-  broll_fullscreen: "B-roll em tela cheia",
+  split_horizontal: "Split — b-roll em cima",
+  split_bottom: "Split — b-roll embaixo",
+  image_fullscreen: "Imagem/print tela cheia (sem áudio)",
+  broll_fullscreen: "B-roll tela cheia (com sua voz)",
 };
 
 export default function VideoEditorEditor() {
@@ -36,6 +37,7 @@ export default function VideoEditorEditor() {
   const [carregando, setCarregando] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [galeriaAberta, setGaleriaAberta] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [renderizando, setRenderizando] = useState(false);
   const primeiraGravacao = useRef(true);
@@ -298,6 +300,8 @@ export default function VideoEditorEditor() {
               acknowledgeRemotionLicense
             />
             {/* Camada interativa: arraste os textos para posicionar */}
+            {/* Crop interativo do b-roll selecionado: arraste p/ mover, scroll p/ zoom */}
+            <CropDragLayer clip={selected} currentTime={currentTime} onUpdateClip={updateClip} />
             <TextDragLayer
               texts={texts} currentTime={currentTime}
               selectedId={selectedTextId} onSelect={setSelectedTextId} onMove={updateText}
@@ -334,16 +338,36 @@ export default function VideoEditorEditor() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Proporção do split (só nos layouts split) */}
-              {(["split_horizontal", "split_bottom", "split_vertical"] as string[]).includes(selected.layout) && (
-                <div className="space-y-1 w-[170px]">
-                  <label className="text-[11px] text-muted-foreground flex items-center justify-between">
-                    <span>Divisão (vídeo principal)</span><span>{Math.round((selected.splitRatio ?? 0.6) * 100)}%</span>
-                  </label>
-                  <input type="range" min={20} max={80} value={Math.round((selected.splitRatio ?? 0.6) * 100)}
-                    onChange={(e) => updateClip(selected.id, { splitRatio: Number(e.target.value) / 100 })} className="w-full" />
-                </div>
-              )}
+              {/* Proporção do split — sempre visível; ao mexer já vira layout split se ainda não for */}
+              {(() => {
+                const ehSplit = (["split_horizontal", "split_bottom", "split_vertical"] as string[]).includes(selected.layout);
+                const pct = Math.round((selected.splitRatio ?? 0.6) * 100);
+                return (
+                  <div className="space-y-1 w-[210px]">
+                    <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                      <span>Divisão · vídeo / b-roll</span>
+                      <span className="flex items-center gap-1">
+                        <input type="number" min={20} max={80} value={pct}
+                          onChange={(e) => {
+                            const v = Math.min(80, Math.max(20, Number(e.target.value) || 60));
+                            const patch: Partial<Clip> = { splitRatio: v / 100 };
+                            if (!ehSplit) patch.layout = "split_horizontal";
+                            updateClip(selected.id, patch);
+                          }}
+                          className="h-6 w-12 rounded border bg-background px-1 text-right text-[11px] outline-none focus:ring-1 focus:ring-violet-500" />
+                        <span className="text-[10px]">% / {100 - pct}%</span>
+                      </span>
+                    </label>
+                    <input type="range" min={20} max={80} value={pct}
+                      onChange={(e) => {
+                        const patch: Partial<Clip> = { splitRatio: Number(e.target.value) / 100 };
+                        if (!ehSplit) patch.layout = "split_horizontal";  // mexeu na divisão → ativa o split
+                        updateClip(selected.id, patch);
+                      }} className="w-full" />
+                    {!ehSplit && <p className="text-[10px] text-muted-foreground">Mexa no slider/campo para dividir a tela (vira layout Split).</p>}
+                  </div>
+                );
+              })()}
               {/* Recorte (zoom + posição) do b-roll */}
               {(() => {
                 const cr = selected.crop; const w = cr?.w ?? 1;
@@ -359,8 +383,16 @@ export default function VideoEditorEditor() {
                 };
                 return (
                   <div className="space-y-1 w-[200px]">
-                    <label className="text-[11px] text-muted-foreground flex items-center justify-between"><span>Recorte (zoom)</span><span>{zoom}%</span></label>
-                    <input type="range" min={100} max={300} value={zoom} onChange={(e) => setCrop(Number(e.target.value), posX, posY)} className="w-full" />
+                    <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                      <span>Recorte (zoom)</span>
+                      <span className="flex items-center gap-1">
+                        <input type="number" min={100} max={400} value={zoom}
+                          onChange={(e) => setCrop(Math.min(400, Math.max(100, Number(e.target.value) || 100)), posX, posY)}
+                          className="h-6 w-14 rounded border bg-background px-1 text-right text-[11px] outline-none focus:ring-1 focus:ring-violet-500" />
+                        <span className="text-[10px]">%</span>
+                      </span>
+                    </label>
+                    <input type="range" min={100} max={400} value={zoom} onChange={(e) => setCrop(Number(e.target.value), posX, posY)} className="w-full" />
                     {zoom > 100 && (
                       <div className="flex gap-2">
                         <div className="flex-1"><span className="text-[10px] text-muted-foreground">Posição ↔</span>
@@ -443,28 +475,35 @@ export default function VideoEditorEditor() {
             onEditTextContent={(id, t) => updateText(id, { text: t })}
           />
 
-          {/* Galeria de assets */}
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Mídias enviadas — clique para inserir no tempo atual</p>
-            <div className="flex flex-wrap gap-2">
-              {assetIds.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma mídia enviada neste vídeo.</p>}
-              {assetIds.map((id) => {
-                const path = doc.assets[id];
-                const isVid = VIDEO_EXT.test(path);
-                return (
-                  <button key={id} onClick={() => addClip(id)}
-                    className="group relative h-20 w-20 overflow-hidden rounded-md border hover:ring-2 hover:ring-violet-500">
-                    {isVid
-                      ? <div className="flex h-full w-full items-center justify-center bg-neutral-800 text-white text-xs">vídeo</div>
-                      : <img src={`${mediaBase}/${path}`} alt={id} className="h-full w-full object-cover" />}
-                    <span className="absolute inset-x-0 bottom-0 bg-black/60 text-[10px] text-white text-center opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1">
-                      <ImagePlus className="h-3 w-3" /> inserir
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Galeria de mídias (popup) */}
+          <Dialog open={galeriaAberta} onOpenChange={setGaleriaAberta}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="w-fit">
+                <ImagePlus className="h-4 w-4 mr-1" /> Galeria de mídias ({assetIds.length})
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader><DialogTitle>Mídias enviadas — clique para inserir no tempo atual</DialogTitle></DialogHeader>
+              <div className="flex flex-wrap gap-2 max-h-[60vh] overflow-y-auto p-1">
+                {assetIds.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma mídia enviada neste vídeo.</p>}
+                {assetIds.map((id) => {
+                  const path = doc.assets[id];
+                  const isVid = VIDEO_EXT.test(path);
+                  return (
+                    <button key={id} onClick={() => { addClip(id); setGaleriaAberta(false); }}
+                      className="group relative h-24 w-24 overflow-hidden rounded-md border hover:ring-2 hover:ring-violet-500">
+                      {isVid
+                        ? <video src={`${mediaBase}/${path}`} muted className="h-full w-full object-cover" />
+                        : <img src={`${mediaBase}/${path}`} alt={id} className="h-full w-full object-cover" />}
+                      <span className="absolute inset-x-0 bottom-0 bg-black/60 text-[10px] text-white text-center opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1">
+                        <ImagePlus className="h-3 w-3" /> inserir
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Legendas: estilo + edição de texto */}
           <div className="rounded-lg border p-3 space-y-3">
@@ -640,6 +679,88 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words
           {legendaAtiva}
         </div>
       )}
+    </div>
+  );
+}
+
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+const clamp01 = (n: number, max = 1) => Math.min(max, Math.max(0, n));
+
+// Região onde o b-roll aparece (fração do preview), por layout + proporção do split.
+function brollRegion(layout: string, ratio?: number): { left: number; top: number; w: number; h: number } | null {
+  const r = Math.min(0.9, Math.max(0.1, ratio ?? 0.6));
+  switch (layout) {
+    case "split_horizontal": return { left: 0, top: 0, w: 1, h: 1 - r };  // b-roll em cima
+    case "split_bottom": return { left: 0, top: r, w: 1, h: 1 - r };      // b-roll embaixo
+    case "split_vertical": return { left: r, top: 0, w: 1 - r, h: 1 };
+    case "broll_fullscreen": case "image_fullscreen": return { left: 0, top: 0, w: 1, h: 1 };
+    default: return null;  // overlay_card (print centralizado) não tem crop livre
+  }
+}
+
+// Camada de crop interativo: com um b-roll selecionado e ativo, arraste p/ mover e use o scroll p/ zoom.
+function CropDragLayer({ clip, currentTime, onUpdateClip }: {
+  clip: Clip | null;
+  currentTime: number;
+  onUpdateClip: (id: string, patch: Partial<Clip>) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  if (!clip) return null;
+  const ativo = currentTime >= clip.start - 0.001 && currentTime < clip.end;
+  const region = brollRegion(clip.layout, clip.splitRatio);
+  if (!ativo || !region) return null;
+  const crop = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+  const zoomed = crop.w < 0.999 || crop.h < 0.999;
+
+  const startPan = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+    if (c0.w >= 0.999 && c0.h >= 0.999) return;            // sem zoom não há o que mover
+    const regWpx = region.w * PREVIEW_W, regHpx = region.h * PREVIEW_H;
+    const sx = e.clientX, sy = e.clientY;
+    const mv = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      const nx = clamp01(c0.x - (dx / regWpx) * c0.w, 1 - c0.w);
+      const ny = clamp01(c0.y - (dy / regHpx) * c0.h, 1 - c0.h);
+      onUpdateClip(clip.id, { crop: { ...c0, x: r3(nx), y: r3(ny) } });
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+    const f = e.deltaY < 0 ? 0.9 : 1.1;
+    const nw = Math.min(1, Math.max(0.25, c0.w * f)), nh = nw;
+    const cx = c0.x + c0.w / 2, cy = c0.y + c0.h / 2;
+    const nx = clamp01(cx - nw / 2, 1 - nw), ny = clamp01(cy - nh / 2, 1 - nh);
+    if (nw >= 0.999 && nh >= 0.999) onUpdateClip(clip.id, { crop: undefined });
+    else onUpdateClip(clip.id, { crop: { x: r3(nx), y: r3(ny), w: r3(nw), h: r3(nh) } });
+  };
+
+  // Superfície sobre a região do b-roll (deixa 34px no rodapé p/ os controles do player).
+  const left = region.left * PREVIEW_W, top = region.top * PREVIEW_H;
+  let w = region.w * PREVIEW_W, h = region.h * PREVIEW_H;
+  const botCap = PREVIEW_H - 34;
+  if (top + h > botCap) h = Math.max(24, botCap - top);
+  return (
+    <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      <div
+        onPointerDown={startPan}
+        onWheel={onWheel}
+        style={{
+          position: "absolute", left, top, width: w, height: h,
+          pointerEvents: "auto", cursor: zoomed ? "grab" : "zoom-in", touchAction: "none",
+          outline: "2px dashed rgba(56,189,248,0.9)", outlineOffset: -2, borderRadius: 4,
+          background: "rgba(56,189,248,0.06)",
+        }}
+        title={zoomed ? "Arraste para mover · scroll para zoom" : "Scroll para dar zoom e cortar · depois arraste para mover"}
+      >
+        <span style={{ position: "absolute", top: 2, left: 4, fontSize: 9, color: "#fff", background: "rgba(0,0,0,0.5)", padding: "1px 4px", borderRadius: 4, pointerEvents: "none" }}>
+          {zoomed ? "✥ mover · scroll zoom" : "⌕ scroll p/ cortar"}
+        </span>
+      </div>
     </div>
   );
 }
