@@ -224,7 +224,8 @@ export default function VideoEditorEditor() {
       const c = cs[i];
       if (currentTime <= c.start + 0.1 || currentTime >= c.end - 0.1) { toast.error("Posicione o playhead dentro do clipe."); return cs; }
       const a = { ...c, id: `${c.id}a`, end: round3(currentTime) };
-      const b = { ...c, id: `${c.id}b`, start: round3(currentTime) };
+      // a segunda parte começa o asset de vídeo de onde a primeira parou (não reinicia o b-roll)
+      const b = { ...c, id: `${c.id}b`, start: round3(currentTime), assetStart: round3((c.assetStart ?? 0) + (currentTime - c.start)) };
       const novo = [...cs]; novo.splice(i, 1, a, b);
       return novo;
     });

@@ -45,6 +45,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
             cropY: seg.cropY,
             crop: seg.crop as any,
             splitRatio: seg.splitRatio,
+            assetStartFrame: seg.assetStart ? Math.round(seg.assetStart * fps) : undefined,
           };
           return (
             <Series.Sequence key={i} durationInFrames={durFrames}>

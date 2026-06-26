@@ -25,6 +25,7 @@ export const segmentSchema = z.object({
   cropY: z.number().optional(),   // posição vertical do asset (0=topo, 100=base; default 50)
   crop: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(), // recorte livre (frações 0–1)
   splitRatio: z.number().optional(), // fração do vídeo principal no split (default 0.6)
+  assetStart: z.number().optional(), // offset (s) dentro do asset de vídeo (p/ dividir b-roll sem reiniciar)
 });
 
 export const stickerSchema = z.object({
@@ -138,6 +139,7 @@ export type Clip = {
   cropY?: number;    // posição vertical do asset (0=topo, 100=base; default 50)
   crop?: { x: number; y: number; w: number; h: number }; // recorte livre (frações 0–1 do asset)
   splitRatio?: number; // fração do vídeo principal no split (default 0.6)
+  assetStart?: number; // offset (s) dentro do asset de vídeo (dividir b-roll sem reiniciar)
 };
 
 // Faixa de música como LISTA (permite cortar/dividir em pedaços).
@@ -188,7 +190,7 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
     const end = Math.min(dur, c.end);
     if (end <= start) continue;
     if (start > cursor) segments.push({ start: cursor, end: start, layout: "talking_full", asset: null });
-    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY, crop: c.crop, splitRatio: c.splitRatio });
+    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY, crop: c.crop, splitRatio: c.splitRatio, assetStart: c.assetStart });
     cursor = end;
   }
   if (cursor < dur) segments.push({ start: cursor, end: dur, layout: "talking_full", asset: null });
@@ -231,7 +233,7 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
       if (b - a < 0.02) continue;
       const ov = overlayEm((a + b) / 2);
       const srcStart = m.sourceStart + (a - m.outStart);
-      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY, crop: ov?.crop, splitRatio: ov?.splitRatio });
+      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY, crop: ov?.crop, splitRatio: ov?.splitRatio, assetStart: ov ? (ov.assetStart ?? 0) + (a - ov.start) : undefined });
     }
   }
   if (!segments.length) segments.push({ start: 0, end: Math.max(0.1, durationInSeconds), layout: "talking_full", asset: null });

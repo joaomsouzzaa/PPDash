@@ -649,7 +649,8 @@ def _clips_para_timeline(doc: dict) -> dict:
         if start > cursor:
             segs.append({"start": cursor, "end": start, "layout": "talking_full", "asset": None})
         segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"],
-                     "cropY": c.get("cropY"), "crop": c.get("crop"), "splitRatio": c.get("splitRatio")})
+                     "cropY": c.get("cropY"), "crop": c.get("crop"), "splitRatio": c.get("splitRatio"),
+                     "assetStart": c.get("assetStart")})
         cursor = end
     if cursor < dur:
         segs.append({"start": cursor, "end": dur, "layout": "talking_full", "asset": None})
@@ -723,7 +724,8 @@ def _montar_timeline(doc: dict):
             segs.append({"start": round(ss, 3), "end": round(ss + (b - a), 3),
                          "layout": ov["layout"] if ov else "talking_full", "asset": ov["asset"] if ov else None,
                          "cropY": ov.get("cropY") if ov else None,
-                         "crop": ov.get("crop") if ov else None, "splitRatio": ov.get("splitRatio") if ov else None})
+                         "crop": ov.get("crop") if ov else None, "splitRatio": ov.get("splitRatio") if ov else None,
+                         "assetStart": (float(ov.get("assetStart") or 0) + (a - float(ov["start"]))) if ov else None})
     if not segs:
         segs = [{"start": 0, "end": max(0.1, dur), "layout": "talking_full", "asset": None}]
     words = []
