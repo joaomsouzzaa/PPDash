@@ -28,6 +28,14 @@ export default function VideoEditorEditorV2() {
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
   const [zf, setZf] = useState(1);   // zoom da VIEW (1 = ajustado à tela)
+  const [tlHeight, setTlHeight] = useState(240);  // altura da timeline (arrastável)
+  const startResizeTl = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const y0 = e.clientY, h0 = tlHeight;
+    const mv = (ev: PointerEvent) => setTlHeight(Math.min(window.innerHeight * 0.7, Math.max(120, h0 + (y0 - ev.clientY))));
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
   // Canvas ocupa o máximo do espaço central, mantendo 9:16.
   const canvasArea = useRef<HTMLDivElement>(null);
   const [cv, setCv] = useState({ w: 315, h: 560 });
@@ -205,8 +213,14 @@ export default function VideoEditorEditorV2() {
         </main>
       </div>
 
+      {/* Divisória arrastável: aumenta/diminui a timeline */}
+      <div onPointerDown={startResizeTl} title="Arraste para aumentar/diminuir a timeline"
+        className="group flex h-2 cursor-row-resize items-center justify-center border-t border-neutral-800 bg-neutral-900 hover:bg-violet-600/30">
+        <div className="h-0.5 w-10 rounded bg-neutral-600 group-hover:bg-violet-400" />
+      </div>
+
       {/* Barra de ações + play + timecode (acima da timeline) */}
-      <div className="flex items-center gap-2 border-t border-neutral-800 bg-neutral-950 px-3 py-1.5">
+      <div className="flex items-center gap-2 bg-neutral-950 px-3 py-1.5">
         <div className="flex items-center gap-1">
           <button onClick={() => sel ? ed.splitClip(sel.id) : ed.splitAt(ed.currentTime)} title="Dividir no playhead" className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800"><Scissors className="h-4 w-4" /></button>
           <button onClick={() => sel && ed.removeClip(sel.id)} disabled={!sel} title="Excluir" className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
@@ -221,8 +235,8 @@ export default function VideoEditorEditorV2() {
         <div className="w-[120px]" />
       </div>
 
-      {/* Timeline full-width */}
-      <div className="max-h-[32vh] overflow-y-auto border-t border-neutral-800 bg-neutral-950 p-2">
+      {/* Timeline full-width (altura arrastável) */}
+      <div style={{ height: tlHeight }} className="overflow-y-auto border-t border-neutral-800 bg-neutral-950 p-2">
         <EditorTimeline
           clips={doc.clips} duration={doc.durationInSeconds} currentTime={ed.currentTime} selectedId={ed.selectedId}
           words={doc.words} palavrasPorPagina={ed.capStyle.palavrasPorPagina}
