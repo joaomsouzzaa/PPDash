@@ -156,6 +156,17 @@ export function useEditorDoc(jobId: string) {
     });
   }, [currentTime]);
   const removeClip = useCallback((id: string) => { setClips((cs) => cs.filter((c) => c.id !== id)); setSelectedId(null); }, [setClips]);
+  const duplicateClip = useCallback((id: string) => {
+    setDoc((d) => {
+      if (!d) return d;
+      const c = d.clips.find((x) => x.id === id); if (!c) return d;
+      const len = c.end - c.start;
+      const start = Math.min(d.durationInSeconds - 0.3, c.end);
+      const novo: Clip = { ...c, id: `c${Date.now().toString(36)}`, start: round3(start), end: round3(Math.min(d.durationInSeconds, start + len)) };
+      setSelectedId(novo.id);
+      return { ...d, clips: [...d.clips, novo] };
+    });
+  }, []);
   const splitClip = useCallback((id: string) => {
     setClips((cs) => {
       const i = cs.findIndex((c) => c.id === id);
@@ -173,6 +184,18 @@ export function useEditorDoc(jobId: string) {
     setCurrentTime(t);
     playerRef.current?.seekTo(Math.round(t * fps));
   }, [fps]);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  useEffect(() => {
+    const p = playerRef.current; if (!p) return;
+    const on = () => setIsPlaying(true), off = () => setIsPlaying(false);
+    p.addEventListener("play", on); p.addEventListener("pause", off); p.addEventListener("ended", off);
+    return () => { p.removeEventListener("play", on); p.removeEventListener("pause", off); p.removeEventListener("ended", off); };
+  }, [doc]);
+  const togglePlay = useCallback(() => {
+    const p = playerRef.current; if (!p) return;
+    if (p.isPlaying()) p.pause(); else p.play();
+  }, []);
 
   const [subindoMusica, setSubindoMusica] = useState(false);
   const uploadMusica = useCallback(async (file: File) => {

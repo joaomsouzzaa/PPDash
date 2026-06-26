@@ -666,6 +666,27 @@ export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove
     const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
+  // Alça de canto: arrastar p/ aumentar/diminuir o texto (escala o fontSize pela distância ao centro).
+  const startResize = (e: React.PointerEvent, t: TextLayer) => {
+    e.preventDefault(); e.stopPropagation();
+    onSelect(t.id);
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = rect.left + (t.x ?? 0.5) * rect.width, cy = rect.top + (t.y ?? 0.5) * rect.height;
+    const d0 = Math.max(8, Math.hypot(e.clientX - cx, e.clientY - cy));
+    const f0 = t.fontSize ?? 80;
+    const mv = (ev: PointerEvent) => {
+      const d = Math.hypot(ev.clientX - cx, ev.clientY - cy);
+      onMove(t.id, { fontSize: Math.round(Math.min(300, Math.max(16, (f0 * d) / d0))) });
+    };
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  const handleCanto = (cur: string): React.CSSProperties => ({
+    position: "absolute", width: 12, height: 12, borderRadius: "50%", background: "#fff",
+    border: "1.5px solid #38bdf8", pointerEvents: "auto", cursor: cur, touchAction: "none",
+  });
   return (
     <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
       {ativos.map((t) => (
@@ -686,6 +707,14 @@ export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove
             outlineOffset: 2, borderRadius: 6,
           }}>
           {t.text}
+          {t.id === selectedId && (
+            <>
+              <div onPointerDown={(e) => startResize(e, t)} style={{ ...handleCanto("nwse-resize"), left: -7, top: -7 }} />
+              <div onPointerDown={(e) => startResize(e, t)} style={{ ...handleCanto("nesw-resize"), right: -7, top: -7 }} />
+              <div onPointerDown={(e) => startResize(e, t)} style={{ ...handleCanto("nesw-resize"), left: -7, bottom: -7 }} />
+              <div onPointerDown={(e) => startResize(e, t)} style={{ ...handleCanto("nwse-resize"), right: -7, bottom: -7 }} />
+            </>
+          )}
         </div>
       ))}
 

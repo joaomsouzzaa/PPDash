@@ -3,7 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Player } from "@remotion/player";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Play, Trash2, RefreshCw, Film, Plus, Type, Image as ImageIcon, Captions as CaptionsIcon, Music, Scissors } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
+import { ChevronLeft, Play, Pause, Trash2, RefreshCw, Film, Plus, Type, Image as ImageIcon, Captions as CaptionsIcon, Music, Scissors, Crop, Maximize2, Layers, MoreHorizontal, Copy, Replace, ZoomIn, ZoomOut } from "lucide-react";
 import { Main } from "@/video-editor/remotion/Main";
 import { EditorTimeline } from "@/components/video-editor/EditorTimeline";
 import { OVERLAY_LAYOUTS, type OverlayLayout, type TextLayer } from "@/video-editor/remotion/schema";
@@ -25,6 +27,7 @@ export default function VideoEditorEditorV2() {
   const navigate = useNavigate();
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
+  const [zf, setZf] = useState(1);   // zoom da VIEW (1 = ajustado à tela)
   // Canvas ocupa o máximo do espaço central, mantendo 9:16.
   const canvasArea = useRef<HTMLDivElement>(null);
   const [cv, setCv] = useState({ w: 315, h: 560 });
@@ -59,6 +62,27 @@ export default function VideoEditorEditorV2() {
         <Button variant="ghost" size="icon" className="text-neutral-300" onClick={() => navigate("/video-editor")}><ChevronLeft className="h-4 w-4" /></Button>
         <Film className="h-4 w-4 text-violet-400" />
         <h1 className="text-sm font-semibold truncate flex-1">{ed.nome}</h1>
+        {/* Zoom da view (canvas) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="flex items-center gap-1 rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800">
+              {Math.round(zf * 100)}% <span className="text-neutral-500">▾</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 bg-neutral-900 text-neutral-100 border-neutral-700">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <ZoomOut className="h-4 w-4 cursor-pointer" onClick={() => setZf((z) => Math.max(0.3, Math.round((z - 0.1) * 10) / 10))} />
+                <input type="range" min={30} max={250} value={Math.round(zf * 100)} onChange={(e) => setZf(Number(e.target.value) / 100)} className="flex-1" />
+                <ZoomIn className="h-4 w-4 cursor-pointer" onClick={() => setZf((z) => Math.min(2.5, Math.round((z + 0.1) * 10) / 10))} />
+              </div>
+              <button className="w-full rounded px-2 py-1 text-left text-xs hover:bg-neutral-800" onClick={() => setZf(1)}>Ajustar à tela</button>
+              <button className="w-full rounded px-2 py-1 text-left text-xs hover:bg-neutral-800" onClick={() => setZf(0.5)}>50%</button>
+              <button className="w-full rounded px-2 py-1 text-left text-xs hover:bg-neutral-800" onClick={() => setZf(1)}>100% (ajustado)</button>
+              <button className="w-full rounded px-2 py-1 text-left text-xs hover:bg-neutral-800" onClick={() => setZf(2)}>200%</button>
+            </div>
+          </PopoverContent>
+        </Popover>
         <Button onClick={() => ed.renderizar(() => navigate("/video-editor"))} disabled={ed.renderizando} className="bg-violet-600 hover:bg-violet-500">
           {ed.renderizando ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Exportar
         </Button>
@@ -153,16 +177,16 @@ export default function VideoEditorEditorV2() {
         </aside>
 
         {/* Canvas central */}
-        <main ref={canvasArea} className="relative flex flex-1 flex-col items-center justify-center bg-neutral-900 p-4">
-          {/* Toolbar flutuante do elemento selecionado */}
+        <main ref={canvasArea} className="relative flex flex-1 flex-col items-center justify-center overflow-auto bg-neutral-900 p-4">
+          {/* Toolbar flutuante de ícones do elemento selecionado */}
           {(sel || selT) && (
             <div className="absolute top-2 left-1/2 z-10 -translate-x-1/2">
-              {sel && <ClipToolbar ed={ed} sel={sel} />}
+              {sel && <ClipToolbar ed={ed} sel={sel} onAddLayer={() => setAba("midia")} />}
               {selT && !sel && <TextToolbar ed={ed} selT={selT} />}
             </div>
           )}
 
-          <div style={{ width: cv.w, height: cv.h, position: "relative" }} className="overflow-hidden rounded-lg border border-neutral-700 bg-black shadow-2xl">
+          <div style={{ width: cv.w * zf, height: cv.h * zf, position: "relative", flexShrink: 0 }} className="overflow-hidden rounded-lg border border-neutral-700 bg-black shadow-2xl">
             <Player
               ref={ed.playerRef}
               component={Main as any}
@@ -171,19 +195,34 @@ export default function VideoEditorEditorV2() {
               fps={ed.fps}
               compositionWidth={1080}
               compositionHeight={1920}
-              style={{ width: cv.w, height: cv.h }}
-              controls clickToPlay={false} doubleClickToFullscreen={false} acknowledgeRemotionLicense
+              style={{ width: cv.w * zf, height: cv.h * zf }}
+              clickToPlay={false} doubleClickToFullscreen={false} acknowledgeRemotionLicense
             />
             <TextDragLayer texts={ed.texts} currentTime={ed.currentTime} selectedId={ed.selectedTextId}
               onSelect={ed.setSelectedTextId} onMove={ed.updateText} words={ed.outWords} captionStyle={ed.capStyle}
               onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={aba === "legenda"} />
           </div>
-          <p className="mt-1 text-xs text-neutral-400">{fmt(ed.currentTime)} / {fmt(doc.durationInSeconds)}</p>
         </main>
       </div>
 
+      {/* Barra de ações + play + timecode (acima da timeline) */}
+      <div className="flex items-center gap-2 border-t border-neutral-800 bg-neutral-950 px-3 py-1.5">
+        <div className="flex items-center gap-1">
+          <button onClick={() => sel ? ed.splitClip(sel.id) : ed.splitAt(ed.currentTime)} title="Dividir no playhead" className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800"><Scissors className="h-4 w-4" /></button>
+          <button onClick={() => sel && ed.removeClip(sel.id)} disabled={!sel} title="Excluir" className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+          <button onClick={() => sel && ed.duplicateClip(sel.id)} disabled={!sel} title="Duplicar" className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800 disabled:opacity-30"><Copy className="h-4 w-4" /></button>
+        </div>
+        <div className="flex flex-1 items-center justify-center gap-3">
+          <button onClick={ed.togglePlay} className="rounded-full bg-neutral-800 p-2 hover:bg-neutral-700">
+            {ed.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </button>
+          <span className="text-xs tabular-nums text-neutral-300">{fmtMs(ed.currentTime)} <span className="text-neutral-600">/ {fmtMs(doc.durationInSeconds)}</span></span>
+        </div>
+        <div className="w-[120px]" />
+      </div>
+
       {/* Timeline full-width */}
-      <div className="max-h-[34vh] overflow-y-auto border-t border-neutral-800 bg-neutral-950 p-2">
+      <div className="max-h-[32vh] overflow-y-auto border-t border-neutral-800 bg-neutral-950 p-2">
         <EditorTimeline
           clips={doc.clips} duration={doc.durationInSeconds} currentTime={ed.currentTime} selectedId={ed.selectedId}
           words={doc.words} palavrasPorPagina={ed.capStyle.palavrasPorPagina}
@@ -199,8 +238,8 @@ export default function VideoEditorEditorV2() {
   );
 }
 
-// Toolbar flutuante para o b-roll selecionado.
-function ClipToolbar({ ed, sel }: { ed: ReturnType<typeof useEditorDoc>; sel: NonNullable<ReturnType<typeof useEditorDoc>["selected"]> }) {
+// Toolbar flutuante de ÍCONES para o b-roll selecionado (estilo CapCut).
+function ClipToolbar({ ed, sel, onAddLayer }: { ed: ReturnType<typeof useEditorDoc>; sel: NonNullable<ReturnType<typeof useEditorDoc>["selected"]>; onAddLayer: () => void }) {
   const ehSplit = (["split_horizontal", "split_bottom", "split_vertical"] as string[]).includes(sel.layout);
   const pct = Math.round((sel.splitRatio ?? 0.6) * 100);
   const cr = sel.crop; const w = cr?.w ?? 1; const zoom = Math.round((1 / w) * 100);
@@ -208,30 +247,64 @@ function ClipToolbar({ ed, sel }: { ed: ReturnType<typeof useEditorDoc>; sel: No
   const setZoom = (zz: number) => {
     const ww = 1 / (zz / 100);
     if (zz <= 100) ed.updateClip(sel.id, { crop: undefined });
-    else ed.updateClip(sel.id, { crop: { x: round3(((1 - ww) / 2)), y: round3(((1 - ww) / 2)), w: round3(ww), h: round3(ww) } });
+    else ed.updateClip(sel.id, { crop: { x: round3((1 - ww) / 2), y: round3((1 - ww) / 2), w: round3(ww), h: round3(ww) } });
   };
+  const Btn = ({ icon: Icon, title, onClick }: { icon: any; title: string; onClick?: () => void }) => (
+    <button title={title} onClick={onClick} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Icon className="h-4 w-4" /></button>
+  );
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800/95 px-3 py-2 shadow-xl backdrop-blur">
-      <Select value={sel.layout} onValueChange={(v) => ed.updateClip(sel.id, { layout: v as OverlayLayout })}>
-        <SelectTrigger className="h-8 w-[210px] bg-neutral-900 text-xs"><SelectValue /></SelectTrigger>
-        <SelectContent>{OVERLAY_LAYOUTS.map((l) => <SelectItem key={l} value={l}>{LAYOUT_NOME[l]}</SelectItem>)}</SelectContent>
-      </Select>
-      <div className="flex items-center gap-1 text-[11px] text-neutral-300">Divisão
-        <NumBox value={pct} min={20} max={80} onCommit={(v) => { const p: any = { splitRatio: v / 100 }; if (!ehSplit) p.layout = "split_horizontal"; ed.updateClip(sel.id, p); }}
-          className="h-7 w-12 rounded border border-neutral-600 bg-neutral-900 px-1 text-right text-[11px]" />%
-      </div>
-      <div className="flex items-center gap-1 text-[11px] text-neutral-300">Zoom
-        <NumBox value={zoom} min={100} max={400} onCommit={setZoom} className="h-7 w-14 rounded border border-neutral-600 bg-neutral-900 px-1 text-right text-[11px]" />%
-      </div>
-      {ehBroll && (
-        <div className="flex items-center gap-1 text-[11px] text-neutral-300" title="Posição vertical do b-roll">↕
-          <input type="range" min={0} max={100} value={sel.cropY ?? 50} onChange={(e) => ed.updateClip(sel.id, { cropY: Number(e.target.value) })} className="w-20" />
-        </div>
-      )}
-      <button onClick={() => ed.splitClip(sel.id)} className="flex items-center gap-1 rounded border border-neutral-600 px-2 py-1 text-[11px] hover:bg-neutral-700"><Scissors className="h-3.5 w-3.5" /> Dividir</button>
-      <button onClick={() => ed.removeClip(sel.id)} className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-red-400 hover:bg-neutral-700"><Trash2 className="h-3.5 w-3.5" /> Remover</button>
+    <div className="flex items-center gap-0.5 rounded-lg border border-neutral-700 bg-neutral-800/95 px-1.5 py-1 shadow-xl backdrop-blur">
+      <Btn icon={ImageIcon} title="Adicionar camada" onClick={onAddLayer} />
+      <Btn icon={Maximize2} title="Ajustar à tela (remove recorte)" onClick={() => ed.updateClip(sel.id, { crop: undefined, cropY: 50 })} />
+      {/* Recortar / ajustes */}
+      <Popover>
+        <PopoverTrigger asChild><button title="Recortar / ajustar" className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button></PopoverTrigger>
+        <PopoverContent className="w-72 space-y-3 bg-neutral-900 text-neutral-100 border-neutral-700">
+          <div className="space-y-1">
+            <label className="text-[11px] text-neutral-400">Layout</label>
+            <Select value={sel.layout} onValueChange={(v) => ed.updateClip(sel.id, { layout: v as OverlayLayout })}>
+              <SelectTrigger className="h-8 w-full bg-neutral-800 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>{OVERLAY_LAYOUTS.map((l) => <SelectItem key={l} value={l}>{LAYOUT_NOME[l]}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-neutral-300">Divisão
+            <NumBox value={pct} min={20} max={80} onCommit={(v) => { const p: any = { splitRatio: v / 100 }; if (!ehSplit) p.layout = "split_horizontal"; ed.updateClip(sel.id, p); }}
+              className="h-7 w-14 rounded border border-neutral-600 bg-neutral-800 px-1 text-right text-[11px]" />% vídeo
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-neutral-300">Zoom
+            <NumBox value={zoom} min={100} max={400} onCommit={setZoom} className="h-7 w-14 rounded border border-neutral-600 bg-neutral-800 px-1 text-right text-[11px]" />%
+          </div>
+          {ehBroll && (
+            <div className="space-y-1">
+              <label className="text-[11px] text-neutral-400 flex justify-between"><span>Posição vertical do b-roll</span><span>{sel.cropY ?? 50}%</span></label>
+              <input type="range" min={0} max={100} value={sel.cropY ?? 50} onChange={(e) => ed.updateClip(sel.id, { cropY: Number(e.target.value) })} className="w-full" />
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+      <Btn icon={Scissors} title="Dividir no playhead" onClick={() => ed.splitClip(sel.id)} />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><button title="Mais" className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><MoreHorizontal className="h-4 w-4" /></button></DropdownMenuTrigger>
+        <DropdownMenuContent className="bg-neutral-900 text-neutral-100 border-neutral-700">
+          <DropdownMenuItem onClick={() => ed.duplicateClip(sel.id)}><Copy className="h-4 w-4 mr-2" /> Duplicar</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => ed.splitClip(sel.id)}><Scissors className="h-4 w-4 mr-2" /> Dividir</DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger><Replace className="h-4 w-4 mr-2" /> Substituir mídia</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="bg-neutral-900 text-neutral-100 border-neutral-700 max-h-64 overflow-y-auto">
+              {ed.assetIds.map((id) => <DropdownMenuItem key={id} onClick={() => ed.updateClip(sel.id, { asset: id })}>{id}</DropdownMenuItem>)}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="text-red-400" onClick={() => ed.removeClip(sel.id)}><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
+}
+
+function fmtMs(s: number) {
+  const m = Math.floor(s / 60), ss = Math.floor(s % 60), cs = Math.floor((s % 1) * 100);
+  return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}:${String(cs).padStart(2, "0")}`;
 }
 
 // Toolbar flutuante para o texto selecionado.
