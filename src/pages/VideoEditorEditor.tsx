@@ -309,6 +309,7 @@ export default function VideoEditorEditor() {
               selectedId={selectedTextId} onSelect={setSelectedTextId} onMove={updateText}
               words={outWords} captionStyle={capStyle}
               onMoveCaption={(y) => setCapStyle({ posicaoY: y })}
+              mostrarLegenda={legendaAberta}
             />
           </div>
           <p className="mt-2 text-xs text-muted-foreground">Preview ao vivo · {fmt(currentTime)} / {fmt(doc.durationInSeconds)}</p>
@@ -594,7 +595,7 @@ function paginarLegenda(words: { word: string; start: number; end: number }[], m
 }
 
 // Camada transparente sobre o Player: textos ativos como caixas arrastáveis + legenda arrastável (vertical).
-function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption }: {
+function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption, mostrarLegenda = false }: {
   texts: TextLayer[];
   currentTime: number;
   selectedId: string | null;
@@ -603,6 +604,7 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words
   words?: { word: string; start: number; end: number }[];
   captionStyle?: CaptionStyle;
   onMoveCaption?: (posicaoY: number) => void;
+  mostrarLegenda?: boolean;  // só mostra a guia da legenda quando ela está "selecionada" (painel aberto)
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const ativos = texts.filter((t) => currentTime >= t.start - 0.001 && currentTime < t.end);
@@ -662,27 +664,27 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words
             textAlign: t.align, lineHeight: 1.1, whiteSpace: "pre-wrap",
             fontFamily: "Inter, system-ui, sans-serif", textShadow: "0 2px 12px rgba(0,0,0,0.55)",
             pointerEvents: "auto", cursor: "grab", userSelect: "none",
-            outline: t.id === selectedId ? "2px dashed #38bdf8" : "1px dashed rgba(255,255,255,0.35)",
+            outline: t.id === selectedId ? "2px dashed #38bdf8" : "none",  // guia só quando selecionado
             outlineOffset: 2, borderRadius: 6,
           }}>
           {t.text}
         </div>
       ))}
 
-      {/* Legenda ativa: arraste verticalmente para reposicionar (atualiza posicaoY) */}
-      {legendaAtiva && cap && (
+      {/* Legenda ativa: guia só quando a legenda está selecionada (painel aberto) */}
+      {mostrarLegenda && legendaAtiva && cap && (
         <div
           onPointerDown={startDragCaption}
           onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute", left: "50%", bottom: (cap.posicaoY ?? 380) * scaleH,
-            transform: "translateX(-50%)", maxWidth: "92%",
-            fontSize: Math.max(9, (cap.fontSize ?? 86) * scale * 0.92), fontWeight: 900,
-            color: cap.color, textTransform: "uppercase", textAlign: "center", lineHeight: 1.1,
-            fontFamily: "Inter, Arial, sans-serif", whiteSpace: "nowrap", overflow: "hidden",
+            transform: "translateX(-50%)", maxWidth: "90%",
+            fontSize: (cap.fontSize ?? 86) * scale, fontWeight: 900,
+            color: "transparent", textTransform: "uppercase", textAlign: "center", lineHeight: 1.1,
+            letterSpacing: "-0.02em", fontFamily: "Inter, Arial, sans-serif", whiteSpace: "normal",
             touchAction: "none", pointerEvents: "auto", cursor: "ns-resize", userSelect: "none",
             outline: "2px dashed rgba(255,230,0,0.9)", outlineOffset: 3, borderRadius: 6,
-            padding: "2px 6px", opacity: 0.85,
+            padding: "2px 8px",
           }}
           title="Arraste para cima/baixo para posicionar a legenda"
         >
