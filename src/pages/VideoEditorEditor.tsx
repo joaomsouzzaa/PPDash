@@ -350,9 +350,8 @@ export default function VideoEditorEditor() {
                     <label className="text-[11px] text-muted-foreground flex items-center justify-between">
                       <span>Divisão · vídeo / b-roll</span>
                       <span className="flex items-center gap-1">
-                        <input type="number" min={20} max={80} value={pct}
-                          onChange={(e) => {
-                            const v = Math.min(80, Math.max(20, Number(e.target.value) || 60));
+                        <NumBox value={pct} min={20} max={80}
+                          onCommit={(v) => {
                             const patch: Partial<Clip> = { splitRatio: v / 100 };
                             if (!ehSplit) patch.layout = "split_horizontal";
                             updateClip(selected.id, patch);
@@ -389,8 +388,8 @@ export default function VideoEditorEditor() {
                     <label className="text-[11px] text-muted-foreground flex items-center justify-between">
                       <span>Recorte (zoom)</span>
                       <span className="flex items-center gap-1">
-                        <input type="number" min={100} max={400} value={zoom}
-                          onChange={(e) => setCrop(Math.min(400, Math.max(100, Number(e.target.value) || 100)), posX, posY)}
+                        <NumBox value={zoom} min={100} max={400}
+                          onCommit={(v) => setCrop(v, posX, posY)}
                           className="h-6 w-14 rounded border bg-background px-1 text-right text-[11px] outline-none focus:ring-1 focus:ring-violet-500" />
                         <span className="text-[10px]">%</span>
                       </span>
@@ -777,6 +776,19 @@ function CropDragLayer({ clip, currentTime, onUpdateClip }: {
   );
 }
 
+// Campo numérico que só confirma (clampa) no Enter/blur — permite digitar livremente.
+function NumBox({ value, min, max, onCommit, className }: { value: number; min: number; max: number; onCommit: (v: number) => void; className?: string }) {
+  const [v, setV] = useState(String(value));
+  useEffect(() => { setV(String(value)); }, [value]);
+  const commit = () => { const n = Math.min(max, Math.max(min, Number(v) || min)); onCommit(n); setV(String(n)); };
+  return (
+    <input type="number" value={v} min={min} max={max} className={className}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); } }} />
+  );
+}
+
 function Cor({ label, value, onChange, extra }: { label: string; value: string; onChange: (v: string) => void; extra?: React.ReactNode }) {
   return (
     <div className="space-y-1">
@@ -787,11 +799,16 @@ function Cor({ label, value, onChange, extra }: { label: string; value: string; 
 }
 
 function Num({ label, value, onChange, min, max, step = 1 }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) {
+  const [v, setV] = useState(String(value));
+  useEffect(() => { setV(String(value)); }, [value]);
+  const commit = () => { const n = Math.min(max, Math.max(min, Number(v) || min)); onChange(n); setV(String(n)); };
   return (
     <div className="space-y-1">
       <label className="text-[11px] text-muted-foreground">{label}</label>
-      <input type="number" value={value} min={min} max={max} step={step}
-        onChange={(e) => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+      <input type="number" value={v} min={min} max={max} step={step}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); } }}
         className="h-8 w-full rounded border bg-background px-2 text-sm outline-none focus:ring-1 focus:ring-violet-500" />
     </div>
   );
