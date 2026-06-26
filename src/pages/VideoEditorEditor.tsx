@@ -38,6 +38,8 @@ export default function VideoEditorEditor() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [galeriaAberta, setGaleriaAberta] = useState(false);
+  const [legendaAberta, setLegendaAberta] = useState(false);
+  const [audioAberto, setAudioAberto] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [renderizando, setRenderizando] = useState(false);
   const primeiraGravacao = useRef(true);
@@ -507,7 +509,10 @@ export default function VideoEditorEditor() {
 
           {/* Legendas: estilo + edição de texto */}
           <div className="rounded-lg border p-3 space-y-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Legenda</p>
+            <button onClick={() => setLegendaAberta((v) => !v)} className="flex w-full items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+              <span>Legenda</span><span>{legendaAberta ? "▲" : "▼"}</span>
+            </button>
+            {legendaAberta && <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Cor label="Palavra" value={capStyle.color} onChange={(v) => setCapStyle({ color: v })} />
               <Cor label="Palavra ativa" value={capStyle.activeColor} onChange={(v) => setCapStyle({ activeColor: v })} />
@@ -528,11 +533,15 @@ export default function VideoEditorEditor() {
             <p className="text-xs text-muted-foreground pt-1">
               ✏️ Para corrigir o texto, dê <b>duplo-clique</b> no bloco da legenda na timeline (faixa "Legendas") e digite a correção.
             </p>
+            </>}
           </div>
 
           {/* Áudio: volume do vídeo + música */}
           <div className="rounded-lg border p-3 space-y-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Áudio</p>
+            <button onClick={() => setAudioAberto((v) => !v)} className="flex w-full items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+              <span>Áudio</span><span>{audioAberto ? "▲" : "▼"}</span>
+            </button>
+            {audioAberto && <>
             <div className="space-y-1">
               <label className="text-[11px] text-muted-foreground flex items-center justify-between">
                 <span>Volume do vídeo (original)</span><span>{Math.round(videoVolume * 100)}%</span>
@@ -563,6 +572,7 @@ export default function VideoEditorEditor() {
                 <p className="text-[11px] text-muted-foreground">Início: {fmt(music.start)} (arraste o bloco na faixa "Música" da timeline).</p>
               </div>
             )}
+            </>}
           </div>
         </div>
       </div>
