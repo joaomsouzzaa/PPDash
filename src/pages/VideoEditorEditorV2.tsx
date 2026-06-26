@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Player } from "@remotion/player";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,26 @@ const LAYOUT_NOME: Record<OverlayLayout, string> = {
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 type Aba = "midia" | "texto" | "legenda" | "audio";
 
-const CANVAS_H = 560, CANVAS_W = Math.round((CANVAS_H * 9) / 16);
-
 export default function VideoEditorEditorV2() {
   const { jobId = "" } = useParams();
   const navigate = useNavigate();
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
+  // Canvas ocupa o máximo do espaço central, mantendo 9:16.
+  const canvasArea = useRef<HTMLDivElement>(null);
+  const [cv, setCv] = useState({ w: 315, h: 560 });
+  useEffect(() => {
+    const el = canvasArea.current; if (!el) return;
+    const upd = () => {
+      const aw = el.clientWidth - 32, ah = el.clientHeight - 56;   // margem p/ toolbar e timecode
+      let h = Math.max(240, ah), w = (h * 9) / 16;
+      if (w > aw) { w = aw; h = (w * 16) / 9; }
+      setCv({ w: Math.round(w), h: Math.round(h) });
+    };
+    upd();
+    const ro = new ResizeObserver(upd); ro.observe(el);
+    return () => ro.disconnect();
+  }, [ed.carregando]);
 
   if (ed.carregando) return <div className="flex h-screen items-center justify-center text-muted-foreground bg-neutral-950">Carregando edição…</div>;
   if (!ed.doc || !ed.timeline) {
@@ -140,16 +153,16 @@ export default function VideoEditorEditorV2() {
         </aside>
 
         {/* Canvas central */}
-        <main className="relative flex flex-1 flex-col items-center justify-center bg-neutral-900 p-4">
+        <main ref={canvasArea} className="relative flex flex-1 flex-col items-center justify-center bg-neutral-900 p-4">
           {/* Toolbar flutuante do elemento selecionado */}
           {(sel || selT) && (
-            <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2">
+            <div className="absolute top-2 left-1/2 z-10 -translate-x-1/2">
               {sel && <ClipToolbar ed={ed} sel={sel} />}
               {selT && !sel && <TextToolbar ed={ed} selT={selT} />}
             </div>
           )}
 
-          <div style={{ width: CANVAS_W, height: CANVAS_H, position: "relative" }} className="overflow-hidden rounded-lg border border-neutral-700 bg-black shadow-2xl">
+          <div style={{ width: cv.w, height: cv.h, position: "relative" }} className="overflow-hidden rounded-lg border border-neutral-700 bg-black shadow-2xl">
             <Player
               ref={ed.playerRef}
               component={Main as any}
@@ -158,19 +171,19 @@ export default function VideoEditorEditorV2() {
               fps={ed.fps}
               compositionWidth={1080}
               compositionHeight={1920}
-              style={{ width: CANVAS_W, height: CANVAS_H }}
+              style={{ width: cv.w, height: cv.h }}
               controls clickToPlay={false} doubleClickToFullscreen={false} acknowledgeRemotionLicense
             />
             <TextDragLayer texts={ed.texts} currentTime={ed.currentTime} selectedId={ed.selectedTextId}
               onSelect={ed.setSelectedTextId} onMove={ed.updateText} words={ed.outWords} captionStyle={ed.capStyle}
               onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={aba === "legenda"} />
           </div>
-          <p className="mt-2 text-xs text-neutral-400">{fmt(ed.currentTime)} / {fmt(doc.durationInSeconds)}</p>
+          <p className="mt-1 text-xs text-neutral-400">{fmt(ed.currentTime)} / {fmt(doc.durationInSeconds)}</p>
         </main>
       </div>
 
       {/* Timeline full-width */}
-      <div className="border-t border-neutral-800 bg-neutral-950 p-2">
+      <div className="max-h-[34vh] overflow-y-auto border-t border-neutral-800 bg-neutral-950 p-2">
         <EditorTimeline
           clips={doc.clips} duration={doc.durationInSeconds} currentTime={ed.currentTime} selectedId={ed.selectedId}
           words={doc.words} palavrasPorPagina={ed.capStyle.palavrasPorPagina}
