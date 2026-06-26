@@ -27,7 +27,6 @@ export default function VideoEditorEditorV2() {
   const navigate = useNavigate();
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
-  const [cropMode, setCropMode] = useState(false);  // modo recorte da camada livre selecionada
   const [tbPos, setTbPos] = useState<{ x: number; y: number } | null>(null);  // posição da toolbar flutuante (arrastável)
   const startDragToolbar = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -48,7 +47,6 @@ export default function VideoEditorEditorV2() {
     const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
-  useEffect(() => { setCropMode(false); }, [ed.selectedId]);
   // Canvas ocupa o máximo do espaço central, mantendo 9:16.
   const canvasArea = useRef<HTMLDivElement>(null);
   const [cv, setCv] = useState({ w: 315, h: 560 });
@@ -207,7 +205,7 @@ export default function VideoEditorEditorV2() {
                 className="cursor-grab rounded-md border border-neutral-700 bg-neutral-800/95 p-1 text-neutral-400 shadow-xl backdrop-blur hover:text-neutral-200 active:cursor-grabbing touch-none">
                 <GripVertical className="h-4 w-4" />
               </button>
-              {sel && <ClipToolbar ed={ed} sel={sel} onAddLayer={() => setAba("midia")} cropMode={cropMode} setCropMode={setCropMode} />}
+              {sel && <ClipToolbar ed={ed} sel={sel} onAddLayer={() => setAba("midia")} />}
               {selT && !sel && <TextToolbar ed={ed} selT={selT} />}
             </div>
           )}
@@ -225,7 +223,7 @@ export default function VideoEditorEditorV2() {
               clickToPlay={false} doubleClickToFullscreen={false} acknowledgeRemotionLicense
             />
             {/* Seleção por clique + caixas de transform das camadas livres (mídia flutuante) */}
-            <FreeLayersOverlay ed={ed} W={cv.w * zf} H={cv.h * zf} cropMode={cropMode} />
+            <FreeLayersOverlay ed={ed} W={cv.w * zf} H={cv.h * zf} />
             {sel && !isFree(sel) && <BrollTransform clip={sel} currentTime={ed.currentTime} onUpdate={ed.updateClip} W={cv.w * zf} H={cv.h * zf} />}
             <TextDragLayer texts={ed.texts} currentTime={ed.currentTime} selectedId={ed.selectedTextId}
               onSelect={ed.setSelectedTextId} onMove={ed.updateText} words={ed.outWords} captionStyle={ed.capStyle}
@@ -274,7 +272,7 @@ export default function VideoEditorEditorV2() {
 }
 
 // Toolbar flutuante de ÍCONES para o b-roll selecionado (estilo CapCut).
-function ClipToolbar({ ed, sel, onAddLayer, cropMode, setCropMode }: { ed: ReturnType<typeof useEditorDoc>; sel: NonNullable<ReturnType<typeof useEditorDoc>["selected"]>; onAddLayer: () => void; cropMode: boolean; setCropMode: (v: boolean) => void }) {
+function ClipToolbar({ ed, sel, onAddLayer }: { ed: ReturnType<typeof useEditorDoc>; sel: NonNullable<ReturnType<typeof useEditorDoc>["selected"]>; onAddLayer: () => void }) {
   const livre = isFree(sel);
   const ehSplit = (["split_horizontal", "split_bottom", "split_vertical"] as string[]).includes(sel.layout);
   const pct = Math.round((sel.splitRatio ?? 0.6) * 100);
@@ -291,15 +289,11 @@ function ClipToolbar({ ed, sel, onAddLayer, cropMode, setCropMode }: { ed: Retur
   return (
     <div className="flex items-center gap-0.5 rounded-lg border border-neutral-700 bg-neutral-800/95 px-1.5 py-1 shadow-xl backdrop-blur">
       <Btn icon={ImageIcon} title="Adicionar camada" onClick={onAddLayer} />
-      {/* Posição livre / recorte / z-order (camada flutuante estilo Canva/CapCut) */}
-      {!livre
-        ? <Btn icon={Move} title="Posição livre (mover/redimensionar na tela)" onClick={() => ed.makeFree(sel.id)} />
-        : <button title={cropMode ? "Concluir recorte" : "Recortar (arrastar bordas)"} onClick={() => setCropMode(!cropMode)}
-            className={`rounded p-1.5 ${cropMode ? "bg-sky-600 text-white" : "text-neutral-200 hover:bg-neutral-700"}`}>{cropMode ? <Check className="h-4 w-4" /> : <Crop className="h-4 w-4" />}</button>}
-      {livre && <Btn icon={BringToFront} title="Trazer para frente" onClick={() => ed.bringToFront(sel.id)} />}
-      {livre && <Btn icon={SendToBack} title="Enviar para trás" onClick={() => ed.sendToBack(sel.id)} />}
-      {livre && <Btn icon={Maximize2} title="Camada em tela cheia" onClick={() => ed.updateClip(sel.id, { box: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} />}
-      <Btn icon={Maximize2} title="Ajustar à tela (remove recorte)" onClick={() => ed.updateClip(sel.id, { crop: undefined, cropY: 50 })} />
+      {!livre && <Btn icon={Move} title="Posição livre (mover/redimensionar na tela)" onClick={() => ed.makeFree(sel.id)} />}
+      <Btn icon={BringToFront} title="Trazer para frente" onClick={() => ed.bringToFront(sel.id)} />
+      <Btn icon={SendToBack} title="Enviar para trás" onClick={() => ed.sendToBack(sel.id)} />
+      <Btn icon={Maximize2} title="Camada em tela cheia" onClick={() => ed.updateClip(sel.id, { box: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} />
+      <Btn icon={Crop} title="Remover recorte" onClick={() => ed.updateClip(sel.id, { crop: undefined, cropY: 50 })} />
       {/* Recortar / ajustes */}
       <Popover>
         <PopoverTrigger asChild><button title="Recortar / ajustar" className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button></PopoverTrigger>
@@ -425,7 +419,7 @@ function BrollTransform({ clip, currentTime, onUpdate, W, H }: {
 }
 
 // Camada interativa das mídias FLUTUANTES (com box): clique p/ selecionar + caixa de transform.
-function FreeLayersOverlay({ ed, W, H, cropMode }: { ed: ReturnType<typeof useEditorDoc>; W: number; H: number; cropMode: boolean }) {
+function FreeLayersOverlay({ ed, W, H }: { ed: ReturnType<typeof useEditorDoc>; W: number; H: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const ativos = (ed.doc?.clips || []).filter((c) => isFree(c) && ed.currentTime >= c.start - 0.001 && ed.currentTime < c.end)
     .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
@@ -434,17 +428,20 @@ function FreeLayersOverlay({ ed, W, H, cropMode }: { ed: ReturnType<typeof useEd
     <div ref={ref} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
       {ativos.map((c) => (
         <FreeTransformBox key={c.id} containerRef={ref} clip={c} selected={c.id === ed.selectedId}
-          onSelect={() => ed.setSelectedId(c.id)} onUpdate={ed.updateClip} W={W} H={H} cropMode={cropMode && c.id === ed.selectedId} />
+          onSelect={() => ed.setSelectedId(c.id)} onUpdate={ed.updateClip} W={W} H={H} />
       ))}
     </div>
   );
 }
 
-// Uma caixa de transform livre: mover, redimensionar (4 cantos), rotacionar e recortar.
-function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W, H, cropMode }: {
+// Uma caixa de transform livre. Funções SEPARADAS (sempre visíveis quando selecionado):
+//  • cantos (azul) = redimensionar mantendo a proporção (não recorta/dá zoom)
+//  • pontos no meio das bordas (laranja) = recortar aquele lado
+//  • corpo = mover · alça superior = rotacionar
+function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W, H }: {
   containerRef: React.RefObject<HTMLDivElement>;
-  clip: NonNullable<ReturnType<typeof useEditorDoc>["selected"]>;
-  selected: boolean; onSelect: () => void; onUpdate: (id: string, patch: any) => void; W: number; H: number; cropMode: boolean;
+  clip: { id: string; box?: { x: number; y: number; w: number; h: number }; crop?: { x: number; y: number; w: number; h: number }; rotation?: number };
+  selected: boolean; onSelect: () => void; onUpdate: (id: string, patch: any) => void; W: number; H: number;
 }) {
   const box = clip.box ?? { x: 0, y: 0, w: 1, h: 1 };
   const left = box.x * W, top = box.y * H, w = box.w * W, h = box.h * H;
@@ -462,15 +459,29 @@ function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W,
   const startMove = drag((dxF, dyF) => {
     onUpdate(clip.id, { box: { ...box, x: round3(clamp(box.x + dxF, -box.w + 0.05, 0.95)), y: round3(clamp(box.y + dyF, -box.h + 0.05, 0.95)) } });
   });
-  // Redimensionar a partir de um canto (o canto oposto fica fixo).
+  // Redimensionar pelo canto MANTENDO A PROPORÇÃO (canto oposto fixo) — não altera o recorte.
   const startResize = (corner: "tl" | "tr" | "bl" | "br") => drag((dxF, dyF) => {
-    let { x, y, w: bw, h: bh } = box;
-    if (corner === "br") { bw = box.w + dxF; bh = box.h + dyF; }
-    if (corner === "bl") { x = box.x + dxF; bw = box.w - dxF; bh = box.h + dyF; }
-    if (corner === "tr") { y = box.y + dyF; bw = box.w + dxF; bh = box.h - dyF; }
-    if (corner === "tl") { x = box.x + dxF; y = box.y + dyF; bw = box.w - dxF; bh = box.h - dyF; }
-    if (bw < 0.05 || bh < 0.05) return;
+    const ar = box.h / box.w;                  // mantém bh/bw constante (sem distorcer/recortar)
+    const dw = (corner === "tl" || corner === "bl") ? -dxF : dxF;
+    const bw = box.w + dw;
+    if (bw < 0.05) return;
+    const bh = bw * ar;
+    const right = box.x + box.w, bottom = box.y + box.h;
+    const x = (corner === "tl" || corner === "bl") ? right - bw : box.x;
+    const y = (corner === "tl" || corner === "tr") ? bottom - bh : box.y;
     onUpdate(clip.id, { box: { x: round3(x), y: round3(y), w: round3(bw), h: round3(bh) } });
+  });
+  // Recorte por LADO (estilo Canva): cada ponto no meio da borda corta só aquele lado.
+  const startCropEdge = (side: "l" | "r" | "t" | "b") => drag((dxF, dyF) => {
+    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+    const ddx = (dxF * W / w) * c0.w, ddy = (dyF * H / h) * c0.h;
+    let { x, y, w: cw, h: ch } = c0;
+    if (side === "l") { const nx = clamp(c0.x + ddx, 0, c0.x + c0.w - 0.1); x = nx; cw = c0.x + c0.w - nx; }
+    if (side === "r") { cw = clamp(c0.w + ddx, 0.1, 1 - c0.x); }
+    if (side === "t") { const ny = clamp(c0.y + ddy, 0, c0.y + c0.h - 0.1); y = ny; ch = c0.y + c0.h - ny; }
+    if (side === "b") { ch = clamp(c0.h + ddy, 0.1, 1 - c0.y); }
+    if (cw >= 0.999 && ch >= 0.999) { onUpdate(clip.id, { crop: undefined }); return; }
+    onUpdate(clip.id, { crop: { x: round3(x), y: round3(y), w: round3(cw), h: round3(ch) } });
   });
   // Rotacionar (alça superior).
   const startRotate = (e: React.PointerEvent) => {
@@ -485,50 +496,35 @@ function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W,
     const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
-  // Recorte: arrastar dentro = reposiciona o recorte (só faz sentido com zoom); cantos = zoom (cut).
-  const startCropPan = drag((dxF, dyF) => {
-    const c0 = clip.crop; if (!c0 || (c0.w >= 0.999 && c0.h >= 0.999)) return; // sem zoom não há o que reposicionar
-    onUpdate(clip.id, { crop: { ...c0, x: round3(clamp(c0.x - (dxF * W / w) * c0.w, 0, 1 - c0.w)), y: round3(clamp(c0.y - (dyF * H / h) * c0.h, 0, 1 - c0.h)) } });
-  });
-  // Recorte por canto (estilo Canva): arrastar o canto ajusta o retângulo de corte do source.
-  const startCropCorner = (corner: "tl" | "tr" | "bl" | "br") => drag((dxF, dyF) => {
-    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-    const ddx = (dxF * W / w) * c0.w, ddy = (dyF * H / h) * c0.h;
-    let { x, y, w: cw, h: ch } = c0;
-    if (corner === "tl" || corner === "bl") { const nx = clamp(c0.x + ddx, 0, c0.x + c0.w - 0.1); x = nx; cw = c0.x + c0.w - nx; }
-    if (corner === "tr" || corner === "br") { cw = clamp(c0.w + ddx, 0.1, 1 - c0.x); }
-    if (corner === "tl" || corner === "tr") { const ny = clamp(c0.y + ddy, 0, c0.y + c0.h - 0.1); y = ny; ch = c0.y + c0.h - ny; }
-    if (corner === "bl" || corner === "br") { ch = clamp(c0.h + ddy, 0.1, 1 - c0.y); }
-    if (cw >= 0.999 && ch >= 0.999) { onUpdate(clip.id, { crop: undefined }); return; }
-    onUpdate(clip.id, { crop: { x: round3(x), y: round3(y), w: round3(cw), h: round3(ch) } });
-  });
 
-  const hdl = (cur: string): React.CSSProperties => ({ position: "absolute", width: 14, height: 14, borderRadius: "50%", background: "#fff", border: "2px solid #38bdf8", pointerEvents: "auto", cursor: cur, touchAction: "none" });
-  const cropColor = "#f59e0b";
+  const blue = "#38bdf8", orange = "#f59e0b";
+  // Alça de canto (quadrada, azul) = redimensionar.
+  const corner = (cur: string): React.CSSProperties => ({ position: "absolute", width: 14, height: 14, borderRadius: 3, background: "#fff", border: `2px solid ${blue}`, pointerEvents: "auto", cursor: cur, touchAction: "none" });
+  // Alça de recorte (barra laranja) no meio de cada borda.
+  const edge = (horizontal: boolean, cur: string): React.CSSProperties => ({ position: "absolute", width: horizontal ? 22 : 6, height: horizontal ? 6 : 22, borderRadius: 3, background: orange, border: "1px solid #000", pointerEvents: "auto", cursor: cur, touchAction: "none" });
   return (
     <div style={{ position: "absolute", left, top, width: w, height: h, transform: clip.rotation ? `rotate(${clip.rotation}deg)` : undefined,
-      pointerEvents: "auto", cursor: cropMode ? "move" : "move", touchAction: "none",
-      outline: selected ? `2px solid ${cropMode ? cropColor : "#38bdf8"}` : "2px dashed rgba(56,189,248,0.45)" }}
-      onPointerDown={cropMode ? startCropPan : startMove}
-      title={cropMode ? "Arraste p/ reposicionar o recorte · cantos p/ zoom" : "Arraste p/ mover · cantos p/ redimensionar"}>
-      {selected && (cropMode ? (
+      pointerEvents: "auto", cursor: "move", touchAction: "none",
+      outline: selected ? `2px solid ${blue}` : "2px dashed rgba(56,189,248,0.45)" }}
+      onPointerDown={startMove}
+      title="Arraste p/ mover · cantos p/ redimensionar · pontos laranja p/ recortar">
+      {selected && (
         <>
-          <div onPointerDown={startCropCorner("tl")} style={{ ...hdl("nwse-resize"), border: `2px solid ${cropColor}`, left: -7, top: -7 }} />
-          <div onPointerDown={startCropCorner("tr")} style={{ ...hdl("nesw-resize"), border: `2px solid ${cropColor}`, right: -7, top: -7 }} />
-          <div onPointerDown={startCropCorner("bl")} style={{ ...hdl("nesw-resize"), border: `2px solid ${cropColor}`, left: -7, bottom: -7 }} />
-          <div onPointerDown={startCropCorner("br")} style={{ ...hdl("nwse-resize"), border: `2px solid ${cropColor}`, right: -7, bottom: -7 }} />
-        </>
-      ) : (
-        <>
-          <div onPointerDown={startResize("tl")} style={{ ...hdl("nwse-resize"), left: -7, top: -7 }} />
-          <div onPointerDown={startResize("tr")} style={{ ...hdl("nesw-resize"), right: -7, top: -7 }} />
-          <div onPointerDown={startResize("bl")} style={{ ...hdl("nesw-resize"), left: -7, bottom: -7 }} />
-          <div onPointerDown={startResize("br")} style={{ ...hdl("nwse-resize"), right: -7, bottom: -7 }} />
+          {/* Cantos = redimensionar (proporção travada) */}
+          <div onPointerDown={startResize("tl")} style={{ ...corner("nwse-resize"), left: -7, top: -7 }} />
+          <div onPointerDown={startResize("tr")} style={{ ...corner("nesw-resize"), right: -7, top: -7 }} />
+          <div onPointerDown={startResize("bl")} style={{ ...corner("nesw-resize"), left: -7, bottom: -7 }} />
+          <div onPointerDown={startResize("br")} style={{ ...corner("nwse-resize"), right: -7, bottom: -7 }} />
+          {/* Meio das bordas = recortar aquele lado */}
+          <div onPointerDown={startCropEdge("t")} style={{ ...edge(true, "ns-resize"), left: "50%", marginLeft: -11, top: -3 }} />
+          <div onPointerDown={startCropEdge("b")} style={{ ...edge(true, "ns-resize"), left: "50%", marginLeft: -11, bottom: -3 }} />
+          <div onPointerDown={startCropEdge("l")} style={{ ...edge(false, "ew-resize"), top: "50%", marginTop: -11, left: -3 }} />
+          <div onPointerDown={startCropEdge("r")} style={{ ...edge(false, "ew-resize"), top: "50%", marginTop: -11, right: -3 }} />
           {/* Alça de rotação */}
-          <div onPointerDown={startRotate} style={{ ...hdl("grab"), left: "50%", top: -28, marginLeft: -7, background: "#38bdf8" }} />
-          <div style={{ position: "absolute", left: "50%", top: -21, width: 1, height: 14, background: "#38bdf8" }} />
+          <div onPointerDown={startRotate} style={{ ...corner("grab"), borderRadius: "50%", left: "50%", top: -28, marginLeft: -7, background: blue }} />
+          <div style={{ position: "absolute", left: "50%", top: -21, width: 1, height: 14, background: blue }} />
         </>
-      ))}
+      )}
     </div>
   );
 }

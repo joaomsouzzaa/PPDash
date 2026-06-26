@@ -177,9 +177,11 @@ export function useEditorDoc(jobId: string) {
       const start = Math.min(currentTime, Math.max(0, d.durationInSeconds - 3));
       const end = Math.min(d.durationInSeconds, start + 3);
       const isVid = VIDEO_EXT.test(d.assets[assetId] || "");
+      const z = Math.max(0, ...allZ(d)) + 1;
       const novo: Clip = {
         id: `c${Date.now().toString(36)}`, asset: assetId, layout: isVid ? "broll_fullscreen" : "overlay_card",
         start: round3(start), end: round3(end),
+        box: { x: 0, y: 0, w: 1, h: 1 }, zIndex: z,  // camada livre por padrão (mover/redimensionar/recortar)
       };
       setSelectedId(novo.id);
       return { ...d, clips: [...d.clips, novo] };
