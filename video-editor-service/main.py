@@ -810,10 +810,13 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
 def _proxy_preview(cut: pathlib.Path, dest: pathlib.Path) -> bool:
     """Gera o proxy leve (preview fluido). Retorna True se ok."""
     try:
+        # ALL-INTRA (keyframe em todo frame): cada corte/overlay faz um seek no proxy; com
+        # keyframe a cada frame o seek é instantâneo → preview roda liso, sem repetir frames.
         subprocess.run(
-            ["ffmpeg", "-y", "-i", str(cut), "-vf", "scale=540:-2", "-c:v", "libx264",
-             "-preset", "veryfast", "-crf", "30", "-g", "15", "-keyint_min", "15",
-             "-sc_threshold", "0", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "96k", str(dest)],
+            ["ffmpeg", "-y", "-i", str(cut), "-vf", "scale=480:-2", "-r", "30", "-c:v", "libx264",
+             "-preset", "veryfast", "-tune", "fastdecode", "-crf", "30",
+             "-g", "1", "-keyint_min", "1", "-sc_threshold", "0",
+             "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-c:a", "aac", "-b:a", "96k", str(dest)],
             capture_output=True, text=True, check=True,
         )
         return True
