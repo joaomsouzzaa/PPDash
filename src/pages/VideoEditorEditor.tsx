@@ -604,7 +604,7 @@ function paginarLegenda(words: { word: string; start: number; end: number }[], m
 }
 
 // Camada transparente sobre o Player: textos ativos como caixas arrastáveis + legenda arrastável (vertical).
-function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption, mostrarLegenda = false }: {
+export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption, mostrarLegenda = false }: {
   texts: TextLayer[];
   currentTime: number;
   selectedId: string | null;
@@ -616,9 +616,18 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words
   mostrarLegenda?: boolean;  // só mostra a guia da legenda quando ela está "selecionada" (painel aberto)
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Mede o próprio tamanho (funciona em qualquer canvas, não só 280×498).
+  const [dims, setDims] = useState({ w: PREVIEW_W, h: PREVIEW_H });
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const upd = () => setDims({ w: el.clientWidth || PREVIEW_W, h: el.clientHeight || PREVIEW_H });
+    upd();
+    const ro = new ResizeObserver(upd); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const ativos = texts.filter((t) => currentTime >= t.start - 0.001 && currentTime < t.end);
-  const scale = PREVIEW_W / COMP_W; // px da composição → px do preview
-  const scaleH = PREVIEW_H / 1920;
+  const scale = dims.w / COMP_W; // px da composição → px do preview
+  const scaleH = dims.h / 1920;
 
   // Legenda ativa no instante atual (para arrastar verticalmente).
   const cap = captionStyle;
@@ -705,7 +714,7 @@ function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words
 }
 
 // Campo numérico que só confirma (clampa) no Enter/blur — permite digitar livremente.
-function NumBox({ value, min, max, onCommit, className }: { value: number; min: number; max: number; onCommit: (v: number) => void; className?: string }) {
+export function NumBox({ value, min, max, onCommit, className }: { value: number; min: number; max: number; onCommit: (v: number) => void; className?: string }) {
   const [v, setV] = useState(String(value));
   useEffect(() => { setV(String(value)); }, [value]);
   const commit = () => { const n = Math.min(max, Math.max(min, Number(v) || min)); onCommit(n); setV(String(n)); };
@@ -717,7 +726,7 @@ function NumBox({ value, min, max, onCommit, className }: { value: number; min: 
   );
 }
 
-function Cor({ label, value, onChange, extra }: { label: string; value: string; onChange: (v: string) => void; extra?: React.ReactNode }) {
+export function Cor({ label, value, onChange, extra }: { label: string; value: string; onChange: (v: string) => void; extra?: React.ReactNode }) {
   return (
     <div className="space-y-1">
       <label className="text-[11px] text-muted-foreground flex items-center justify-between">{label}{extra}</label>
@@ -726,7 +735,7 @@ function Cor({ label, value, onChange, extra }: { label: string; value: string; 
   );
 }
 
-function Num({ label, value, onChange, min, max, step = 1 }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) {
+export function Num({ label, value, onChange, min, max, step = 1 }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) {
   const [v, setV] = useState(String(value));
   useEffect(() => { setV(String(value)); }, [value]);
   const commit = () => { const n = Math.min(max, Math.max(min, Number(v) || min)); onChange(n); setV(String(n)); };
@@ -742,7 +751,7 @@ function Num({ label, value, onChange, min, max, step = 1 }: { label: string; va
   );
 }
 
-function fmt(s: number) {
+export function fmt(s: number) {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
   return `${m}:${String(ss).padStart(2, "0")}`;

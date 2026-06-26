@@ -29,6 +29,7 @@ import MetaAds from "./pages/MetaAds";
 import AutoDmInstagram from "./pages/AutoDmInstagram";
 import VideoEditor from "./pages/VideoEditor";
 import VideoEditorEditor from "./pages/VideoEditorEditor";
+import VideoEditorEditorV2 from "./pages/VideoEditorEditorV2";
 import Pesquisas from "./pages/Pesquisas";
 import ResponderPesquisa from "./pages/ResponderPesquisa";
 import Modulos from "./pages/Modulos";
@@ -97,6 +98,7 @@ const App = () => (
             <Route path="/auto-dm" element={<Priv modulo="growth.autodm"><AutoDmInstagram /></Priv>} />
             <Route path="/video-editor" element={<Priv modulo="growth.videoeditor"><VideoEditor /></Priv>} />
             <Route path="/video-editor/editar/:jobId" element={<Priv modulo="growth.videoeditor"><VideoEditorEditor /></Priv>} />
+            <Route path="/video-editor/editar2/:jobId" element={<Priv modulo="growth.videoeditor"><VideoEditorEditorV2 /></Priv>} />
             <Route path="/pesquisas" element={<Priv modulo="growth.pesquisas"><Pesquisas /></Priv>} />
 
             {/* Pública: responder pesquisa (sem login) */}

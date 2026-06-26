@@ -1,0 +1,222 @@
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import type { PlayerRef } from "@remotion/player";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import {
+  montarTimeline, CAPTION_STYLE_DEFAULT,
+  type Clip, type EditorDoc, type CaptionStyle, type VideoSegment, type TextLayer,
+} from "@/video-editor/remotion/schema";
+
+const db = supabase as any;
+const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
+const VIDEO_EXT = /\.(mp4|mov|webm|mkv|m4v)$/i;
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+// Toda a lógica do editor de vídeo (carregar/salvar/handlers), compartilhada entre layouts.
+export function useEditorDoc(jobId: string) {
+  const playerRef = useRef<PlayerRef>(null);
+  const [doc, setDoc] = useState<EditorDoc | null>(null);
+  const [nome, setNome] = useState("");
+  const [carregando, setCarregando] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [renderizando, setRenderizando] = useState(false);
+  const primeiraGravacao = useRef(true);
+  const mediaBase = `${SERVICE_URL}/work/${jobId}`;
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await db.from("video_jobs").select("nome,timeline,status").eq("id", jobId).maybeSingle();
+      if (!data?.timeline?.clips) { toast.error("Edição não encontrada para este job."); setCarregando(false); return; }
+      setNome(data.nome || "vídeo");
+      setDoc(data.timeline as EditorDoc);
+      setCarregando(false);
+    })();
+  }, [jobId]);
+
+  useEffect(() => {
+    if (!doc) return;
+    if (primeiraGravacao.current) { primeiraGravacao.current = false; return; }
+    const t = setTimeout(() => { db.from("video_jobs").update({ timeline: doc }).eq("id", jobId).then(() => {}); }, 800);
+    return () => clearTimeout(t);
+  }, [doc, jobId]);
+
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !doc) return;
+    const fps = doc.fps || 30;
+    const cb = (e: { detail: { frame: number } }) => setCurrentTime(e.detail.frame / fps);
+    p.addEventListener("frameupdate", cb as any);
+    return () => p.removeEventListener("frameupdate", cb as any);
+  }, [doc]);
+
+  const { timeline, words: outWords } = useMemo(() => {
+    if (!doc) return { timeline: null as any, words: [] as any[] };
+    const r = montarTimeline(doc);
+    return { timeline: { ...r.timeline, video: doc.videoPreview || doc.video }, words: r.words };
+  }, [doc]);
+
+  const fps = doc?.fps || 30;
+  const durationInFrames = Math.max(1, Math.round((doc?.durationInSeconds || 1) * fps));
+  const selected = doc?.clips.find((c) => c.id === selectedId) || null;
+  const assetIds = doc ? Object.keys(doc.assets) : [];
+
+  const setClips = useCallback((updater: (cs: Clip[]) => Clip[]) => {
+    setDoc((d) => (d ? { ...d, clips: updater(d.clips) } : d));
+  }, []);
+  const updateClip = useCallback((id: string, patch: Partial<Clip>) => {
+    setClips((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }, [setClips]);
+
+  const capStyle: CaptionStyle = { ...CAPTION_STYLE_DEFAULT, ...(doc?.captionStyle || {}) };
+  const setCapStyle = useCallback((patch: Partial<CaptionStyle>) => {
+    setDoc((d) => (d ? { ...d, captionStyle: { ...CAPTION_STYLE_DEFAULT, ...(d.captionStyle || {}), ...patch } } : d));
+  }, []);
+  const editCaption = useCallback((indices: number[], texto: string) => {
+    const tokens = texto.trim().split(/\s+/).filter(Boolean);
+    setDoc((d) => {
+      if (!d) return d;
+      const words = [...d.words];
+      indices.forEach((gi, k) => {
+        const novo = k < tokens.length ? (k === indices.length - 1 ? tokens.slice(k).join(" ") : tokens[k]) : "";
+        words[gi] = { ...words[gi], word: novo };
+      });
+      return { ...d, words };
+    });
+  }, []);
+
+  const videoVolume = doc?.videoVolume ?? 1;
+  const music = doc?.music ?? null;
+  const setVideoVolume = useCallback((v: number) => setDoc((d) => (d ? { ...d, videoVolume: v } : d)), []);
+  const setMusicVol = useCallback((v: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, volume: v } } : d)), []);
+  const setMusicStart = useCallback((s: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, start: Math.max(0, s) } } : d)), []);
+  const removerMusica = useCallback(() => setDoc((d) => (d ? { ...d, music: null } : d)), []);
+
+  const videoSegments = doc?.videoSegments ?? null;
+  const originalDuration = doc?.originalDuration ?? doc?.durationInSeconds ?? 0;
+  const trimSeg = useCallback((id: string, patch: Partial<VideoSegment>) => {
+    setDoc((d) => (d && d.videoSegments ? { ...d, videoSegments: d.videoSegments.map((s) => (s.id === id ? { ...s, ...patch } : s)) } : d));
+  }, []);
+  const deleteSeg = useCallback((id: string) => {
+    setDoc((d) => (d && d.videoSegments ? { ...d, videoSegments: d.videoSegments.filter((s) => s.id !== id) } : d));
+  }, []);
+  const splitAt = useCallback((outTime: number) => {
+    setDoc((d) => {
+      if (!d || !d.videoSegments) return d;
+      let cursor = 0; const novos: VideoSegment[] = [];
+      for (const s of d.videoSegments) {
+        const len = s.sourceEnd - s.sourceStart;
+        if (outTime > cursor + 0.1 && outTime < cursor + len - 0.1) {
+          const srcCut = s.sourceStart + (outTime - cursor);
+          novos.push({ id: `${s.id}a`, sourceStart: s.sourceStart, sourceEnd: srcCut });
+          novos.push({ id: `${s.id}b`, sourceStart: srcCut, sourceEnd: s.sourceEnd });
+        } else novos.push(s);
+        cursor += len;
+      }
+      return { ...d, videoSegments: novos };
+    });
+  }, []);
+
+  // Texto
+  const texts = doc?.texts ?? [];
+  const selectedText = texts.find((t) => t.id === selectedTextId) || null;
+  const addText = useCallback(() => {
+    setDoc((d) => {
+      if (!d) return d;
+      const start = Math.min(currentTime, Math.max(0, d.durationInSeconds - 3));
+      const novo: TextLayer = {
+        id: `t${Date.now().toString(36)}`, text: "Texto", start: round3(start),
+        end: round3(Math.min(d.durationInSeconds, start + 3)),
+        x: 0.5, y: 0.5, fontSize: 80, color: "#FFFFFF", bgColor: "transparent", bold: true, align: "center",
+      };
+      return { ...d, texts: [...(d.texts || []), novo] };
+    });
+  }, [currentTime]);
+  const updateText = useCallback((id: string, patch: Partial<TextLayer>) => {
+    setDoc((d) => (d ? { ...d, texts: (d.texts || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) } : d));
+  }, []);
+  const removeText = useCallback((id: string) => {
+    setDoc((d) => (d ? { ...d, texts: (d.texts || []).filter((t) => t.id !== id) } : d));
+    setSelectedTextId(null);
+  }, []);
+
+  const addClip = useCallback((assetId: string) => {
+    setDoc((d) => {
+      if (!d) return d;
+      const start = Math.min(currentTime, Math.max(0, d.durationInSeconds - 3));
+      const end = Math.min(d.durationInSeconds, start + 3);
+      const isVid = VIDEO_EXT.test(d.assets[assetId] || "");
+      const novo: Clip = {
+        id: `c${Date.now().toString(36)}`, asset: assetId, layout: isVid ? "broll_fullscreen" : "overlay_card",
+        start: round3(start), end: round3(end),
+      };
+      setSelectedId(novo.id);
+      return { ...d, clips: [...d.clips, novo] };
+    });
+  }, [currentTime]);
+  const removeClip = useCallback((id: string) => { setClips((cs) => cs.filter((c) => c.id !== id)); setSelectedId(null); }, [setClips]);
+  const splitClip = useCallback((id: string) => {
+    setClips((cs) => {
+      const i = cs.findIndex((c) => c.id === id);
+      if (i < 0) return cs;
+      const c = cs[i];
+      if (currentTime <= c.start + 0.1 || currentTime >= c.end - 0.1) { toast.error("Posicione o playhead dentro do clipe."); return cs; }
+      const a = { ...c, id: `${c.id}a`, end: round3(currentTime) };
+      const b = { ...c, id: `${c.id}b`, start: round3(currentTime), assetStart: round3((c.assetStart ?? 0) + (currentTime - c.start)) };
+      const novo = [...cs]; novo.splice(i, 1, a, b);
+      return novo;
+    });
+  }, [setClips, currentTime]);
+
+  const seek = useCallback((t: number) => {
+    setCurrentTime(t);
+    playerRef.current?.seekTo(Math.round(t * fps));
+  }, [fps]);
+
+  const [subindoMusica, setSubindoMusica] = useState(false);
+  const uploadMusica = useCallback(async (file: File) => {
+    setSubindoMusica(true);
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      const form = new FormData();
+      form.append("job_id", jobId); form.append("file", file, file.name);
+      const res = await fetch(`${SERVICE_URL}/upload-asset`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.path) throw new Error(`Falha ao subir música (${res.status})`);
+      setDoc((d) => (d ? { ...d, music: { asset: data.path, volume: 0.5, start: 0 } } : d));
+      toast.success("Música adicionada.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao subir a música.");
+    } finally { setSubindoMusica(false); }
+  }, [jobId]);
+
+  const renderizar = useCallback(async (onDone: () => void) => {
+    if (!SERVICE_URL) { toast.error("Serviço não configurado."); return; }
+    setRenderizando(true);
+    try {
+      await db.from("video_jobs").update({ timeline: doc }).eq("id", jobId);
+      const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
+      const res = await fetch(`${SERVICE_URL}/renderizar`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      if (!res.ok) throw new Error(`Serviço respondeu ${res.status}`);
+      toast.success("Renderizando o vídeo final…");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao renderizar.");
+    } finally { setRenderizando(false); }
+  }, [doc, jobId]);
+
+  return {
+    playerRef, doc, nome, carregando, mediaBase, fps, durationInFrames,
+    timeline, outWords, currentTime, seek,
+    selectedId, setSelectedId, selected, updateClip, addClip, removeClip, splitClip,
+    selectedTextId, setSelectedTextId, texts, selectedText, addText, updateText, removeText,
+    capStyle, setCapStyle, editCaption,
+    videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, removerMusica, uploadMusica, subindoMusica,
+    videoSegments, originalDuration, trimSeg, deleteSeg, splitAt,
+    assetIds, renderizar, renderizando, VIDEO_EXT,
+  };
+}
