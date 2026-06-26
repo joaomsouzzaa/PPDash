@@ -404,6 +404,17 @@ export default function VideoEditorEditor() {
                   </div>
                 );
               })()}
+              {/* Posição vertical do b-roll (objectPosition) — funciona MESMO sem zoom; tira a cabeça/sobras do quadro */}
+              {(["split_horizontal", "split_bottom", "split_vertical", "broll_fullscreen", "image_fullscreen"] as string[]).includes(selected.layout) && (
+                <div className="space-y-1 w-[180px]">
+                  <label className="text-[11px] text-muted-foreground flex items-center justify-between">
+                    <span>Posição vertical do b-roll</span><span>{selected.cropY ?? 50}%</span>
+                  </label>
+                  <input type="range" min={0} max={100} value={selected.cropY ?? 50}
+                    onChange={(e) => updateClip(selected.id, { cropY: Number(e.target.value) })} className="w-full" />
+                  <p className="text-[10px] text-muted-foreground">0 = mostra o topo do b-roll · 100 = a base</p>
+                </div>
+              )}
               <div className="text-xs text-muted-foreground">{fmt(selected.start)} – {fmt(selected.end)}</div>
               <Button variant="outline" size="sm" onClick={() => splitClip(selected.id)}>✂ Dividir</Button>
               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => removeClip(selected.id)}>
