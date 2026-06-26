@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
-import { ChevronLeft, Play, Pause, Trash2, RefreshCw, Film, Plus, Type, Image as ImageIcon, Captions as CaptionsIcon, Music, Scissors, Crop, Maximize2, Layers, MoreHorizontal, Copy, Replace, ZoomIn, ZoomOut, Move, BringToFront, SendToBack, Check } from "lucide-react";
+import { ChevronLeft, Play, Pause, Trash2, RefreshCw, Film, Plus, Type, Image as ImageIcon, Captions as CaptionsIcon, Music, Scissors, Crop, Maximize2, Layers, MoreHorizontal, Copy, Replace, ZoomIn, ZoomOut, Move, BringToFront, SendToBack, Check, GripVertical } from "lucide-react";
 import { Main } from "@/video-editor/remotion/Main";
 import { EditorTimeline } from "@/components/video-editor/EditorTimeline";
 import { OVERLAY_LAYOUTS, isFree, type OverlayLayout, type TextLayer } from "@/video-editor/remotion/schema";
@@ -28,6 +28,17 @@ export default function VideoEditorEditorV2() {
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
   const [cropMode, setCropMode] = useState(false);  // modo recorte da camada livre selecionada
+  const [tbPos, setTbPos] = useState<{ x: number; y: number } | null>(null);  // posição da toolbar flutuante (arrastável)
+  const startDragToolbar = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const host = canvasArea.current?.getBoundingClientRect();
+    const bar = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect();
+    if (!host || !bar) return;
+    const offX = e.clientX - bar.left, offY = e.clientY - bar.top;
+    const mv = (ev: PointerEvent) => setTbPos({ x: ev.clientX - host.left - offX, y: ev.clientY - host.top - offY });
+    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
   const [zf, setZf] = useState(1);   // zoom da VIEW (1 = ajustado à tela)
   const [tlHeight, setTlHeight] = useState(240);  // altura da timeline (arrastável)
   const startResizeTl = (e: React.PointerEvent) => {
@@ -188,9 +199,14 @@ export default function VideoEditorEditorV2() {
 
         {/* Canvas central */}
         <main ref={canvasArea} className="relative flex flex-1 flex-col items-center justify-center overflow-auto bg-neutral-900 p-4">
-          {/* Toolbar flutuante de ícones do elemento selecionado */}
+          {/* Toolbar flutuante de ícones do elemento selecionado (arrastável pela alça) */}
           {(sel || selT) && (
-            <div className="absolute top-2 left-1/2 z-10 -translate-x-1/2">
+            <div className="absolute z-10 flex items-center gap-1"
+              style={tbPos ? { left: tbPos.x, top: tbPos.y } : { top: 8, left: "50%", transform: "translateX(-50%)" }}>
+              <button onPointerDown={startDragToolbar} title="Arraste para mover a barra"
+                className="cursor-grab rounded-md border border-neutral-700 bg-neutral-800/95 p-1 text-neutral-400 shadow-xl backdrop-blur hover:text-neutral-200 active:cursor-grabbing touch-none">
+                <GripVertical className="h-4 w-4" />
+              </button>
               {sel && <ClipToolbar ed={ed} sel={sel} onAddLayer={() => setAba("midia")} cropMode={cropMode} setCropMode={setCropMode} />}
               {selT && !sel && <TextToolbar ed={ed} selT={selT} />}
             </div>
@@ -469,28 +485,23 @@ function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W,
     const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
-  // Recorte: arrastar dentro = pan; cantos = zoom (mesma lógica do b-roll).
+  // Recorte: arrastar dentro = reposiciona o recorte (só faz sentido com zoom); cantos = zoom (cut).
   const startCropPan = drag((dxF, dyF) => {
-    const c0 = clip.crop; if (!c0 || c0.w >= 0.999) { onUpdate(clip.id, { crop: { x: 0, y: 0, w: 0.999, h: 0.999 } }); return; }
+    const c0 = clip.crop; if (!c0 || (c0.w >= 0.999 && c0.h >= 0.999)) return; // sem zoom não há o que reposicionar
     onUpdate(clip.id, { crop: { ...c0, x: round3(clamp(c0.x - (dxF * W / w) * c0.w, 0, 1 - c0.w)), y: round3(clamp(c0.y - (dyF * H / h) * c0.h, 0, 1 - c0.h)) } });
   });
-  const startCropZoom = (e: React.PointerEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
-    const rect = containerRef.current?.getBoundingClientRect(); if (!rect) return;
-    const cx = rect.left + left + w / 2, cy = rect.top + top + h / 2;
-    const d0 = Math.max(8, Math.hypot(e.clientX - cx, e.clientY - cy));
-    const z0 = 1 / (clip.crop?.w ?? 1);
-    const mv = (ev: PointerEvent) => {
-      const z = clamp((z0 * Math.hypot(ev.clientX - cx, ev.clientY - cy)) / d0, 1, 4);
-      if (z <= 1.001) { onUpdate(clip.id, { crop: undefined }); return; }
-      const ww = 1 / z; const c = clip.crop;
-      const cxF = c ? c.x + c.w / 2 : 0.5, cyF = c ? c.y + c.h / 2 : 0.5;
-      onUpdate(clip.id, { crop: { x: round3(clamp(cxF - ww / 2, 0, 1 - ww)), y: round3(clamp(cyF - ww / 2, 0, 1 - ww)), w: round3(ww), h: round3(ww) } });
-    };
-    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
-  };
+  // Recorte por canto (estilo Canva): arrastar o canto ajusta o retângulo de corte do source.
+  const startCropCorner = (corner: "tl" | "tr" | "bl" | "br") => drag((dxF, dyF) => {
+    const c0 = clip.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+    const ddx = (dxF * W / w) * c0.w, ddy = (dyF * H / h) * c0.h;
+    let { x, y, w: cw, h: ch } = c0;
+    if (corner === "tl" || corner === "bl") { const nx = clamp(c0.x + ddx, 0, c0.x + c0.w - 0.1); x = nx; cw = c0.x + c0.w - nx; }
+    if (corner === "tr" || corner === "br") { cw = clamp(c0.w + ddx, 0.1, 1 - c0.x); }
+    if (corner === "tl" || corner === "tr") { const ny = clamp(c0.y + ddy, 0, c0.y + c0.h - 0.1); y = ny; ch = c0.y + c0.h - ny; }
+    if (corner === "bl" || corner === "br") { ch = clamp(c0.h + ddy, 0.1, 1 - c0.y); }
+    if (cw >= 0.999 && ch >= 0.999) { onUpdate(clip.id, { crop: undefined }); return; }
+    onUpdate(clip.id, { crop: { x: round3(x), y: round3(y), w: round3(cw), h: round3(ch) } });
+  });
 
   const hdl = (cur: string): React.CSSProperties => ({ position: "absolute", width: 14, height: 14, borderRadius: "50%", background: "#fff", border: "2px solid #38bdf8", pointerEvents: "auto", cursor: cur, touchAction: "none" });
   const cropColor = "#f59e0b";
@@ -502,10 +513,10 @@ function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W,
       title={cropMode ? "Arraste p/ reposicionar o recorte · cantos p/ zoom" : "Arraste p/ mover · cantos p/ redimensionar"}>
       {selected && (cropMode ? (
         <>
-          <div onPointerDown={startCropZoom} style={{ ...hdl("nwse-resize"), border: `2px solid ${cropColor}`, left: -7, top: -7 }} />
-          <div onPointerDown={startCropZoom} style={{ ...hdl("nesw-resize"), border: `2px solid ${cropColor}`, right: -7, top: -7 }} />
-          <div onPointerDown={startCropZoom} style={{ ...hdl("nesw-resize"), border: `2px solid ${cropColor}`, left: -7, bottom: -7 }} />
-          <div onPointerDown={startCropZoom} style={{ ...hdl("nwse-resize"), border: `2px solid ${cropColor}`, right: -7, bottom: -7 }} />
+          <div onPointerDown={startCropCorner("tl")} style={{ ...hdl("nwse-resize"), border: `2px solid ${cropColor}`, left: -7, top: -7 }} />
+          <div onPointerDown={startCropCorner("tr")} style={{ ...hdl("nesw-resize"), border: `2px solid ${cropColor}`, right: -7, top: -7 }} />
+          <div onPointerDown={startCropCorner("bl")} style={{ ...hdl("nesw-resize"), border: `2px solid ${cropColor}`, left: -7, bottom: -7 }} />
+          <div onPointerDown={startCropCorner("br")} style={{ ...hdl("nwse-resize"), border: `2px solid ${cropColor}`, right: -7, bottom: -7 }} />
         </>
       ) : (
         <>

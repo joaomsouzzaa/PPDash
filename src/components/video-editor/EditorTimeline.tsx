@@ -233,7 +233,7 @@ export function EditorTimeline({
             ref={trackRef}
             className="relative h-14 bg-background/40"
             style={{ width }}
-            onPointerDown={(e) => { if (e.target === e.currentTarget) { onSelect(null); startScrub(e.clientX); } }}
+            onPointerDown={(e) => { if (e.target === e.currentTarget) { startScrub(e.clientX); } }}
           >
             {clips.map((c) => {
               const left = c.start * pxs;
