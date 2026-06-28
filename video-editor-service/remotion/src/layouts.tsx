@@ -44,10 +44,10 @@ const Head: React.FC<{ src: string; from: number; preview?: boolean; volume?: nu
 export const Asset: React.FC<{ src: string | null; isVideo: boolean; preview?: boolean; cropY?: number; crop?: Crop; fromFrame?: number }> = ({ src, isVideo, preview, cropY, crop, fromFrame }) => {
   if (!src) return null;
   const from = fromFrame && fromFrame > 0 ? fromFrame : undefined;
-  // loop (só no render): se o b-roll for mais curto que o trecho, repete em vez de ficar preto.
-  // No preview (Player) o loop causava tela preta em alguns casos, então fica sem.
+  // loop: se o b-roll for mais curto que o trecho na timeline, repete em vez de congelar/ficar preto.
+  // Vale no preview E no render (assim o que você vê é o que sai no vídeo final).
   const vid = (style: React.CSSProperties) =>
-    preview ? <Video src={src} muted trimBefore={from} style={style} /> : <OffthreadVideo src={src} muted loop trimBefore={from} style={style} />;
+    preview ? <Video src={src} muted loop trimBefore={from} style={style} /> : <OffthreadVideo src={src} muted loop trimBefore={from} style={style} />;
   const livre = crop && (crop.w < 0.999 || crop.h < 0.999 || crop.x > 0.001 || crop.y > 0.001);
   if (livre && crop) {
     const inner: React.CSSProperties = {
