@@ -350,5 +350,6 @@ export function useEditorDoc(jobId: string) {
     videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, removerMusica, uploadMusica, subindoMusica,
     videoSegments, originalDuration, trimSeg, deleteSeg, splitAt,
     assetIds, renderizar, renderizando, VIDEO_EXT,
+    isPlaying, togglePlay,
   };
 }
