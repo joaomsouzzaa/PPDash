@@ -255,7 +255,8 @@ export default function VideoEditorEditorV2() {
             {sel && !isFree(sel) && <BrollTransform clip={sel} currentTime={ed.currentTime} onUpdate={ed.updateClip} W={cv.w * zf} H={cv.h * zf} />}
             <TextDragLayer texts={ed.texts} currentTime={ed.currentTime} selectedId={ed.selectedTextId}
               onSelect={ed.setSelectedTextId} onMove={ed.updateText} words={ed.outWords} captionStyle={ed.capStyle}
-              onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={true} />
+              onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={true}
+              onSelecionarLegenda={() => setAba("legenda")} />
           </div>
         </main>
       </div>

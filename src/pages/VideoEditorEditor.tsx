@@ -604,7 +604,7 @@ function paginarLegenda(words: { word: string; start: number; end: number }[], m
 }
 
 // Camada transparente sobre o Player: textos ativos como caixas arrastáveis + legenda arrastável (vertical).
-export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption, mostrarLegenda = false }: {
+export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove, words = [], captionStyle, onMoveCaption, mostrarLegenda = false, onSelecionarLegenda }: {
   texts: TextLayer[];
   currentTime: number;
   selectedId: string | null;
@@ -614,6 +614,7 @@ export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove
   captionStyle?: CaptionStyle;
   onMoveCaption?: (posicaoY: number) => void;
   mostrarLegenda?: boolean;  // só mostra a guia da legenda quando ela está "selecionada" (painel aberto)
+  onSelecionarLegenda?: () => void;  // clicar na legenda no preview → abrir o painel de legendas
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Mede o próprio tamanho (funciona em qualquer canvas, não só 280×498).
@@ -641,6 +642,7 @@ export function TextDragLayer({ texts, currentTime, selectedId, onSelect, onMove
   })();
   const startDragCaption = (e: React.PointerEvent) => {
     e.preventDefault(); e.stopPropagation();
+    onSelecionarLegenda?.();  // clicar na legenda abre o painel de legendas (cores, etc.)
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
     const rect = ref.current?.getBoundingClientRect();
     if (!rect || !onMoveCaption) return;
