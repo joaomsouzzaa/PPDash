@@ -20,7 +20,7 @@ import {
   Heart, MessageCircle, Send as SendIcon, Bookmark, ChevronLeft, X, Link2, Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { listarContas, assinarWebhook, listarMidias, type IgConta, type IgMidia, type IgAutomacao, type DmBotao, type DmPayload } from "@/lib/instagram";
+import { listarContas, assinarWebhook, listarMidias, processarAntigos, type IgConta, type IgMidia, type IgAutomacao, type DmBotao, type DmPayload } from "@/lib/instagram";
 import { toast } from "sonner";
 
 // Tabelas novas ainda não regeneradas em supabase/types.ts — cast pontual.
@@ -227,6 +227,27 @@ export default function AutoDmInstagram() {
     await carregar();
   };
 
+  // Backfill: roda a automação nos comentários antigos do(s) post(s).
+  const [processandoId, setProcessandoId] = useState<string | null>(null);
+  const processar = async (a: IgAutomacao) => {
+    if (a.status !== "live") { toast.error("Ative a automação (LIVE) antes de processar os comentários antigos."); return; }
+    setProcessandoId(a.id);
+    const t = toast.loading("Processando comentários antigos…");
+    try {
+      const r = await processarAntigos(a.id);
+      let msg = `${r.processados} processado(s) · ${r.respostas} resposta(s) · ${r.dms} DM(s).`;
+      if (r.fora_janela > 0) msg += ` ${r.fora_janela} sem DM (fora da janela de 7 dias do Instagram).`;
+      if (r.pulados > 0) msg += ` ${r.pulados} pulado(s) (já feitos / sem gatilho).`;
+      toast.success(msg, { id: t });
+      if (r.erros?.length) toast.warning(r.erros.slice(0, 3).join(" · "));
+      await carregar();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao processar.", { id: t });
+    } finally {
+      setProcessandoId(null);
+    }
+  };
+
   const toggleStatus = async (a: IgAutomacao) => {
     const novo = a.status === "live" ? "pausada" : "live";
     const { error } = await db.from("ig_automacoes").update({ status: novo }).eq("id", a.id);
@@ -286,6 +307,7 @@ export default function AutoDmInstagram() {
                 automacoes={automacoes.filter((a) => a.ig_conta_id === (contaSel?.id ?? null))}
                 conta={contaSel} execucoes={execucoes} midias={midias} onNova={novaAutomacao}
                 onEditar={abrirEdicao} onExcluir={excluir} onToggle={toggleStatus} onDuplicar={duplicar}
+                onProcessar={processar} processandoId={processandoId}
               />
             )}
           </div>
@@ -387,9 +409,10 @@ function GerenciarContasDialog({ open, onOpenChange, contas, onToggle }: {
 // ============================================================
 // Lista de automações
 // ============================================================
-function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEditar, onExcluir, onToggle, onDuplicar }: {
+function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEditar, onExcluir, onToggle, onDuplicar, onProcessar, processandoId }: {
   automacoes: IgAutomacao[]; conta: IgConta | null; execucoes: Record<string, number>; midias: IgMidia[]; onNova: () => void;
   onEditar: (a: IgAutomacao) => void; onExcluir: (id: string) => void; onToggle: (a: IgAutomacao) => void; onDuplicar: (a: IgAutomacao) => void;
+  onProcessar: (a: IgAutomacao) => void; processandoId: string | null;
 }) {
   const thumbDe = (a: IgAutomacao) => {
     if (a.escopo !== "post_especifico" || a.media_ids.length === 0) return null;
@@ -413,7 +436,7 @@ function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEdita
             <span className="flex-1">Nome</span>
             <span className="w-20 text-center">Execuções</span>
             <span className="w-16 text-center">Post</span>
-            <span className="w-[190px]" />
+            <span className="w-[230px]" />
           </div>
         )}
         {automacoes.map((a) => {
@@ -448,8 +471,12 @@ function ListaAutomacoes({ automacoes, conta, execucoes, midias, onNova, onEdita
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1 shrink-0 w-[190px] justify-end">
+              <div className="flex items-center gap-1 shrink-0 w-[230px] justify-end">
                 <Switch checked={a.status === "live"} onCheckedChange={() => onToggle(a)} />
+                <Button variant="ghost" size="sm" title="Processar comentários antigos deste post (responde + envia DM)"
+                  disabled={processandoId === a.id} onClick={() => onProcessar(a)}>
+                  {processandoId === a.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <SendIcon className="h-4 w-4" />}
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => onEditar(a)}>Editar</Button>
                 <Button variant="ghost" size="icon" title="Duplicar" onClick={() => onDuplicar(a)}><Copy className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="icon" title="Excluir" onClick={() => onExcluir(a.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>

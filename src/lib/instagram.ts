@@ -78,3 +78,11 @@ export async function listarMidias(igUserId: string): Promise<IgMidia[]> {
   const d = await invoke<{ midias: IgMidia[] }>({ action: "listar_midias", ig_user_id: igUserId });
   return d.midias || [];
 }
+
+export interface BackfillResultado {
+  processados: number; respostas: number; dms: number; fora_janela: number; pulados: number; erros: string[];
+}
+// Roda a automação nos comentários ANTIGOS do(s) post(s) associado(s) — responde + envia DM.
+export async function processarAntigos(automacaoId: string): Promise<BackfillResultado> {
+  return invoke<BackfillResultado>({ action: "processar_antigos", automacao_id: automacaoId });
+}
