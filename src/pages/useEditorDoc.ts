@@ -236,7 +236,10 @@ export function useEditorDoc(jobId: string) {
     const p = playerRef.current; if (!p) return;
     try {
       const playing = typeof p.isPlaying === "function" ? p.isPlaying() : isPlaying;
-      if (playing) p.pause(); else p.play();
+      if (playing) { p.pause(); return; }
+      // Player do Remotion começa mutado; o play vem do nosso botão, então liga o áudio aqui.
+      try { (p as any).unmute?.(); (p as any).setVolume?.(1); } catch { /* noop */ }
+      p.play();
     } catch { /* noop */ }
   }, [isPlaying]);
 
