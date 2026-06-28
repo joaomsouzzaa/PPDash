@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Player } from "@remotion/player";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,13 @@ export default function VideoEditorEditorV2() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ed.undo, ed.redo, ed.copySelection, ed.cutSelection, ed.pasteClipboard]);
+
+  // inputProps estável: NÃO depende de currentTime; só muda quando os dados mudam.
+  // Sem isto, o Player recebe props novas a cada frame e re-bufferiza (play travado/engasgado).
+  const playerInputProps = useMemo(() => ({
+    timeline: ed.timeline, words: ed.outWords, assets: ed.doc?.assets ?? {}, mediaBase: ed.mediaBase,
+    preview: true, captionStyle: ed.capStyle, videoVolume: ed.videoVolume, music: ed.music, texts: ed.texts,
+  }), [ed.timeline, ed.outWords, ed.doc?.assets, ed.mediaBase, ed.capStyle, ed.videoVolume, ed.music, ed.texts]);
 
   if (ed.carregando) return <div className="flex h-screen items-center justify-center text-muted-foreground bg-neutral-950">Carregando edição…</div>;
   if (!ed.doc || !ed.timeline) {
@@ -233,7 +240,7 @@ export default function VideoEditorEditorV2() {
             <Player
               ref={ed.playerRef}
               component={Main as any}
-              inputProps={{ timeline: ed.timeline, words: ed.outWords, assets: doc.assets, mediaBase: ed.mediaBase, preview: true, captionStyle: ed.capStyle, videoVolume: ed.videoVolume, music: ed.music, texts: ed.texts }}
+              inputProps={playerInputProps}
               durationInFrames={ed.durationInFrames}
               fps={ed.fps}
               compositionWidth={1080}

@@ -104,7 +104,9 @@ export function useEditorDoc(jobId: string) {
     setDoc((d) => (d ? { ...d, head: { ...(d.head || {}), ...patch } } : d));
   }, []);
 
-  const capStyle: CaptionStyle = { ...CAPTION_STYLE_DEFAULT, ...(doc?.captionStyle || {}) };
+  // Memoizado: senão um objeto novo a cada render faz o Player re-renderizar/re-bufferizar
+  // durante o play (trava/engasga/repete áudio).
+  const capStyle: CaptionStyle = useMemo(() => ({ ...CAPTION_STYLE_DEFAULT, ...(doc?.captionStyle || {}) }), [doc?.captionStyle]);
   const setCapStyle = useCallback((patch: Partial<CaptionStyle>) => {
     setDoc((d) => (d ? { ...d, captionStyle: { ...CAPTION_STYLE_DEFAULT, ...(d.captionStyle || {}), ...patch } } : d));
   }, []);
