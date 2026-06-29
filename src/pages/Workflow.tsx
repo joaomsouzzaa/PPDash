@@ -47,6 +47,7 @@ export default function Workflow() {
   const [view, setView] = useState<"kanban" | "lista">("kanban");
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [dragOverCard, setDragOverCard] = useState<string | null>(null);
 
   const { data: colunas = [] } = useQuery({
     queryKey: ["kanban_colunas"],
@@ -336,8 +337,17 @@ export default function Workflow() {
     queryClient.invalidateQueries({ queryKey: ["respostas", editing.id] });
   };
 
-  const moverPara = async (tarefaId: string, colunaId: string) => {
-    await supabase.from("tarefas").update({ coluna_id: colunaId, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+  // Move/reordena um card: insere antes de `beforeId` (ou no fim se null) na coluna alvo,
+  // reatribuindo a `ordem` sequencial dos cards daquela coluna. Cobre mover entre colunas E reordenar.
+  const reordenar = async (tarefaId: string, colunaId: string, beforeId: string | null) => {
+    const moved = tarefas.find((t) => t.id === tarefaId);
+    if (!moved) return;
+    const lista = tarefas.filter((t) => t.coluna_id === colunaId && t.id !== tarefaId).sort((a, b) => a.ordem - b.ordem);
+    let idx = beforeId ? lista.findIndex((t) => t.id === beforeId) : lista.length;
+    if (idx < 0) idx = lista.length;
+    lista.splice(idx, 0, moved);
+    await Promise.all(lista.map((t, i) =>
+      supabase.from("tarefas").update({ coluna_id: colunaId, ordem: i, updated_at: new Date().toISOString() }).eq("id", t.id)));
     queryClient.invalidateQueries({ queryKey: ["tarefas"] });
   };
 
@@ -402,12 +412,12 @@ export default function Workflow() {
             <div className="flex-1 overflow-x-auto p-6">
               <div className="flex gap-4 h-full min-w-min">
                 {colunas.map((col) => {
-                  const cards = tarefas.filter((t) => t.coluna_id === col.id);
+                  const cards = tarefas.filter((t) => t.coluna_id === col.id).sort((a, b) => a.ordem - b.ordem);
                   return (
                     <div key={col.id} className={`w-72 shrink-0 flex flex-col rounded-xl border transition-colors ${dragOverCol === col.id ? "bg-primary/10 border-primary" : "bg-muted/40 border-border"}`}
                       onDragOver={(e) => { e.preventDefault(); if (dragOverCol !== col.id) setDragOverCol(col.id); }}
                       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverCol((c) => (c === col.id ? null : c)); }}
-                      onDrop={() => { if (dragId) { moverPara(dragId, col.id); } setDragId(null); setDragOverCol(null); }}>
+                      onDrop={() => { if (dragId) reordenar(dragId, col.id, null); setDragId(null); setDragOverCol(null); setDragOverCard(null); }}>
                       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                         <span className="font-medium text-sm">{col.nome} <span className="text-muted-foreground">({cards.length})</span></span>
                         <button onClick={() => novaTarefa(col.id)} className="text-muted-foreground hover:text-foreground"><Plus className="h-4 w-4" /></button>
@@ -416,9 +426,11 @@ export default function Workflow() {
                         {cards.map((t) => (
                           <Card key={t.id} draggable
                             onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", t.id); setDragId(t.id); }}
-                            onDragEnd={() => { setDragId(null); setDragOverCol(null); }}
+                            onDragEnd={() => { setDragId(null); setDragOverCol(null); setDragOverCard(null); }}
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (dragId && dragId !== t.id && dragOverCard !== t.id) setDragOverCard(t.id); }}
+                            onDrop={(e) => { e.stopPropagation(); if (dragId && dragId !== t.id) reordenar(dragId, col.id, t.id); setDragId(null); setDragOverCol(null); setDragOverCard(null); }}
                             onClick={() => abrirTarefa(t)}
-                            className={`cursor-grab active:cursor-grabbing hover:border-primary/50 transition-all ${dragId === t.id ? "opacity-40 ring-2 ring-primary" : ""}`}>
+                            className={`cursor-grab active:cursor-grabbing hover:border-primary/50 transition-all ${dragId === t.id ? "opacity-40 ring-2 ring-primary" : ""} ${dragOverCard === t.id ? "border-t-2 border-t-primary" : ""}`}>
                             <CardContent className="p-3 space-y-2">
                               <p className="text-sm font-medium leading-tight">{t.titulo}</p>
                               {t.descricao && <p className="text-xs text-muted-foreground line-clamp-2">{t.descricao}</p>}
