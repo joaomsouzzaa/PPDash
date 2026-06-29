@@ -214,6 +214,24 @@ async function agendarFollowup(supabase: any, orgId: string, pageId: string, aut
   });
 }
 
+// Estimativa rápida de quantos comentários existem (soma comments_count das mídias-alvo) — p/ a barra de progresso.
+async function estimarAntigos(supabase: any, orgId: string, automacaoId: string) {
+  const { data: auto } = await supabase.from("ig_automacoes").select("escopo,media_ids,ig_conta_id").eq("org_id", orgId).eq("id", automacaoId).maybeSingle();
+  if (!auto) throw new Error("Automação não encontrada.");
+  const { data: conta } = await supabase.from("ig_contas").select("ig_user_id,page_token").eq("org_id", orgId).eq("id", auto.ig_conta_id).maybeSingle();
+  if (!conta?.page_token) throw new Error("Conta Instagram não encontrada.");
+  const token = conta.page_token as string;
+  let medias: string[] = [];
+  if (auto.escopo === "post_especifico") medias = (auto.media_ids || []).map(String);
+  else { const res = await graphGet(token, `/${conta.ig_user_id}/media`, { fields: "id", limit: "25" }); medias = (res.data || []).map((m: any) => String(m.id)); }
+  let total = 0;
+  for (const id of medias) {
+    const r = await graphGet(token, `/${id}`, { fields: "comments_count" }).catch(() => null);
+    total += Number(r?.comments_count || 0);
+  }
+  return { total: Math.min(total, 200) };  // o backfill processa até 200 por vez
+}
+
 async function processarAntigos(supabase: any, orgId: string, automacaoId: string) {
   const { data: auto } = await supabase.from("ig_automacoes").select("*").eq("org_id", orgId).eq("id", automacaoId).maybeSingle();
   if (!auto) throw new Error("Automação não encontrada.");
@@ -268,7 +286,8 @@ async function processarAntigos(supabase: any, orgId: string, automacaoId: strin
             if (igsid) { await agendarFollowup(supabase, orgId, pageId, auto, igsid); acoes.followup = !!auto.followup_ativo; }
           } catch (e) {
             const m = msg(e);
-            if (/24|window|outside|7 day|allowed|time/i.test(m)) out.fora_janela++;
+            // janela de 7 dias do Instagram (private reply). Cobre PT e EN.
+            if (/antig|privad|window|outside|too old|expir|7 ?day|24 ?h|allowed|muito antigo/i.test(m)) out.fora_janela++;
             acoes.erros.push(`dm: ${m}`);
           }
         }
@@ -299,6 +318,7 @@ Deno.serve(async (req) => {
     if (action === "listar_contas") return json({ contas: await listarContas(supabase, orgId, token) });
     if (action === "assinar_webhook") return json(await assinarWebhook(supabase, orgId, String(body.ig_user_id)));
     if (action === "listar_midias") return json({ midias: await listarMidias(supabase, orgId, String(body.ig_user_id)) });
+    if (action === "estimar_antigos") return json(await estimarAntigos(supabase, orgId, String(body.automacao_id)));
     if (action === "processar_antigos") return json(await processarAntigos(supabase, orgId, String(body.automacao_id)));
 
     return json({ error: `Ação desconhecida: ${action}` }, 400);

@@ -20,7 +20,7 @@ import {
   Heart, MessageCircle, Send as SendIcon, Bookmark, ChevronLeft, X, Link2, Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { listarContas, assinarWebhook, listarMidias, processarAntigos, type IgConta, type IgMidia, type IgAutomacao, type DmBotao, type DmPayload } from "@/lib/instagram";
+import { listarContas, assinarWebhook, listarMidias, processarAntigos, estimarAntigos, type IgConta, type IgMidia, type IgAutomacao, type DmBotao, type DmPayload } from "@/lib/instagram";
 import { toast } from "sonner";
 
 // Tabelas novas ainda não regeneradas em supabase/types.ts — cast pontual.
@@ -233,15 +233,39 @@ export default function AutoDmInstagram() {
     if (a.status !== "live") { toast.error("Ative a automação (LIVE) antes de processar os comentários antigos."); return; }
     setProcessandoId(a.id);
     const t = toast.loading("Processando comentários antigos…");
+    // Contagem inicial de logs desta automação (baseline) p/ medir o progresso ao vivo.
+    const baseline = await (async () => {
+      const { count } = await db.from("ig_automacao_logs").select("id", { count: "exact", head: true }).eq("automacao_id", a.id);
+      return count || 0;
+    })();
+    // Estimativa do total (p/ mostrar %). Se falhar, mostra só a contagem.
+    let total = 0;
+    try { total = (await estimarAntigos(a.id)).total || 0; } catch { /* sem total */ }
+    // Poll: atualiza o toast com quantos já foram processados.
+    const tick = setInterval(async () => {
+      const { count } = await db.from("ig_automacao_logs").select("id", { count: "exact", head: true }).eq("automacao_id", a.id);
+      const feitos = Math.max(0, (count || 0) - baseline);
+      const pct = total > 0 ? ` (${Math.min(100, Math.round((feitos / total) * 100))}%)` : "";
+      toast.loading(`Processando comentários antigos… ${feitos}${total ? `/${total}` : ""}${pct}`, { id: t });
+    }, 1200);
     try {
       const r = await processarAntigos(a.id);
-      let msg = `${r.processados} processado(s) · ${r.respostas} resposta(s) · ${r.dms} DM(s).`;
-      if (r.fora_janela > 0) msg += ` ${r.fora_janela} sem DM (fora da janela de 7 dias do Instagram).`;
-      if (r.pulados > 0) msg += ` ${r.pulados} pulado(s) (já feitos / sem gatilho).`;
+      clearInterval(tick);
+      let msg = `Pronto: ${r.processados} processado(s) · ${r.respostas} resposta(s) · ${r.dms} DM(s) enviada(s).`;
+      if (r.pulados > 0) msg += ` ${r.pulados} pulado(s).`;
       toast.success(msg, { id: t });
-      if (r.erros?.length) toast.warning(r.erros.slice(0, 3).join(" · "));
+      // Quando o Instagram bloqueia DM por idade do comentário (>7 dias), explica claramente.
+      if (r.fora_janela > 0) {
+        toast.warning(
+          `${r.fora_janela} comentário(s) não receberam DM: o Instagram só permite enviar Direct em resposta a comentários de até ~7 dias. As respostas públicas funcionaram normalmente. DMs voltam a sair automaticamente nos comentários novos (automação LIVE).`,
+          { duration: 12000 },
+        );
+      } else if (r.erros?.length) {
+        toast.warning(r.erros.slice(0, 3).join(" · "));
+      }
       await carregar();
     } catch (e) {
+      clearInterval(tick);
       toast.error(e instanceof Error ? e.message : "Falha ao processar.", { id: t });
     } finally {
       setProcessandoId(null);

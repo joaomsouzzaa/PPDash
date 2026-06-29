@@ -86,3 +86,7 @@ export interface BackfillResultado {
 export async function processarAntigos(automacaoId: string): Promise<BackfillResultado> {
   return invoke<BackfillResultado>({ action: "processar_antigos", automacao_id: automacaoId });
 }
+// Estimativa de quantos comentários serão varridos (p/ a barra de progresso).
+export async function estimarAntigos(automacaoId: string): Promise<{ total: number }> {
+  return invoke<{ total: number }>({ action: "estimar_antigos", automacao_id: automacaoId });
+}
