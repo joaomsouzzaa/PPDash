@@ -8,18 +8,27 @@ import { CAPTION_STYLE_DEFAULT } from "./schema";
 
 type Page = { startMs: number; words: { text: string; fromMs: number; toMs: number }[] };
 
-function paginar(words: Word[], maxWords: number, maxDurMs = 1100): Page[] {
+// Quebra a legenda em páginas curtas. Além de nº de palavras/duração, também quebra ao FIM DE FRASE
+// (. ! ? …) e em SALTOS de tempo (corte) — assim a legenda nunca atravessa um corte nem parte a frase.
+function paginar(words: Word[], maxWords: number, maxDurMs = 1100, gapMs = 500): Page[] {
   const pages: Page[] = [];
   let cur: Page | null = null;
+  let prevTo: number | null = null;
+  let prevPunct = false;
   for (const w of words) {
     const fromMs = w.start * 1000;
     const toMs = w.end * 1000;
     const estouraDur = cur && toMs - cur.startMs > maxDurMs;
-    if (!cur || cur.words.length >= maxWords || estouraDur) {
+    const cheio = cur && cur.words.length >= maxWords;
+    const corte = cur && prevTo != null && fromMs - prevTo > gapMs;   // salto grande = corte
+    const novaFrase = cur && prevPunct;                               // frase anterior terminou
+    if (!cur || cheio || estouraDur || corte || novaFrase) {
       cur = { startMs: fromMs, words: [] };
       pages.push(cur);
     }
     cur.words.push({ text: w.word, fromMs, toMs });
+    prevTo = toMs;
+    prevPunct = /[.!?…]$/.test((w.word || "").trim());
   }
   return pages;
 }

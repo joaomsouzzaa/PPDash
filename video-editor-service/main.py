@@ -336,11 +336,15 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
                 return
 
             yield json.dumps({"pct": 32, "etapa": "extraindo frames"}) + "\n"
+            # Distribui ~32 frames pelo vídeo INTEIRO (antes pegava só os primeiros ~48s).
+            N_FRAMES = 32
+            dur_ref = _ffprobe_dur(pathlib.Path(ref_file))
+            fps_expr = f"{N_FRAMES}/{dur_ref:.2f}" if dur_ref and dur_ref > 1 else "1/2"
             subprocess.run(
-                ["ffmpeg", "-y", "-i", ref_file, "-vf", "fps=1/2,scale=512:-2", "-frames:v", "24", str(framesdir / "f%04d.jpg")],
+                ["ffmpeg", "-y", "-i", ref_file, "-vf", f"fps={fps_expr},scale=512:-2", "-frames:v", str(N_FRAMES), str(framesdir / "f%04d.jpg")],
                 capture_output=True, text=True,
             )
-            frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:24]
+            frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:N_FRAMES]
 
             yield json.dumps({"pct": 45, "etapa": "transcrevendo áudio"}) + "\n"
             try:
@@ -590,24 +594,65 @@ def deletar(job_id: str, authorization: str = Header(default="")):
 # ============================================================
 # Pipeline
 # ============================================================
+def _packed_de_words(transcript: dict) -> str:
+    """Texto 'frases [ini-fim]' a partir do transcript faster-whisper (entrada do gerar_ranges)."""
+    linhas = []
+    for s in transcript.get("segments", []):
+        txt = (s.get("text") or "").strip()
+        if not txt:
+            continue
+        linhas.append(f"[{round(float(s.get('start',0)),2)}-{round(float(s.get('end',0)),2)}] {txt}")
+    return "\n".join(linhas)
+
+
+def _snap_ranges(ranges: list, words: list, tol: float = 0.25, min_len: float = 0.4, merge_gap: float = 0.15) -> list:
+    """Encaixa start/end dos cortes nos limites de palavra (sem meia-palavra), descarta cortes
+    minúsculos e junta cortes quase colados (evita micro-cortes choppy)."""
+    if not words:
+        return ranges
+    starts = sorted(float(w["start"]) for w in words if w.get("start") is not None)
+    ends = sorted(float(w["end"]) for w in words if w.get("end") is not None)
+
+    def nearest(v: float, arr: list) -> float:
+        best, bd = v, tol
+        for x in arr:
+            d = abs(x - v)
+            if d < bd:
+                bd, best = d, x
+        return best
+
+    snapped = []
+    for r in ranges:
+        s = nearest(float(r["start"]), starts)
+        e = nearest(float(r["end"]), ends)
+        if e - s >= min_len:
+            snapped.append({"start": round(s, 3), "end": round(e, 3)})
+    snapped.sort(key=lambda r: r["start"])
+    merged: list = []
+    for r in snapped:
+        if merged and r["start"] - merged[-1]["end"] < merge_gap:
+            merged[-1]["end"] = max(merged[-1]["end"], r["end"])
+        else:
+            merged.append(dict(r))
+    return merged or ranges
+
+
 def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Path,
-                 out: pathlib.Path, prefixo: str = "", render_out: bool = True) -> dict:
-    """Roda o corte por IA (video-use). Se render_out, renderiza em `out`; senão só retorna o EDL
-    (faixas em tempo do ORIGINAL). `prefixo` rotula a etapa."""
+                 out: pathlib.Path, prefixo: str = "", render_out: bool = True):
+    """Decide os cortes por IA a partir da MESMA transcrição (faster-whisper) usada na legenda —
+    fonte única, sem divergência de tempos. Se render_out, renderiza o cut em `out`.
+    Retorna (edl, transcript). `prefixo` rotula a etapa."""
+    from transcribe_words import transcrever_words
     editdir = workdir / "edit"
     editdir.mkdir(parents=True, exist_ok=True)
 
     set_etapa(db, job_id, f"{prefixo}transcrevendo áudio")
-    run_helper("transcribe.py", [str(src), "--edit-dir", str(editdir)], cwd=workdir)
-
-    set_etapa(db, job_id, f"{prefixo}organizando transcrição")
-    run_helper("pack_transcripts.py", ["--edit-dir", str(editdir)], cwd=workdir)
-    packed = editdir / "takes_packed.md"
-    if not packed.exists():
-        raise RuntimeError("Falha ao empacotar a transcrição (takes_packed.md não gerado)")
+    transcript = transcrever_words(str(src), on_progress=lambda p: set_etapa(db, job_id, f"{prefixo}transcrevendo áudio ({p}%)"))
+    words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
 
     set_etapa(db, job_id, f"{prefixo}decidindo cortes (IA)")
-    ranges = gerar_ranges(packed.read_text(encoding="utf-8"), "")
+    ranges = gerar_ranges(_packed_de_words(transcript), "")
+    ranges = _snap_ranges(ranges, words)
     stem = src.stem
     edl = {
         "sources": {stem: str(src)},
@@ -617,7 +662,7 @@ def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Pa
     edl_path.write_text(json.dumps(edl), encoding="utf-8")
 
     if not render_out:
-        return edl  # só as faixas (Fase 3 usa o original + ranges, não o cut renderizado)
+        return edl, transcript  # só as faixas (Fase 3 usa o original + ranges, não o cut renderizado)
 
     total = len(edl["ranges"])
     seg_re = re.compile(r"^\s*\[(\d+)\]")
@@ -631,7 +676,7 @@ def _gerar_corte(db: Client, job_id: str, src: pathlib.Path, workdir: pathlib.Pa
     run_helper("render.py", [str(edl_path), "-o", str(out), "--no-subtitles", "--preview"], cwd=workdir, on_line=on_render_line)
     if not out.exists():
         raise RuntimeError("render.py não gerou o vídeo cortado")
-    return edl
+    return edl, transcript
 
 
 def processar_job(job_id: str, brief: str, org_id: str):
@@ -642,7 +687,7 @@ def processar_job(job_id: str, brief: str, org_id: str):
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=f"vedit-{job_id}-"))
     try:
         out = OUTPUT_DIR / f"{job_id}.mp4"
-        edl = _gerar_corte(db, job_id, src, workdir, out)
+        edl, _ = _gerar_corte(db, job_id, src, workdir, out)
         db.table("video_jobs").update({
             "status": "pronto", "etapa": "concluído",
             "resultado_url": f"{PUBLIC_BASE}/files/{job_id}.mp4", "edl": edl, "erro": None,
@@ -794,11 +839,12 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
     try:
         workjob.mkdir(parents=True, exist_ok=True)
 
-        # 1) Corte por IA só para obter as FAIXAS (em tempo do ORIGINAL); NÃO renderiza o cut.
-        edl = _gerar_corte(db, job_id, src, workdir, workjob / "_x.mp4", prefixo="", render_out=False)
+        # 1) Corte por IA → FAIXAS (tempo do ORIGINAL) + transcrição (fonte única p/ legenda). NÃO renderiza o cut.
+        edl, transcript = _gerar_corte(db, job_id, src, workdir, workjob / "_x.mp4", prefixo="", render_out=False)
         ranges = edl.get("ranges", [])
         if not ranges:
             raise RuntimeError("Não consegui obter as faixas de corte")
+        words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
 
         # 2) O ORIGINAL é a base do editor (servido em /work) + proxy leve + duração.
         set_etapa(db, job_id, "preparando preview")
@@ -806,11 +852,6 @@ def processar_edicao(job_id: str, brief: str, org_id: str):
         shutil.copyfile(str(src), str(orig))
         prev_ok = _proxy_preview(orig, workjob / "original_preview.mp4")
         original_dur = _ffprobe_dur(orig)
-
-        # 3) Transcreve o ORIGINAL (tempo do original) → legendas (remapeadas na timeline).
-        set_etapa(db, job_id, "transcrevendo legendas")
-        transcript = transcrever_words(str(orig), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
-        words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
 
         # 4) Planner no transcript de SAÍDA (palavras dentro das faixas) → overlays no tempo de saída.
         set_etapa(db, job_id, "planejando layouts")
@@ -879,8 +920,8 @@ def _alinhar_insercoes(insertion_plan: list, transcript_ref: str, transcript_nov
         "Inclua TODAS as inserções (não pule b-rolls). Classifique o 'layout' observando como aparece na referência:\n"
         "- 'broll_full' = b-roll ocupa a tela toda;\n- 'split_top' = b-roll na METADE DE CIMA (pessoa embaixo);\n"
         "- 'split_bottom' = b-roll na METADE DE BAIXO (pessoa em cima);\n- 'print' = print/card; - 'image' = imagem cheia.\n"
-        "Responda APENAS JSON: "
-        '{"clips":[{"start":<s>,"end":<s>,"layout":"broll_full|split_top|split_bottom|print|image","descricao":"...","ref_start":<s>,"ref_end":<s>}]}'
+        "Responda APENAS JSON (copie a 'linha' falada correspondente do vídeo NOVO, p/ ancoragem precisa): "
+        '{"clips":[{"start":<s>,"end":<s>,"layout":"broll_full|split_top|split_bottom|print|image","descricao":"...","linha":"trecho falado no NOVO","ref_start":<s>,"ref_end":<s>}]}'
     )
     user = (f"PLANO DE INSERÇÕES (referência):\n{json.dumps(insertion_plan, ensure_ascii=False)}\n\n"
             f"TRANSCRIÇÃO DA REFERÊNCIA:\n{transcript_ref or '(indisponível)'}\n\n"
@@ -894,6 +935,38 @@ def _alinhar_insercoes(insertion_plan: list, transcript_ref: str, transcript_nov
         return (json.loads(txt) or {}).get("clips", [])
     except Exception:
         return []
+
+
+def _norm_txt(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^\w\s]", " ", s.lower())
+
+
+def _ancorar_no_texto(words_saida: list, linha: str):
+    """Acha a sequência de palavras de `linha` nas words de SAÍDA e devolve (start,end) reais.
+    Garante que o b-roll entre EXATAMENTE quando a fala correspondente acontece. None se não casar."""
+    alvo = _norm_txt(linha).split()
+    if len(alvo) < 2 or not words_saida:
+        return None
+    toks = [(_norm_txt(w.get("word", "")), float(w.get("start", 0)), float(w.get("end", 0))) for w in words_saida]
+    toks = [t for t in toks if t[0]]
+    palavras = [t[0] for t in toks]
+    n = len(alvo)
+    melhor_i, melhor_score = -1, 0.0
+    for i in range(0, max(0, len(palavras) - n) + 1):
+        janela = palavras[i:i + n]
+        if not janela:
+            continue
+        acertos = sum(1 for a, b in zip(alvo, janela) if a == b or a in b or b in a)
+        score = acertos / n
+        if score > melhor_score:
+            melhor_score, melhor_i = score, i
+    if melhor_i < 0 or melhor_score < 0.5:  # match fraco → deixa o LLM decidir
+        return None
+    j = min(melhor_i + n - 1, len(toks) - 1)
+    return round(toks[melhor_i][1], 3), round(toks[j][2], 3)
 
 
 def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_id: str):
@@ -924,8 +997,8 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         if not src.exists() or src.stat().st_size < 1000:
             raise RuntimeError("Download do Drive vazio — confira se o link é público ('qualquer pessoa com o link').")
 
-        # 2) Faixas de corte (Fase 3: usa o ORIGINAL + faixas) + proxy + transcrição do original
-        edl = _gerar_corte(db, job_id, src, workdir, workjob / "_x.mp4", prefixo="", render_out=False)
+        # 2) Faixas de corte + transcrição (fonte única) + proxy. Fase 3: usa o ORIGINAL + faixas.
+        edl, transcript = _gerar_corte(db, job_id, src, workdir, workjob / "_x.mp4", prefixo="", render_out=False)
         ranges = edl.get("ranges", [])
         if not ranges:
             raise RuntimeError("Não consegui obter as faixas de corte")
@@ -934,8 +1007,6 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         shutil.copyfile(str(src), str(orig))
         prev_ok = _proxy_preview(orig, workjob / "original_preview.mp4")
         original_dur = _ffprobe_dur(orig)
-        set_etapa(db, job_id, "transcrevendo legendas")
-        transcript = transcrever_words(str(orig), on_progress=lambda p: set_etapa(db, job_id, f"transcrevendo legendas ({p}%)"))
         words = [w for s in transcript.get("segments", []) for w in s.get("words", [])]
         # transcrição de SAÍDA (palavras dentro das faixas) para alinhar os b-rolls no tempo de saída
         out_transcript = _remap_transcript_saida(transcript, ranges)
@@ -951,6 +1022,20 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         plano = vr.get("insertion_plan") or []
         ref_id = vr.get("ref_id")
         alinhados = _alinhar_insercoes(plano, vr.get("transcript") or "", transcript_txt)
+
+        # words em tempo de SAÍDA (p/ ancorar cada inserção EXATAMENTE na fala correspondente)
+        dur_out = sum(float(r["end"]) - float(r["start"]) for r in ranges)
+        _mapped, _o = [], 0.0
+        for r in ranges:
+            _a, _b = float(r["start"]), float(r["end"]); _mapped.append((_a, _b, _o)); _o += (_b - _a)
+        words_saida = []
+        for w in words:
+            ws, we = float(w.get("start", 0)), float(w.get("end", 0))
+            for (a_, b_, o_) in _mapped:
+                if a_ <= ws < b_:
+                    os_ = o_ + (ws - a_); oe = o_ + (min(we, b_) - a_)
+                    words_saida.append({"word": w.get("word", ""), "start": round(os_, 3), "end": round(max(os_ + 0.05, oe), 3)})
+                    break
 
         # 4) Monta clips + assets. Layout pela classificação; b-roll split é recortado na metade certa.
         LAY = {"broll_full": "broll_fullscreen", "broll": "broll_fullscreen", "split_top": "split_horizontal",
@@ -976,15 +1061,28 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
                     if out.exists():
                         asset_id = f"ins{i}"
                         assets_map[asset_id] = f"assets/ins{i}.mp4"
+            # ancoragem determinística pela fala; fallback no start/end do LLM. + clamp/dur mín/máx.
+            start = float(a.get("start", 0) or 0); end = float(a.get("end", 0) or 0)
+            anc = _ancorar_no_texto(words_saida, a.get("linha") or a.get("descricao") or "")
+            if anc:
+                start, end = anc
+            start = max(0.0, min(start, dur_out))
+            end = min(max(start + 1.5, end), dur_out)
+            end = min(end, start + 6.0)
             clips.append({
                 "id": f"c{i}", "asset": asset_id, "layout": layout,
-                "start": round(float(a.get("start", 0)), 3), "end": round(float(a.get("end", 0)), 3),
+                "start": round(start, 3), "end": round(end, 3),
                 "descricao": a.get("descricao", ""),
             })
-        clips = [c for c in clips if c["end"] > c["start"]]
+        # ordena e evita sobreposição (empurra o início pro fim do anterior)
+        clips = [c for c in clips if c["end"] - c["start"] >= 0.3]
+        clips.sort(key=lambda c: c["start"])
+        for i in range(1, len(clips)):
+            if clips[i]["start"] < clips[i - 1]["end"]:
+                clips[i]["start"] = round(clips[i - 1]["end"], 3)
+        clips = [c for c in clips if c["end"] - c["start"] >= 0.3]
 
         video_segments = [{"id": f"v{i}", "sourceStart": float(r["start"]), "sourceEnd": float(r["end"])} for i, r in enumerate(ranges)]
-        dur_out = sum(float(r["end"]) - float(r["start"]) for r in ranges)
         editor_doc = {
             "clips": clips, "words": words, "assets": assets_map,
             "video": "original.mp4",

@@ -26,9 +26,9 @@ ENV VIDEO_USE_DIR=/app/video-use
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pré-baixa o modelo do faster-whisper (evita download no 1º job)
-ENV WHISPER_MODEL=small
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+# Pré-baixa o modelo do faster-whisper (evita download no 1º job). 'medium' = melhor sincronia PT.
+ENV WHISPER_MODEL=medium
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('medium', device='cpu', compute_type='int8')"
 
 # Projeto Remotion (renderizador da edição) + Chromium do Remotion.
 # Instala deps a partir do package.json primeiro (cacheado), depois copia o código —

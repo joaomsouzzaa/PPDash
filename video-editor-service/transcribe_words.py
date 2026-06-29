@@ -26,14 +26,20 @@ def _get_model():
     return _model
 
 
-def transcrever_words(video_path: str, language: str | None = None, on_progress=None) -> dict:
-    """on_progress(pct:int) é chamado conforme a transcrição avança (segment.end / duração)."""
+def transcrever_words(video_path: str, language: str | None = "pt", on_progress=None, initial_prompt: str | None = None) -> dict:
+    """on_progress(pct:int) é chamado conforme a transcrição avança (segment.end / duração).
+    language="pt" por padrão (evita autodetecção errada em clipes curtos). beam_size + VAD
+    ajustados para timestamps de palavra mais precisos (melhor sincronia de legenda/corte)."""
     model = _get_model()
     segments, info = model.transcribe(
         video_path,
-        language=language,            # None = autodetecta (PT detectado normalmente)
+        language=language,            # "pt" por padrão; passe None para autodetectar
         word_timestamps=True,
+        beam_size=5,                  # mais preciso que o greedy default
         vad_filter=True,              # ignora silêncios longos
+        vad_parameters={"min_silence_duration_ms": 400},
+        initial_prompt=initial_prompt,
+        condition_on_previous_text=False,  # evita "arrastar" erro de uma frase pra outra
     )
     dur = float(getattr(info, "duration", 0) or 0)
     out_segments = []
