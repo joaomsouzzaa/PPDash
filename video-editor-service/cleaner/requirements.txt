@@ -1,0 +1,5 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+# video-subtitle-remover (VSR) traz suas próprias deps de inpainting (torch/paddle/opencv).
+# Instale o VSR a partir do repositório no Dockerfile; ele exige CUDA/GPU.

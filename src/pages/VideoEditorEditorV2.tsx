@@ -27,6 +27,7 @@ export default function VideoEditorEditorV2() {
   const navigate = useNavigate();
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
+  const [capSelecionada, setCapSelecionada] = useState(false);  // legenda "selecionada" no preview → mostra toolbar flutuante
   const [tbPos, setTbPos] = useState<{ x: number; y: number } | null>(null);  // posição da toolbar flutuante (arrastável)
   const startDragToolbar = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -79,6 +80,11 @@ export default function VideoEditorEditorV2() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ed.undo, ed.redo, ed.copySelection, ed.cutSelection, ed.pasteClipboard]);
+
+  // Selecionar clip/texto/head desfaz a seleção da legenda (toolbars são mutuamente exclusivas).
+  useEffect(() => {
+    if (ed.selectedId || ed.selectedTextId) setCapSelecionada(false);
+  }, [ed.selectedId, ed.selectedTextId]);
 
   // inputProps estável: NÃO depende de currentTime; só muda quando os dados mudam.
   // Sem isto, o Player recebe props novas a cada frame e re-bufferiza (play travado/engasgado).
@@ -223,7 +229,7 @@ export default function VideoEditorEditorV2() {
         {/* Canvas central */}
         <main ref={canvasArea} className="relative flex flex-1 flex-col items-center justify-center overflow-auto bg-neutral-900 p-4">
           {/* Toolbar flutuante de ícones do elemento selecionado (arrastável pela alça) */}
-          {(sel || selT || selHead) && (
+          {(sel || selT || selHead || capSelecionada) && (
             <div className="absolute z-10 flex items-center gap-1"
               style={tbPos ? { left: tbPos.x, top: tbPos.y } : { top: 8, left: "50%", transform: "translateX(-50%)" }}>
               <button onPointerDown={startDragToolbar} title="Arraste para mover a barra"
@@ -233,6 +239,7 @@ export default function VideoEditorEditorV2() {
               {sel && <ClipToolbar ed={ed} sel={sel} onAddLayer={() => setAba("midia")} />}
               {selT && !sel && <TextToolbar ed={ed} selT={selT} />}
               {selHead && <HeadToolbar ed={ed} />}
+              {capSelecionada && !sel && !selT && !selHead && <CaptionToolbar ed={ed} onMais={() => setAba("legenda")} />}
             </div>
           )}
 
@@ -256,7 +263,7 @@ export default function VideoEditorEditorV2() {
             <TextDragLayer texts={ed.texts} currentTime={ed.currentTime} selectedId={ed.selectedTextId}
               onSelect={ed.setSelectedTextId} onMove={ed.updateText} words={ed.outWords} captionStyle={ed.capStyle}
               onMoveCaption={(y) => ed.setCapStyle({ posicaoY: y })} mostrarLegenda={true}
-              onSelecionarLegenda={() => setAba("legenda")} />
+              onSelecionarLegenda={() => { setAba("legenda"); ed.setSelectedId(null); ed.setSelectedTextId(null); setCapSelecionada(true); }} />
           </div>
         </main>
       </div>
@@ -594,6 +601,25 @@ function FreeTransformBox({ containerRef, clip, selected, onSelect, onUpdate, W,
           <div style={{ position: "absolute", left: "50%", top: -21, width: 1, height: 14, background: blue }} />
         </>
       )}
+    </div>
+  );
+}
+
+// Toolbar flutuante para a LEGENDA selecionada (clique na legenda no preview).
+// Controles principais inline; o painel lateral "Legendas" tem o resto (borda, altura, etc.).
+function CaptionToolbar({ ed, onMais }: { ed: ReturnType<typeof useEditorDoc>; onMais: () => void }) {
+  const cs = ed.capStyle;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800/95 px-3 py-2 shadow-xl backdrop-blur">
+      <span className="text-[11px] text-neutral-400 flex items-center gap-1"><CaptionsIcon className="h-3.5 w-3.5" /> Legenda</span>
+      <Cor label="Palavra" value={cs.color} onChange={(v) => ed.setCapStyle({ color: v })} />
+      <Cor label="Ativa" value={cs.activeColor} onChange={(v) => ed.setCapStyle({ activeColor: v })} />
+      <Cor label="Fundo" value={cs.bgColor === "transparent" ? "#000000" : cs.bgColor} onChange={(v) => ed.setCapStyle({ bgColor: v })}
+        extra={<button className="text-[10px] underline text-neutral-400" onClick={() => ed.setCapStyle({ bgColor: "transparent" })}>sem fundo</button>} />
+      <div className="flex items-center gap-1 text-[11px] text-neutral-300">Tam
+        <NumBox value={cs.fontSize} min={32} max={140} onCommit={(v) => ed.setCapStyle({ fontSize: v })} className="h-7 w-14 rounded border border-neutral-600 bg-neutral-900 px-1 text-right text-[11px]" />
+      </div>
+      <button onClick={onMais} title="Mais opções de legenda" className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-700"><MoreHorizontal className="h-3.5 w-3.5" /> Mais</button>
     </div>
   );
 }

@@ -53,6 +53,8 @@ REMOTION_DIR = pathlib.Path(os.environ.get("REMOTION_DIR", "./remotion")).resolv
 INTERNAL_BASE = os.environ.get("INTERNAL_BASE", "http://127.0.0.1:8080")
 # Cookies do Instagram (Netscape cookies.txt) para o yt-dlp baixar Reels que exigem login.
 COOKIES_FILE = pathlib.Path(os.environ.get("YTDLP_COOKIES", str(OUTPUT_DIR.parent / "cookies.txt")))
+# Worker GPU que remove a legenda queimada dos b-rolls (inpainting). Vazio = limpeza desligada.
+VIDEO_CLEANER_URL = os.environ.get("VIDEO_CLEANER_URL", "").rstrip("/")
 MODEL = "claude-opus-4-8"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -969,6 +971,100 @@ def _ancorar_no_texto(words_saida: list, linha: str):
     return round(toks[melhor_i][1], 3), round(toks[j][2], 3)
 
 
+def _limpar_legenda(clip: pathlib.Path) -> bool:
+    """Envia o clip ao worker GPU (VIDEO_CLEANER_URL) que remove a legenda queimada por inpainting
+    e sobrescreve o arquivo com a versão limpa. Best-effort: se não houver worker ou falhar,
+    mantém o clip original e retorna False (não quebra o job)."""
+    if not VIDEO_CLEANER_URL or not clip.exists():
+        return False
+    import httpx
+    try:
+        with open(clip, "rb") as fh:
+            resp = httpx.post(
+                f"{VIDEO_CLEANER_URL}/limpar-legenda",
+                files={"file": (clip.name, fh, "video/mp4")},
+                timeout=600.0,
+            )
+        resp.raise_for_status()
+        data = resp.content
+        if not data or len(data) < 1000:
+            return False
+        clip.write_bytes(data)
+        return True
+    except Exception:
+        return False
+
+
+def _queries_youtube(alinhados: list, brief: str = "") -> dict:
+    """IA transforma a descrição de cada inserção numa busca curta de YouTube (termos visuais
+    concretos). Retorna {i: "query"}. Fallback: usa a própria descrição."""
+    fallback = {i: (a.get("descricao") or a.get("linha") or "").strip() for i, a in enumerate(alinhados)}
+    itens = [{"i": i, "descricao": a.get("descricao", ""), "linha": a.get("linha", "")} for i, a in enumerate(alinhados)]
+    if not itens:
+        return {}
+    try:
+        client = anthropic.Anthropic()
+        system = (
+            "Para CADA inserção de b-roll, gere uma BUSCA curta de YouTube (3 a 6 palavras) que encontre "
+            "um vídeo de IMAGEM ILUSTRATIVA (b-roll) do que está sendo dito. Use termos VISUAIS concretos "
+            "(objetos, lugares, ações), pode ser em inglês quando ajudar a achar stock footage. Evite nomes "
+            "próprios pouco conhecidos. Responda APENAS JSON: {\"queries\":[{\"i\":<int>,\"q\":\"...\"}]}"
+        )
+        user = json.dumps({"brief": brief, "insercoes": itens}, ensure_ascii=False)
+        resp = client.messages.create(model=MODEL, max_tokens=2000, system=system,
+                                      messages=[{"role": "user", "content": user}])
+        txt = "".join(b.text for b in resp.content if b.type == "text").strip()
+        if txt.startswith("```"):
+            txt = txt.split("```", 2)[1].lstrip("json").strip()
+        out = dict(fallback)
+        for it in (json.loads(txt) or {}).get("queries", []):
+            q = (it.get("q") or "").strip()
+            if q:
+                out[int(it["i"])] = q
+        return out
+    except Exception:
+        return fallback
+
+
+def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf: str = "") -> bool:
+    """Busca no YouTube, baixa um trecho leve do 1º resultado que funcionar e recorta para dur_alvo.
+    Sem cookies (é YouTube). Retorna True se gerou o arquivo."""
+    if not query:
+        return False
+    try:
+        p = subprocess.run(["yt-dlp", "--flat-playlist", "--print", "id", f"ytsearch4:{query}"],
+                           capture_output=True, text=True, timeout=60)
+    except Exception:
+        return False
+    ids = [l.strip() for l in (p.stdout or "").splitlines() if l.strip()][:4]
+    sec_end = 8 + max(6, int(dur_alvo) + 6)
+    for vid in ids:
+        raw = out_path.parent / f"raw_{vid}.mp4"
+        base = ["yt-dlp", f"https://www.youtube.com/watch?v={vid}", "--no-playlist",
+                "-f", "mp4[height<=720]/best[height<=720]/best", "-o", str(raw)]
+        for extra in ([f"--download-sections", f"*8-{sec_end}", "--force-keyframes-at-cuts"], []):
+            try:
+                subprocess.run(base + extra, capture_output=True, text=True, timeout=180)
+            except Exception:
+                continue
+            if raw.exists() and raw.stat().st_size > 10000:
+                break
+        if not (raw.exists() and raw.stat().st_size > 10000):
+            continue
+        vf = (crop_vf + "," if crop_vf else "") + "scale='min(1080,iw)':-2"
+        try:
+            subprocess.run(["ffmpeg", "-y", "-ss", "0", "-t", str(max(1.0, dur_alvo)), "-i", str(raw), "-an",
+                            "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+                            "-g", "30", "-keyint_min", "30", "-sc_threshold", "0", "-movflags", "+faststart", str(out_path)],
+                           capture_output=True, text=True, timeout=120)
+        except Exception:
+            pass
+        raw.unlink(missing_ok=True)
+        if out_path.exists() and out_path.stat().st_size > 10000:
+            return True
+    return False
+
+
 def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_id: str):
     """3B: baixa o bruto do Drive, corta, transcreve, alinha o plano da referência e monta os clips."""
     import shutil, glob
@@ -1044,6 +1140,8 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
         clips, assets_map = [], {}
         ref_glob = glob.glob(str(WORK_DIR / "ref" / str(ref_id) / "ref.*")) if ref_id else []
         ref_file = next((c for c in ref_glob if not c.endswith(".jpg")), None)
+        # fonte "youtube": gera as buscas (IA) uma vez; cada inserção baixa um b-roll relevante.
+        queries = _queries_youtube(alinhados, "") if fonte == "youtube" else {}
         for i, a in enumerate(alinhados):
             tipo = a.get("layout") or a.get("tipo") or "broll_full"
             layout = LAY.get(tipo, "broll_fullscreen")
@@ -1059,8 +1157,21 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
                                     "-g", "30", "-keyint_min", "30", "-sc_threshold", "0", "-movflags", "+faststart", str(out)],
                                    capture_output=True, text=True)
                     if out.exists():
+                        # Remove a legenda queimada do vídeo de referência (best-effort, GPU).
+                        if VIDEO_CLEANER_URL:
+                            set_etapa(db, job_id, "limpando legenda dos b-rolls")
+                            if not _limpar_legenda(out):
+                                _log(db, job_id, f"⚠️ não consegui limpar a legenda do b-roll ins{i} (mantendo original)")
                         asset_id = f"ins{i}"
                         assets_map[asset_id] = f"assets/ins{i}.mp4"
+            elif fonte == "youtube":
+                set_etapa(db, job_id, f"buscando b-roll {i + 1}/{len(alinhados)}")
+                out = assets_dir / f"ins{i}.mp4"
+                dur_alvo = float(a.get("end", 0) or 0) - float(a.get("start", 0) or 0)
+                dur_alvo = max(2.0, min(6.0, dur_alvo or 4.0))
+                if _youtube_broll(queries.get(i, ""), out, dur_alvo, CROP.get(tipo, "")):
+                    asset_id = f"ins{i}"
+                    assets_map[asset_id] = f"assets/ins{i}.mp4"
             # ancoragem determinística pela fala; fallback no start/end do LLM. + clamp/dur mín/máx.
             start = float(a.get("start", 0) or 0); end = float(a.get("end", 0) or 0)
             anc = _ancorar_no_texto(words_saida, a.get("linha") or a.get("descricao") or "")

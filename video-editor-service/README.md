@@ -54,6 +54,18 @@ VITE_VIDEO_EDITOR_URL=https://<url-do-servico>
 Container (Railway / Render / Fly.io / VM) com FFmpeg instalado. Processamento é assíncrono
 (background task), então a página responde rápido e acompanha o status pelo banco.
 
+## Limpeza de legenda dos b-rolls (worker GPU)
+
+Os b-rolls em modo `literal` são recortes do vídeo de referência (Reels/TikToks via yt-dlp),
+que costumam ter **legenda queimada** nos pixels. Para deixá-los limpos usamos inpainting por
+GPU com o [video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover) rodando
+num worker separado (pasta `cleaner/`) — **não** roda na VPS CPU.
+
+- Suba o worker num host com GPU NVIDIA: `docker build -t broll-cleaner cleaner/ && docker run --gpus all -p 9000:9000 broll-cleaner`.
+- No serviço principal, setar a env `VIDEO_CLEANER_URL=http://<gpu-host>:9000`.
+- A limpeza é **best-effort e automática** em todo b-roll literal: se a env estiver vazia ou o
+  worker falhar/timeout, o clip original é mantido e o job conclui normalmente (apenas loga aviso).
+
 ## Notas
 
 - O `render.py` do video-use espera o EDL com cortes em **limites de palavra**, **padding de

@@ -882,7 +882,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [enviandoCookies, setEnviandoCookies] = useState(false);
   const [creditoBaixo, setCreditoBaixo] = useState(false);
   const [driveUrl, setDriveUrl] = useState("");
-  const [fonte, setFonte] = useState<"literal" | "assets">("literal");
+  const [fonte, setFonte] = useState<"literal" | "assets" | "youtube">("literal");
   const [montando, setMontando] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
 
@@ -1080,6 +1080,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
                 <SelectTrigger className="h-9 w-[260px] text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="literal">Recortar b-rolls da referência (literal)</SelectItem>
+                  <SelectItem value="youtube">Buscar b-rolls no YouTube (automático)</SelectItem>
                   <SelectItem value="assets">Só timing (eu coloco as mídias no editor)</SelectItem>
                 </SelectContent>
               </Select>
@@ -1094,6 +1095,12 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
                 </Button>
               )}
             </div>
+            {fonte === "youtube" && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                ⚠️ Busca automática no YouTube: mantém os mesmos momentos/quantidade de b-roll da referência, mas pode usar
+                conteúdo com direitos autorais e o processamento é mais lento (baixa um clipe por inserção).
+              </p>
+            )}
             {/* Status real da montagem (etapa + % + barra) */}
             {montandoJob && (
               <div className="space-y-1">
