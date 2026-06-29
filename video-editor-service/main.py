@@ -1005,10 +1005,13 @@ def _queries_youtube(alinhados: list, brief: str = "") -> dict:
     try:
         client = anthropic.Anthropic()
         system = (
-            "Para CADA inserção de b-roll, gere uma BUSCA curta de YouTube (3 a 6 palavras) que encontre "
-            "um vídeo de IMAGEM ILUSTRATIVA (b-roll) do que está sendo dito. Use termos VISUAIS concretos "
-            "(objetos, lugares, ações), pode ser em inglês quando ajudar a achar stock footage. Evite nomes "
-            "próprios pouco conhecidos. Responda APENAS JSON: {\"queries\":[{\"i\":<int>,\"q\":\"...\"}]}"
+            "Para CADA inserção de b-roll, gere uma BUSCA de YouTube que encontre um vídeo de IMAGEM "
+            "ILUSTRATIVA (b-roll/stock footage) do que está sendo dito. Regras:\n"
+            "- 3 a 6 palavras VISUAIS concretas (objetos, lugares, ações), de preferência em INGLÊS (acha mais stock).\n"
+            "- SEMPRE termine com 'stock footage' ou 'b roll' (ex.: 'stock market crash red graph b roll').\n"
+            "- Prefira imagens CINEMATOGRÁFICAS, sem pessoas falando à câmera e sem texto na tela.\n"
+            "- Evite nomes próprios pouco conhecidos.\n"
+            "Responda APENAS JSON: {\"queries\":[{\"i\":<int>,\"q\":\"...\"}]}"
         )
         user = json.dumps({"brief": brief, "insercoes": itens}, ensure_ascii=False)
         resp = client.messages.create(model=MODEL, max_tokens=2000, system=system,
@@ -1032,11 +1035,27 @@ def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf:
     if not query:
         return False
     try:
-        p = subprocess.run(["yt-dlp", "--flat-playlist", "--print", "id", f"ytsearch4:{query}"],
+        # busca mais resultados com a duração, p/ priorizar clipes CURTOS (cara de b-roll/stock).
+        p = subprocess.run(["yt-dlp", "--flat-playlist", "--print", "%(id)s|%(duration)s", f"ytsearch8:{query}"],
                            capture_output=True, text=True, timeout=60)
     except Exception:
         return False
-    ids = [l.strip() for l in (p.stdout or "").splitlines() if l.strip()][:4]
+    cands = []
+    for l in (p.stdout or "").splitlines():
+        l = l.strip()
+        if "|" not in l:
+            continue
+        vid, dur = l.split("|", 1)
+        try:
+            d = float(dur)
+        except ValueError:
+            d = 9999.0  # duração desconhecida vai pro fim
+        if vid and d >= dur_alvo and d <= 300:  # ignora longos demais (>5min) e curtos que não cobrem o trecho
+            cands.append((d, vid.strip()))
+    cands.sort(key=lambda x: x[0])  # mais curtos primeiro
+    ids = [v for _, v in cands][:4]
+    if not ids:  # fallback: aceita qualquer resultado se o filtro zerou
+        ids = [l.split("|", 1)[0].strip() for l in (p.stdout or "").splitlines() if l.strip()][:4]
     sec_end = 8 + max(6, int(dur_alvo) + 6)
     for vid in ids:
         raw = out_path.parent / f"raw_{vid}.mp4"
