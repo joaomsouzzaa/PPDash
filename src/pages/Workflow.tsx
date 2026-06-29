@@ -847,6 +847,9 @@ export default function Workflow() {
 // Vídeo de referência → roteiro adaptado + plano de inserções (v3 Fase 3A)
 // ============================================================
 const SERVICE_URL_VE = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
+// Detecta o erro de saldo da API da Anthropic (p/ abrir o popup amigável em vez do erro técnico).
+const ERRO_CREDITO_API = /credit balance is too low|too low to access the anthropic|plans ?& ?billing|insufficient.*credit|cr[eé]dito.*(baixo|insuficiente)|saldo.*(baixo|insuficiente)/i;
+const ANTHROPIC_BILLING_URL = "https://console.anthropic.com/settings/billing";
 
 // Move um card para a etapa (coluna) pelo nome (sem acento/maiúsculas).
 const normEtapa = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -865,6 +868,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [analisando, setAnalisando] = useState(false);
   const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
   const [enviandoCookies, setEnviandoCookies] = useState(false);
+  const [creditoBaixo, setCreditoBaixo] = useState(false);
   const [driveUrl, setDriveUrl] = useState("");
   const [fonte, setFonte] = useState<"literal" | "assets">("literal");
   const [montando, setMontando] = useState(false);
@@ -965,7 +969,9 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
       toast.success("Referência analisada — roteiro e plano de inserções gerados.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao analisar a referência.");
+      const m = e instanceof Error ? e.message : "Falha ao analisar a referência.";
+      if (ERRO_CREDITO_API.test(m)) setCreditoBaixo(true);
+      else toast.error(m);
     } finally {
       setAnalisando(false);
       setProg(null);
@@ -1011,6 +1017,25 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
             finally { setEnviandoCookies(false); }
           }} />
       </label>
+
+      {/* Popup: saldo da IA (Anthropic) acabou */}
+      <Dialog open={creditoBaixo} onOpenChange={setCreditoBaixo}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">⚠️ Sua IA está sem saldo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>A análise não rodou porque o <b>saldo de créditos da API de IA (Anthropic)</b> acabou.</p>
+            <p>Para voltar a funcionar, adicione créditos no painel da Anthropic. Dica: ative o <b>Auto-reload</b> lá para recarregar sozinho e nunca mais ver este aviso.</p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setCreditoBaixo(false)}>Fechar</Button>
+            <Button onClick={() => window.open(ANTHROPIC_BILLING_URL, "_blank", "noopener,noreferrer")}>
+              Adicionar créditos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {analisando && prog && (
         <div className="space-y-1">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
