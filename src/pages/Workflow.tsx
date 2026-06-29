@@ -17,7 +17,7 @@ import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDo
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
-import { analisarReferenciaStream } from "@/lib/videoAnalise";
+import { analisarReferenciaStream, configurarCookiesInstagram } from "@/lib/videoAnalise";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -864,6 +864,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [url, setUrl] = useState("");
   const [analisando, setAnalisando] = useState(false);
   const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
+  const [enviandoCookies, setEnviandoCookies] = useState(false);
   const [driveUrl, setDriveUrl] = useState("");
   const [fonte, setFonte] = useState<"literal" | "assets">("literal");
   const [montando, setMontando] = useState(false);
@@ -997,6 +998,19 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
           {analisando ? (prog ? `${prog.pct}%` : "Analisando…") : "Analisar referência"}
         </Button>
       </div>
+      {/* Cookies do Instagram (p/ baixar Reels que exigem login) — envia o cookies.txt direto pra VPS */}
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+        🔑 {enviandoCookies ? "Enviando cookies…" : "Configurar/atualizar cookies do Instagram"}
+        <input type="file" accept=".txt" className="hidden" disabled={enviandoCookies}
+          onChange={async (e) => {
+            const f = e.target.files?.[0]; e.currentTarget.value = "";
+            if (!f) return;
+            setEnviandoCookies(true);
+            try { await configurarCookiesInstagram(f); toast.success("Cookies do Instagram atualizados na VPS."); }
+            catch (err) { toast.error(err instanceof Error ? err.message : "Falha ao enviar cookies."); }
+            finally { setEnviandoCookies(false); }
+          }} />
+      </label>
       {analisando && prog && (
         <div className="space-y-1">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

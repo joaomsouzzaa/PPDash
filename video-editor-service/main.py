@@ -320,9 +320,18 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
             cand = glob.glob(str(refdir / "ref.*"))
             ref_file = next((c for c in cand if not c.endswith(".jpg")), None)
             if not ref_file:
-                login = "login" in erro.lower() or "cookies" in erro.lower()
-                msg = ("Esse Instagram exige login para baixar. Configure os cookies do Instagram na VPS (me avise) "
-                       "ou tente um link público (YouTube/TikTok)." if login else f"Falha ao baixar: {erro[-200:] or 'erro yt-dlp'}")
+                el = erro.lower()
+                login = ("login" in el or "cookies" in el or "rate-limit" in el or "rate limit" in el
+                         or "logged-in" in el or "logged in" in el or "empty media response" in el or "401" in el)
+                ig = "instagram.com" in (ref_url or "").lower()
+                if login and ig and COOKIES_FILE.exists():
+                    msg = ("Os cookies do Instagram expiraram (ou foram invalidados). Reexporte o cookies.txt "
+                           "logado no Instagram e me avise para reconfigurar na VPS — ou use um link público (YouTube/TikTok).")
+                elif login:
+                    msg = ("Esse Instagram exige login para baixar. Configure os cookies do Instagram na VPS (me avise) "
+                           "ou tente um link público (YouTube/TikTok).")
+                else:
+                    msg = f"Falha ao baixar: {erro[-200:] or 'erro yt-dlp'}"
                 yield json.dumps({"erro": msg}) + "\n"
                 return
 
@@ -474,6 +483,35 @@ async def upload_asset(job_id: str = Form(...), file: UploadFile = File(...), au
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
     return {"ok": True, "path": f"assets/{nome}"}
+
+
+@app.get("/cookies-status")
+def cookies_status(authorization: str = Header(default="")):
+    """Diz se os cookies do Instagram estão configurados e quando foram atualizados (p/ a UI)."""
+    exigir_usuario(authorization)
+    import datetime
+    if not COOKIES_FILE.exists():
+        return {"configurado": False}
+    mt = datetime.datetime.fromtimestamp(COOKIES_FILE.stat().st_mtime)
+    return {"configurado": True, "atualizado_em": mt.isoformat(), "tem_sessao": "sessionid" in COOKIES_FILE.read_text(errors="replace")}
+
+
+@app.post("/configurar-cookies")
+async def configurar_cookies(file: UploadFile = File(...), authorization: str = Header(default="")):
+    """Recebe o cookies.txt (Netscape) do Instagram pela UI e grava na VPS — sem precisar de SSH.
+    Grava os BYTES exatos (preserva os tabs que o yt-dlp exige)."""
+    exigir_usuario(authorization)
+    data = await file.read()
+    txt = data.decode("utf-8", errors="replace")
+    if "sessionid" not in txt or "instagram" not in txt.lower():
+        raise HTTPException(400, "Arquivo inválido: não parece um cookies.txt do Instagram logado (faltou 'sessionid').")
+    COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    COOKIES_FILE.write_bytes(data)
+    try:
+        os.chmod(COOKIES_FILE, 0o600)
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @app.post("/cancelar")
