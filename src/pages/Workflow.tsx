@@ -890,6 +890,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [inicioAnalise, setInicioAnalise] = useState<number | null>(null);
   const [agora, setAgora] = useState<number>(Date.now());
   const [enviandoCookies, setEnviandoCookies] = useState(false);
+  const [enviandoCookiesYt, setEnviandoCookiesYt] = useState(false);
   const [creditoBaixo, setCreditoBaixo] = useState(false);
   const [driveUrl, setDriveUrl] = useState("");
   const [fonte, setFonte] = useState<"literal" | "assets" | "youtube">("literal");
@@ -908,7 +909,15 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   // Status dos cookies do Instagram na VPS (p/ mostrar se está configurado e quando).
   const { data: cookies } = useQuery({
     queryKey: ["ig-cookies-status"],
-    queryFn: cookiesStatus,
+    queryFn: () => cookiesStatus("instagram"),
+    enabled: !!SERVICE_URL_VE,
+    retry: false,
+  });
+
+  // Status dos cookies do YouTube na VPS (p/ baixar b-roll sem ser bloqueado).
+  const { data: cookiesYt } = useQuery({
+    queryKey: ["yt-cookies-status"],
+    queryFn: () => cookiesStatus("youtube"),
     enabled: !!SERVICE_URL_VE,
     retry: false,
   });
@@ -1091,6 +1100,29 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
           ? (cookies.tem_sessao
               ? <span className="text-xs text-emerald-600">✓ configurado{cookies.atualizado_em ? ` (atualizado em ${new Date(cookies.atualizado_em).toLocaleDateString("pt-BR")})` : ""}</span>
               : <span className="text-xs text-amber-600">⚠ arquivo sem sessionid — reexporte logado</span>)
+          : <span className="text-xs text-muted-foreground">não configurado</span>
+      )}
+
+      {/* Cookies do YouTube (p/ baixar b-roll sem bloqueio do yt-dlp na VPS) */}
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+        🔑 {enviandoCookiesYt ? "Enviando cookies…" : "Configurar/atualizar cookies do YouTube"}
+        <input type="file" accept=".txt,.json" className="hidden" disabled={enviandoCookiesYt}
+          onChange={async (e) => {
+            const f = e.target.files?.[0]; e.currentTarget.value = "";
+            if (!f) return;
+            setEnviandoCookiesYt(true);
+            try {
+              await configurarCookiesInstagram(f, "youtube");
+              toast.success("Cookies do YouTube atualizados na VPS.");
+              qc.invalidateQueries({ queryKey: ["yt-cookies-status"] });
+            }
+            catch (err) { toast.error(err instanceof Error ? err.message : "Falha ao enviar cookies."); }
+            finally { setEnviandoCookiesYt(false); }
+          }} />
+      </label>
+      {cookiesYt && (
+        cookiesYt.configurado
+          ? <span className="text-xs text-emerald-600">✓ configurado{cookiesYt.atualizado_em ? ` (atualizado em ${new Date(cookiesYt.atualizado_em).toLocaleDateString("pt-BR")})` : ""}</span>
           : <span className="text-xs text-muted-foreground">não configurado</span>
       )}
 

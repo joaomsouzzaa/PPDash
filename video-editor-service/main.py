@@ -53,6 +53,8 @@ REMOTION_DIR = pathlib.Path(os.environ.get("REMOTION_DIR", "./remotion")).resolv
 INTERNAL_BASE = os.environ.get("INTERNAL_BASE", "http://127.0.0.1:8080")
 # Cookies do Instagram (Netscape cookies.txt) para o yt-dlp baixar Reels que exigem login.
 COOKIES_FILE = pathlib.Path(os.environ.get("YTDLP_COOKIES", str(OUTPUT_DIR.parent / "cookies.txt")))
+# Cookies do YouTube (separados): o IP de datacenter da VPS é bloqueado sem login.
+YOUTUBE_COOKIES_FILE = pathlib.Path(os.environ.get("YT_YOUTUBE_COOKIES", str(OUTPUT_DIR.parent / "youtube_cookies.txt")))
 # Worker GPU que remove a legenda queimada dos b-rolls (inpainting). Vazio = limpeza desligada.
 VIDEO_CLEANER_URL = os.environ.get("VIDEO_CLEANER_URL", "").rstrip("/")
 MODEL = "claude-opus-4-8"
@@ -545,21 +547,39 @@ async def upload_asset(job_id: str = Form(...), file: UploadFile = File(...), au
     return {"ok": True, "path": f"assets/{nome}"}
 
 
+# Configuração de cookies por plataforma: arquivo de destino, domínios aceitos e cookie-chave.
+PLATAFORMAS_COOKIES = {
+    "instagram": {"arquivo": COOKIES_FILE, "dominios": ("instagram",), "chave": "sessionid", "rotulo": "Instagram"},
+    "youtube": {"arquivo": YOUTUBE_COOKIES_FILE, "dominios": ("youtube", "google"), "chave": "", "rotulo": "YouTube"},
+}
+
+
+def _plat(plataforma: str) -> dict:
+    cfg = PLATAFORMAS_COOKIES.get((plataforma or "instagram").lower())
+    if not cfg:
+        raise HTTPException(400, "Plataforma inválida (use 'instagram' ou 'youtube').")
+    return cfg
+
+
 @app.get("/cookies-status")
-def cookies_status(authorization: str = Header(default="")):
-    """Diz se os cookies do Instagram estão configurados e quando foram atualizados (p/ a UI)."""
+def cookies_status(plataforma: str = "instagram", authorization: str = Header(default="")):
+    """Diz se os cookies da plataforma estão configurados e quando foram atualizados (p/ a UI)."""
     exigir_usuario(authorization)
     import datetime
-    if not COOKIES_FILE.exists():
+    cfg = _plat(plataforma)
+    arq = cfg["arquivo"]
+    if not arq.exists():
         return {"configurado": False}
-    mt = datetime.datetime.fromtimestamp(COOKIES_FILE.stat().st_mtime)
-    return {"configurado": True, "atualizado_em": mt.isoformat(), "tem_sessao": "sessionid" in COOKIES_FILE.read_text(errors="replace")}
+    mt = datetime.datetime.fromtimestamp(arq.stat().st_mtime)
+    chave = cfg["chave"]
+    tem_sessao = (chave in arq.read_text(errors="replace")) if chave else True
+    return {"configurado": True, "atualizado_em": mt.isoformat(), "tem_sessao": tem_sessao}
 
 
-def _cookies_json_para_netscape(obj) -> str | None:
+def _cookies_json_para_netscape(obj, dominios=("instagram",)) -> str | None:
     """Converte o JSON de cookies exportado por extensões (Cookie-Editor, EditThisCookie) para o
     formato Netscape cookies.txt que o yt-dlp exige. Retorna None se o formato não for reconhecido.
-    Filtra só cookies de domínio *instagram*."""
+    Filtra só cookies cujo domínio contém um dos `dominios`."""
     if isinstance(obj, dict) and isinstance(obj.get("cookies"), list):
         obj = obj["cookies"]
     if not isinstance(obj, list):
@@ -571,7 +591,7 @@ def _cookies_json_para_netscape(obj) -> str | None:
         nome = c.get("name")
         valor = c.get("value")
         dominio = c.get("domain") or ""
-        if nome is None or valor is None or "instagram" not in dominio.lower():
+        if nome is None or valor is None or not any(d in dominio.lower() for d in dominios):
             continue
         path = c.get("path") or "/"
         # flag (TRUE = vale p/ subdomínios): domínio com ponto inicial ou hostOnly=false
@@ -584,24 +604,27 @@ def _cookies_json_para_netscape(obj) -> str | None:
         except (TypeError, ValueError):
             exp = 0
         linhas.append("\t".join([dominio, flag, path, secure, str(exp), str(nome), str(valor)]))
-    if len(linhas) == 1:  # só o cabeçalho = nenhum cookie do instagram
+    if len(linhas) == 1:  # só o cabeçalho = nenhum cookie do domínio pedido
         return None
     return "\n".join(linhas) + "\n"
 
 
 @app.post("/configurar-cookies")
-async def configurar_cookies(file: UploadFile = File(...), authorization: str = Header(default="")):
-    """Recebe os cookies do Instagram pela UI e grava na VPS — sem precisar de SSH.
+async def configurar_cookies(file: UploadFile = File(...), plataforma: str = "instagram", authorization: str = Header(default="")):
+    """Recebe os cookies (Instagram ou YouTube) pela UI e grava na VPS — sem precisar de SSH.
     Aceita o cookies.txt (Netscape) OU o JSON de extensões (auto-converte p/ Netscape),
     pois o yt-dlp só lê o formato Netscape (tabs)."""
     exigir_usuario(authorization)
+    cfg = _plat(plataforma)
+    dominios, chave, rotulo, arquivo = cfg["dominios"], cfg["chave"], cfg["rotulo"], cfg["arquivo"]
+    dom_match = lambda t: any(d in t.lower() for d in dominios)
     data = await file.read()
     txt = data.decode("utf-8", errors="replace")
 
     convertido = False
-    # 1) Já é Netscape? (cabeçalho padrão ou linhas tab-separadas com sessionid do instagram)
+    # 1) Já é Netscape? (cabeçalho padrão ou linhas tab-separadas com domínio da plataforma)
     eh_netscape = txt.lstrip().startswith("# Netscape HTTP Cookie File") or (
-        "\t" in txt and "sessionid" in txt and "instagram" in txt.lower()
+        "\t" in txt and dom_match(txt) and (not chave or chave in txt)
     )
     if eh_netscape:
         saida_bytes = data  # preserva os BYTES exatos (tabs intactos)
@@ -612,23 +635,23 @@ async def configurar_cookies(file: UploadFile = File(...), authorization: str = 
         except json.JSONDecodeError:
             raise HTTPException(400, "Formato não reconhecido. Exporte como cookies.txt (Netscape) — "
                                      "recomendo a extensão 'Get cookies.txt LOCALLY' — ou um JSON de cookies.")
-        netscape = _cookies_json_para_netscape(obj)
+        netscape = _cookies_json_para_netscape(obj, dominios)
         if netscape is None:
-            raise HTTPException(400, "JSON de cookies inválido ou sem cookies do Instagram. "
-                                     "Confirme que exportou logado no instagram.com.")
+            raise HTTPException(400, f"JSON de cookies inválido ou sem cookies do {rotulo}. "
+                                     f"Confirme que exportou logado no {rotulo.lower()}.com.")
         saida_bytes = netscape.encode("utf-8")
         convertido = True
 
-    # Validação final: precisa do sessionid do Instagram
+    # Validação final: precisa conter o domínio da plataforma (e a chave de sessão, se houver)
     saida_txt = saida_bytes.decode("utf-8", errors="replace")
-    if "sessionid" not in saida_txt or "instagram" not in saida_txt.lower():
-        raise HTTPException(400, "Não achei o cookie 'sessionid' do Instagram logado — "
-                                 "confirme que estava logado no instagram.com ao exportar.")
+    if not dom_match(saida_txt) or (chave and chave not in saida_txt):
+        falta = f"o cookie '{chave}' do {rotulo} logado" if chave else f"cookies do {rotulo}"
+        raise HTTPException(400, f"Não achei {falta} — confirme que estava logado no {rotulo.lower()}.com ao exportar.")
 
-    COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    COOKIES_FILE.write_bytes(saida_bytes)
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_bytes(saida_bytes)
     try:
-        os.chmod(COOKIES_FILE, 0o600)
+        os.chmod(arquivo, 0o600)
     except Exception:
         pass
     return {"ok": True, "convertido": convertido}
@@ -1167,8 +1190,10 @@ def _yt_anti_bot() -> list:
     Usa o client 'android' (não exige login) e reaproveita os cookies (se houver)."""
     flags = ["--extractor-args", "youtube:player_client=android,web",
              "--retries", "3", "--fragment-retries", "3", "--socket-timeout", "20", "--no-warnings"]
-    if COOKIES_FILE.exists():
-        flags += ["--cookies", str(COOKIES_FILE)]
+    # Prefere os cookies do YouTube; cai p/ os do Instagram só se não houver (legado).
+    ck = YOUTUBE_COOKIES_FILE if YOUTUBE_COOKIES_FILE.exists() else COOKIES_FILE
+    if ck.exists():
+        flags += ["--cookies", str(ck)]
     return flags
 
 
@@ -1356,17 +1381,28 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
             start = max(0.0, min(start, dur_out))
             end = min(max(start + 1.5, end), dur_out)
             end = min(end, start + 6.0)
+            # B-roll que não baixou (asset_id=None) vira clipe vazio: o front mostraria tela
+            # preta (split) ou o vídeo principal "fake b-roll" (tela cheia). Melhor pular a
+            # inserção — o segmento fica talking_full naturalmente em clipsParaTimeline.
+            if asset_id is None:
+                continue
             clips.append({
                 "id": f"c{i}", "asset": asset_id, "layout": layout,
                 "start": round(start, 3), "end": round(end, 3),
                 "descricao": a.get("descricao", ""),
             })
+        avisos = []
         if fonte == "youtube":
             n_ok, n_tot = len(assets_map), len(alinhados)
             _log(db, job_id, f"📊 b-rolls do YouTube: {n_ok} de {n_tot} inserções")
             if n_ok == 0 and n_tot > 0:
-                _log(db, job_id, "⚠️ Nenhum b-roll baixado — o YouTube provavelmente bloqueou o yt-dlp na VPS "
-                                 "(precisa de cookies do YouTube) ou as buscas não acharam vídeo.")
+                msg = ("Nenhum b-roll do YouTube foi baixado — o YouTube provavelmente bloqueou o yt-dlp "
+                       "na VPS. Configure os cookies do YouTube no Workflow e gere novamente.")
+                _log(db, job_id, f"⚠️ {msg}")
+                avisos.append({"tipo": "broll_zero", "texto": msg})
+            elif 0 < n_ok < n_tot:
+                msg = f"Só {n_ok} de {n_tot} b-rolls do YouTube foram baixados; os demais foram omitidos da timeline."
+                avisos.append({"tipo": "broll_parcial", "texto": msg})
         # ordena e evita sobreposição (empurra o início pro fim do anterior)
         clips = [c for c in clips if c["end"] - c["start"] >= 0.3]
         clips.sort(key=lambda c: c["start"])
@@ -1384,6 +1420,7 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
             "durationInSeconds": dur_out,
             "videoSegments": video_segments,
             "originalDuration": original_dur,
+            "avisos": avisos,
         }
         db.table("video_jobs").update({"status": "editar", "etapa": None, "timeline": editor_doc, "erro": None}).eq("id", job_id).execute()
     except Exception as e:

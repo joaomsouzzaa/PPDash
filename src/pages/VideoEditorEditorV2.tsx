@@ -29,6 +29,7 @@ export default function VideoEditorEditorV2() {
   const navigate = useNavigate();
   const ed = useEditorDoc(jobId);
   const [aba, setAba] = useState<Aba>("midia");
+  const [avisosDispensados, setAvisosDispensados] = useState(false);  // banner de avisos da geração (ex.: b-rolls não baixados)
   const [capSelecionada, setCapSelecionada] = useState(false);  // legenda "selecionada" no preview → mostra toolbar flutuante
   const [tbPos, setTbPos] = useState<{ x: number; y: number } | null>(null);  // posição da toolbar flutuante (arrastável)
   const startDragToolbar = (e: React.PointerEvent) => {
@@ -139,6 +140,22 @@ export default function VideoEditorEditorV2() {
           {ed.renderizando ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Exportar
         </Button>
       </header>
+
+      {/* Avisos da geração (ex.: nenhum b-roll do YouTube baixado por bloqueio do yt-dlp) */}
+      {!avisosDispensados && (doc.avisos?.length ?? 0) > 0 && (
+        <div className="flex items-start gap-3 border-b border-amber-700/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+          <span className="mt-0.5">⚠️</span>
+          <div className="flex-1 space-y-0.5">
+            {doc.avisos!.map((a, i) => <p key={i}>{a.texto}</p>)}
+            <p className="text-amber-300/80">
+              Configure os cookies do YouTube no{" "}
+              <button className="underline hover:text-amber-100" onClick={() => navigate("/workflow")}>Workflow</button>{" "}
+              e gere a edição novamente.
+            </p>
+          </div>
+          <button className="text-amber-300/70 hover:text-amber-100" onClick={() => setAvisosDispensados(true)}>✕</button>
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0">
         {/* Barra de ícones */}

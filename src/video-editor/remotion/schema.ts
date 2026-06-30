@@ -231,6 +231,7 @@ export type EditorDoc = {
   // Fase 3 (cortes como clipes). Quando presente, a timeline é montada a partir destes.
   videoSegments?: VideoSegment[];  // trechos mantidos do ORIGINAL, em ordem
   originalDuration?: number;       // duração do vídeo original (s) — limite do "aparar pra mais"
+  avisos?: { tipo: string; texto: string }[];  // avisos da geração (ex.: b-rolls não baixados)
 };
 
 const FREE_VIDEO_EXT = /\.(mp4|mov|webm|mkv|m4v)$/i;

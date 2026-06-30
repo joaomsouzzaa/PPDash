@@ -5,22 +5,24 @@ const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined
 
 export type AnaliseProgresso = { pct: number; etapa: string; log?: string };
 
-// Status dos cookies do Instagram na VPS (p/ a UI mostrar se está configurado).
-export async function cookiesStatus(): Promise<{ configurado: boolean; atualizado_em?: string; tem_sessao?: boolean }> {
+export type PlataformaCookies = "instagram" | "youtube";
+
+// Status dos cookies (Instagram ou YouTube) na VPS (p/ a UI mostrar se está configurado).
+export async function cookiesStatus(plataforma: PlataformaCookies = "instagram"): Promise<{ configurado: boolean; atualizado_em?: string; tem_sessao?: boolean }> {
   if (!SERVICE_URL) throw new Error("Serviço de vídeo não configurado.");
   const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
-  const res = await fetch(`${SERVICE_URL}/cookies-status`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`${SERVICE_URL}/cookies-status?plataforma=${plataforma}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Falha (${res.status})`);
   return res.json();
 }
 
 // Envia o cookies.txt (exportado do navegador) direto pra VPS — sem SSH.
-export async function configurarCookiesInstagram(file: File): Promise<void> {
+export async function configurarCookiesInstagram(file: File, plataforma: PlataformaCookies = "instagram"): Promise<void> {
   if (!SERVICE_URL) throw new Error("Serviço de vídeo não configurado.");
   const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
   const form = new FormData();
   form.append("file", file, file.name || "cookies.txt");
-  const res = await fetch(`${SERVICE_URL}/configurar-cookies`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+  const res = await fetch(`${SERVICE_URL}/configurar-cookies?plataforma=${plataforma}`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
   const j = await res.json().catch(() => ({}));
   if (!res.ok || !j?.ok) throw new Error(j?.detail || j?.error || `Falha ao enviar cookies (${res.status})`);
 }

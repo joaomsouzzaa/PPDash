@@ -133,11 +133,19 @@ const OverlayCard: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, previ
   </AbsoluteFill>
 );
 
-const ImageFullscreen: React.FC<Ctx> = ({ assetSrc, videoSrc, videoStartFrame, isVideoAsset, preview, videoVolume, speed, assetSpeed, cropY, crop, assetStartFrame }) => (
+// Placeholder quando o b-roll não tem mídia (não baixou): deixa claro que é mídia faltando,
+// em vez de cair no vídeo principal "fake b-roll" e esconder a falha.
+const BrollFaltando: React.FC = () => (
+  <AbsoluteFill style={{ backgroundColor: "#1a1a1a", justifyContent: "center", alignItems: "center" }}>
+    <span style={{ color: "#888", fontSize: 28, fontFamily: "sans-serif" }}>b-roll não disponível</span>
+  </AbsoluteFill>
+);
+
+const ImageFullscreen: React.FC<Ctx> = ({ assetSrc, isVideoAsset, preview, cropY, crop, assetStartFrame, assetSpeed }) => (
   <AbsoluteFill style={{ backgroundColor: "#000" }}>
     {assetSrc
       ? <Asset src={assetSrc} isVideo={isVideoAsset(assetSrc)} preview={preview} cropY={cropY} crop={crop} fromFrame={assetStartFrame} playbackRate={assetSpeed} />
-      : <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} playbackRate={speed} />}
+      : <BrollFaltando />}
   </AbsoluteFill>
 );
 
@@ -146,7 +154,7 @@ const BrollFullscreen: React.FC<Ctx> = ({ videoSrc, videoStartFrame, assetSrc, i
     <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} playbackRate={speed} style={{ display: "none" }} />
     {assetSrc
       ? <Asset src={assetSrc} isVideo={isVideoAsset(assetSrc)} preview={preview} cropY={cropY} crop={crop} fromFrame={assetStartFrame} playbackRate={assetSpeed} />
-      : <Head src={videoSrc} from={videoStartFrame} preview={preview} volume={videoVolume} playbackRate={speed} />}
+      : <BrollFaltando />}
   </AbsoluteFill>
 );
 
