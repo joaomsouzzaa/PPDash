@@ -971,6 +971,20 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     }
   };
 
+  // Limpa a análise atual (roteiro + plano) e reseta os campos pra rodar uma nova referência.
+  const limpar = async () => {
+    if (!window.confirm("Limpar o roteiro adaptado e o plano de inserções para fazer uma nova análise?")) return;
+    try {
+      await db.from("tarefas").update({ video_ref: null, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      setUrl(""); setProg(null); setLogs([]); setLogAberto(false); setInicioAnalise(null); setDriveUrl("");
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      qc.invalidateQueries({ queryKey: ["tarefas"] });
+      toast.success("Análise limpa — cole uma nova referência.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao limpar.");
+    }
+  };
+
   const analisar = async () => {
     if (!url.trim()) { toast.error("Cole o link do vídeo de referência."); return; }
     if (!SERVICE_URL_VE) { toast.error("Serviço de vídeo não configurado."); return; }
@@ -1119,7 +1133,12 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       )}
       {ref?.roteiro && (
         <div className="space-y-2 rounded-md border p-3 text-sm">
-          <p className="text-xs font-semibold text-muted-foreground">ROTEIRO ADAPTADO</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground">ROTEIRO ADAPTADO</p>
+            <Button onClick={limpar} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Limpar / Nova análise
+            </Button>
+          </div>
           <p className="whitespace-pre-wrap text-sm">{ref.roteiro}</p>
           {Array.isArray(ref.insertion_plan) && ref.insertion_plan.length > 0 && (
             <>
