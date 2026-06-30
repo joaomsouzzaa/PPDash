@@ -26,7 +26,7 @@ type TipoPergunta =
   | "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao"
   | "email" | "telefone" | "numero" | "data" | "dropdown"
   | "escala_opiniao" | "nps" | "avaliacao";
-type Opcao = { id: string; label: string };
+type Opcao = { id: string; label: string; pontos?: number | null };
 type Regra = { quando_opcao_id: string; ir_para_pergunta_id: string | null }; // null = finalizar; "" = próxima
 type Pergunta = {
   id: string;
@@ -235,8 +235,12 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
     });
   };
 
-  const addOpcao = (p: Pergunta) => upd(p.id, { opcoes: [...p.opcoes, { id: rid(), label: `Opção ${p.opcoes.length + 1}` }] });
+  const addOpcao = (p: Pergunta) => upd(p.id, { opcoes: [...p.opcoes, { id: rid(), label: `Opção ${p.opcoes.length + 1}`, pontos: null }] });
   const updOpcao = (p: Pergunta, oid: string, label: string) => upd(p.id, { opcoes: p.opcoes.map((o) => (o.id === oid ? { ...o, label } : o)) });
+  // Pontuação da opção: vazio → null (não pontua); senão número. Uma pergunta só conta no
+  // score (tela de Resultados) quando alguma de suas opções tem pontos numérico.
+  const updOpcaoPontos = (p: Pergunta, oid: string, valor: string) =>
+    upd(p.id, { opcoes: p.opcoes.map((o) => (o.id === oid ? { ...o, pontos: valor.trim() === "" ? null : Number(valor) } : o)) });
   const removerOpcao = (p: Pergunta, oid: string) =>
     upd(p.id, { opcoes: p.opcoes.filter((o) => o.id !== oid), logica: p.logica.filter((r) => r.quando_opcao_id !== oid) });
 
@@ -400,9 +404,17 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                 {TIPOS_OPCOES.includes(sel.tipo) && (
                   <div className="space-y-2">
                     <Label>Opções</Label>
+                    <p className="text-[11px] text-muted-foreground">No campo "pts" defina a pontuação da opção (deixe vazio para não pontuar).</p>
                     {sel.opcoes.map((o) => (
                       <div key={o.id} className="flex gap-1">
                         <Input value={o.label} onChange={(e) => updOpcao(sel, o.id, e.target.value)} />
+                        <Input
+                          type="number"
+                          className="w-16 shrink-0"
+                          placeholder="pts"
+                          value={o.pontos ?? ""}
+                          onChange={(e) => updOpcaoPontos(sel, o.id, e.target.value)}
+                        />
                         <Button size="icon" variant="ghost" onClick={() => removerOpcao(sel, o.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     ))}
@@ -468,14 +480,45 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
   const valorCelula = (p: Pergunta, r: { respostas: Record<string, any> }) =>
     TIPOS_BIFURCAVEIS.includes(p.tipo) ? labelOpcao(p, r.respostas?.[p.id]) : (r.respostas?.[p.id] ?? "");
 
+  // ----- Pontuação (só aparece se houver perguntas com pontos definidos) -----
+  // Uma pergunta conta quando alguma de suas opções tem `pontos` numérico.
+  const temPonto = (o: Opcao) => typeof o.pontos === "number";
+  const perguntasPontuadas = perguntas.filter((p) => opcoesDaPergunta(p).some(temPonto));
+  const temPontuacao = perguntasPontuadas.length > 0;
+  const maxTotal = perguntasPontuadas.reduce(
+    (acc, p) => acc + Math.max(0, ...opcoesDaPergunta(p).map((o) => (temPonto(o) ? (o.pontos as number) : 0))),
+    0,
+  );
+  const faixaDe = (pct: number) =>
+    pct >= 80 ? "Pronto para franquear"
+      : pct >= 60 ? "Quase lá"
+      : pct >= 40 ? "Precisa estruturar"
+      : "Ainda não é o momento";
+  const calcularScore = (r: { respostas: Record<string, any> }) => {
+    const total = perguntasPontuadas.reduce((acc, p) => {
+      const escolhida = opcoesDaPergunta(p).find((o) => o.id === r.respostas?.[p.id]);
+      return acc + (escolhida && temPonto(escolhida) ? (escolhida.pontos as number) : 0);
+    }, 0);
+    const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
+    return { total, pct, faixa: faixaDe(pct) };
+  };
+
   // Exporta as respostas em CSV (separador ; e BOM para abrir corretamente no Excel pt-BR).
   const exportarCSV = () => {
     const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const cabecalho = ["Data", ...perguntas.map((p, i) => `${i + 1}. ${p.titulo}`)];
-    const linhas = respostas.map((r) => [
-      new Date(r.created_at).toLocaleString("pt-BR"),
-      ...perguntas.map((p) => valorCelula(p, r)),
-    ]);
+    const cabecalho = [
+      "Data",
+      ...perguntas.map((p, i) => `${i + 1}. ${p.titulo}`),
+      ...(temPontuacao ? ["Pontuação", "%", "Faixa"] : []),
+    ];
+    const linhas = respostas.map((r) => {
+      const s = temPontuacao ? calcularScore(r) : null;
+      return [
+        new Date(r.created_at).toLocaleString("pt-BR"),
+        ...perguntas.map((p) => valorCelula(p, r)),
+        ...(s ? [`${s.total}/${maxTotal}`, `${s.pct}%`, s.faixa] : []),
+      ];
+    });
     const csv = [cabecalho, ...linhas].map((l) => l.map(esc).join(";")).join("\r\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -505,17 +548,26 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
               <TableRow>
                 <TableHead className="w-32">Data</TableHead>
                 {perguntas.map((p, i) => <TableHead key={p.id}>{i + 1}. {p.titulo}</TableHead>)}
+                {temPontuacao && <TableHead className="text-center">Pontuação</TableHead>}
+                {temPontuacao && <TableHead className="text-center">%</TableHead>}
+                {temPontuacao && <TableHead>Faixa</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {respostas.map((r) => (
+              {respostas.map((r) => {
+                const s = temPontuacao ? calcularScore(r) : null;
+                return (
                 <TableRow key={r.id}>
                   <TableCell className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString("pt-BR")}</TableCell>
                   {perguntas.map((p) => (
                     <TableCell key={p.id} className="text-sm">{valorCelula(p, r)}</TableCell>
                   ))}
+                  {s && <TableCell className="text-center font-medium">{s.total}/{maxTotal}</TableCell>}
+                  {s && <TableCell className="text-center font-medium">{s.pct}%</TableCell>}
+                  {s && <TableCell className="text-sm">{s.faixa}</TableCell>}
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}

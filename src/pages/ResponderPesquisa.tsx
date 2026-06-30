@@ -11,7 +11,7 @@ type TipoPergunta =
   | "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao"
   | "email" | "telefone" | "numero" | "data" | "dropdown"
   | "escala_opiniao" | "nps" | "avaliacao";
-type Opcao = { id: string; label: string };
+type Opcao = { id: string; label: string; pontos?: number | null };
 type Regra = { quando_opcao_id: string; ir_para_pergunta_id: string | null };
 type Pergunta = {
   id: string; ordem: number; titulo: string; descricao: string | null;
