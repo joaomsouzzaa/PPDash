@@ -17,11 +17,14 @@ import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDo
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
+import { uploadComProgresso } from "@/lib/upload";
 import { analisarReferenciaStream, configurarCookiesInstagram, cookiesStatus } from "@/lib/videoAnalise";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-type Coluna = { id: string; nome: string; ordem: number; agente_id: string | null };
+const MAX_UPLOAD_MB = 200;
+
+type Coluna ={ id: string; nome: string; ordem: number; agente_id: string | null };
 type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null };
 type Agente = { id: string; nome: string };
 type Resposta = { id: string; autor: string | null; conteudo: string; created_at: string };
@@ -225,6 +228,7 @@ export default function Workflow() {
 
   const [gerando, setGerando] = useState<"imagem" | "video" | null>(null);
   const [enviandoUpload, setEnviandoUpload] = useState(false);
+  const [progresso, setProgresso] = useState<{ pct: number; loaded: number; total: number } | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [provider, setProvider] = useState<"higgsfield" | "openai">("higgsfield");
   const [projetoId, setProjetoId] = useState<string>("_auto");
@@ -267,19 +271,26 @@ export default function Workflow() {
   const uploadArte = async (files: FileList | null) => {
     if (!editing) { toast.error("Salve a tarefa antes de anexar"); return; }
     if (!files || files.length === 0) return;
+    const orgId = await getOrgId();
+    if (!orgId) { toast.error("Organização não identificada."); return; }
     setEnviandoUpload(true);
     let ok = 0;
     for (const file of Array.from(files)) {
+      if (file.size > MAX_UPLOAD_MB * 1024 * 1024) { toast.error(`${file.name} excede ${MAX_UPLOAD_MB} MB`); continue; }
       const tipo = file.type.startsWith("video") ? "video" : "imagem";
-      const path = `${editing.id}/${crypto.randomUUID()}-${file.name}`;
-      const up = await supabase.storage.from("artes-tarefas").upload(path, file, { contentType: file.type || undefined });
-      if (up.error) { toast.error(`Erro ao subir ${file.name}: ${up.error.message}`); continue; }
+      const path = `${orgId}/${editing.id}/${crypto.randomUUID()}-${file.name}`;
+      setProgresso({ pct: 0, loaded: 0, total: file.size });
+      try {
+        await uploadComProgresso("artes-tarefas", path, file,
+          (loaded, total) => setProgresso({ loaded, total, pct: Math.round((loaded / total) * 100) }));
+      } catch (e: any) { toast.error(`Erro ao subir ${file.name}: ${e?.message || "falhou"}`); continue; }
       const url = supabase.storage.from("artes-tarefas").getPublicUrl(path).data.publicUrl;
       const ins = await supabase.from("tarefa_anexos").insert({ tarefa_id: editing.id, tipo, url, status: "pronto", origem: "upload" });
       if (ins.error) { toast.error(`Erro ao anexar ${file.name}`); continue; }
       ok++;
     }
     setEnviandoUpload(false);
+    setProgresso(null);
     if (uploadRef.current) uploadRef.current.value = "";
     if (ok > 0) {
       toast.success(`${ok} arquivo(s) anexado(s)!`);
@@ -736,6 +747,16 @@ export default function Workflow() {
                   <Button variant="outline" size="sm" disabled={enviandoUpload} onClick={() => uploadRef.current?.click()}>
                     {enviandoUpload ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} Anexar arquivo
                   </Button>
+                  {enviandoUpload && progresso && (
+                    <div className="space-y-1 pt-2">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progresso.pct}%` }} />
+                      </div>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {progresso.pct}% · {(progresso.loaded / 1048576).toFixed(1)} MB de {MAX_UPLOAD_MB} MB
+                      </p>
+                    </div>
+                  )}
                 </div>
                 {(() => {
                   const prontos = anexos.filter((a) => a.status === "pronto" && a.url);
