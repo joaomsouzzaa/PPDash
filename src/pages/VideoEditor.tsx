@@ -426,7 +426,7 @@ export default function VideoEditor() {
                           </>
                         )}
                         {(j.status === "erro" || j.status === "pronto") && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Reprocessar (refazer com os ajustes atuais)" onClick={() => reprocessar(j)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title={j.nome === "Edição (referência)" ? "Reprocessar (refaz o corte, o alinhamento e os b-rolls da referência)" : "Reprocessar (refazer com os ajustes atuais)"} onClick={() => reprocessar(j)}>
                             <RotateCcw className="h-4 w-4" />
                           </Button>
                         )}

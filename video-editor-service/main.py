@@ -445,12 +445,13 @@ def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frame
             "   - AUTORIDADE / CONEXÃO (seguir): a virada conecta logicamente com a marca como prova de visão/autoridade, e o CTA é SEGUIR O PERFIL (não vender franquia). Use quando o caso é mais história/insight/cultura e empurrar franquia soaria forçado.\n"
             "   NÃO assuma conversão por padrão: julgue caso a caso e varie entre os dois objetivos.\n"
             "Saída em DUAS partes, nesta ordem:\n"
-            "1) O ROTEIRO em **markdown bem formatado** (NÃO use JSON aqui), no estilo:\n"
+            "REGRA DE FORMATAÇÃO (OBRIGATÓRIA): escreva o roteiro em TEXTO PURO. NÃO use markdown — nada de `*` ou `**` (negrito/itálico), nem `#`/`##`/`###` (títulos). Para destacar, use MAIÚSCULAS. O texto é exibido cru, então qualquer `*` aparece literalmente.\n"
+            "1) O ROTEIRO em texto puro (NÃO use JSON aqui), no estilo:\n"
             "   - uma linha `🎯 Objetivo: Conversão` ou `🎯 Objetivo: Autoridade` (a escolha do Passo 0);\n"
             "   - uma linha de contexto/premissa que você assumiu (e peça correção se necessário);\n"
-            "   - título `## 🎬 ROTEIRO — ...`;\n"
-            "   - blocos por tempo `**[mm:ss–mm:ss] — NOME DO BLOCO**` com `🎥 B-roll: ...`, `🗣️ \"fala...\"`, `📝 Texto na tela: **...**`;\n"
-            "   - `### 📌 Legenda do post` e `### 📌 Notas de produção`.\n"
+            "   - título `🎬 ROTEIRO — ...`;\n"
+            "   - blocos por tempo `[mm:ss–mm:ss] — NOME DO BLOCO` com `🎥 B-roll: ...`, `🗣️ \"fala...\"`, `📝 Texto na tela: ...`;\n"
+            "   - `📌 Legenda do post` e `📌 Notas de produção`.\n"
             "   REGRA CENTRAL DA ADAPTAÇÃO (siga à risca, vale para os DOIS objetivos): NÃO invente uma história nova sobre o cliente e NÃO troque o caso da referência por outro caso. "
             "Você CONTA A MESMA HISTÓRIA/o MESMO CASO REAL da referência (mesmos fatos, mesma sequência: gancho → contexto → virada → lição), exatamente como no vídeo original. "
             "O CLIENTE só ENTRA na virada/lição e no CTA — ele não vira o protagonista da história. O PAPEL do cliente na virada e o CTA dependem do objetivo do Passo 0: "
@@ -521,7 +522,7 @@ def montar_edicao(body: dict, authorization: str = Header(default="")):
     job_id = str(uuid.uuid4())
     db.table("video_jobs").insert({
         "id": job_id, "org_id": org_id, "nome": "Edição (referência)", "video_url": "",
-        "status": "processando", "etapa": "na fila", "modo": "completo",
+        "status": "processando", "etapa": "na fila", "modo": "montar",
     }).execute()
     # guarda o job no card para abrir o editor depois
     row = db.table("tarefas").select("video_ref").eq("id", card_id).maybe_single().execute()
@@ -702,13 +703,29 @@ def reprocessar(background: BackgroundTasks, body: dict, authorization: str = He
     job_id = (body or {}).get("job_id")
     if not job_id:
         raise HTTPException(400, "job_id obrigatório")
-    if not input_path(job_id).exists():
-        raise HTTPException(409, "O vídeo original não está mais salvo na VPS. Reenvie o vídeo.")
     db = svc()
     row = db.table("video_jobs").select("brief,org_id,modo").eq("id", job_id).maybe_single().execute()
     brief = (row.data or {}).get("brief") or ""
     org_id = (row.data or {}).get("org_id") or ""
     modo = (row.data or {}).get("modo") or "corte"
+
+    # Job de referência (fluxo "Montar"): re-rodar processar_montar para refazer os b-rolls,
+    # senão a edição simples sobrescreveria a timeline sem b-roll. Detecta pelo card que aponta
+    # para este job (cobre jobs antigos gravados como modo="completo", não só os novos "montar").
+    card = db.table("tarefas").select("id,video_ref,org_id").eq("video_ref->>job_id", job_id).maybe_single().execute()
+    vr = (card.data or {}).get("video_ref") or {}
+    drive_url = vr.get("drive_url")
+    if drive_url and (modo == "montar" or vr.get("insertion_plan")):
+        # processar_montar re-baixa o bruto do Drive, então NÃO exige input_path salvo.
+        card_id = card.data["id"]
+        fonte = vr.get("fonte_broll") or "literal"
+        org_id = org_id or (card.data or {}).get("org_id") or ""
+        db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "modo": "montar", "erro": None}).eq("id", job_id).execute()
+        enqueue("montar", job_id, card_id, drive_url, fonte, org_id)
+        return {"ok": True, "job_id": job_id, "status": "processando"}
+
+    if not input_path(job_id).exists():
+        raise HTTPException(409, "O vídeo original não está mais salvo na VPS. Reenvie o vídeo.")
     if modo == "completo" and not (WORK_DIR / job_id / "assets").exists():
         raise HTTPException(409, "Os assets deste job não estão mais salvos. Reenvie.")
     db.table("video_jobs").update({"status": "processando", "etapa": "na fila", "erro": None}).eq("id", job_id).execute()

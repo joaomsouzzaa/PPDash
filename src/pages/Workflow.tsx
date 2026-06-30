@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight } from "lucide-react";
+import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight, Upload } from "lucide-react";
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
@@ -224,6 +224,8 @@ export default function Workflow() {
   const isDesign = /design|arte/i.test(etapaNome);
 
   const [gerando, setGerando] = useState<"imagem" | "video" | null>(null);
+  const [enviandoUpload, setEnviandoUpload] = useState(false);
+  const uploadRef = useRef<HTMLInputElement>(null);
   const [provider, setProvider] = useState<"higgsfield" | "openai">("higgsfield");
   const [projetoId, setProjetoId] = useState<string>("_auto");
   const [lightbox, setLightbox] = useState<Anexo | null>(null);
@@ -258,6 +260,31 @@ export default function Workflow() {
     }
     queryClient.invalidateQueries({ queryKey: ["anexos", editing.id] });
     queryClient.invalidateQueries({ queryKey: ["respostas", editing.id] });
+  };
+
+  // Anexar arquivo do computador: sobe pro bucket artes-tarefas e cria anexo "pronto"
+  // (mesmo destino das artes geradas → vira mídia selecionável e publicável).
+  const uploadArte = async (files: FileList | null) => {
+    if (!editing) { toast.error("Salve a tarefa antes de anexar"); return; }
+    if (!files || files.length === 0) return;
+    setEnviandoUpload(true);
+    let ok = 0;
+    for (const file of Array.from(files)) {
+      const tipo = file.type.startsWith("video") ? "video" : "imagem";
+      const path = `${editing.id}/${crypto.randomUUID()}-${file.name}`;
+      const up = await supabase.storage.from("artes-tarefas").upload(path, file, { contentType: file.type || undefined });
+      if (up.error) { toast.error(`Erro ao subir ${file.name}: ${up.error.message}`); continue; }
+      const url = supabase.storage.from("artes-tarefas").getPublicUrl(path).data.publicUrl;
+      const ins = await supabase.from("tarefa_anexos").insert({ tarefa_id: editing.id, tipo, url, status: "pronto", origem: "upload" });
+      if (ins.error) { toast.error(`Erro ao anexar ${file.name}`); continue; }
+      ok++;
+    }
+    setEnviandoUpload(false);
+    if (uploadRef.current) uploadRef.current.value = "";
+    if (ok > 0) {
+      toast.success(`${ok} arquivo(s) anexado(s)!`);
+      queryClient.invalidateQueries({ queryKey: ["anexos", editing.id] });
+    }
   };
 
   const novaTarefa = (colunaId?: string) => {
@@ -704,6 +731,12 @@ export default function Workflow() {
             {editing && (
               <div className="space-y-3 border-t border-border pt-3">
                 <Label className="flex items-center gap-2 text-sm"><ImageIcon className="h-4 w-4 text-primary" /> Publicar no Instagram</Label>
+                <div>
+                  <input ref={uploadRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => uploadArte(e.target.files)} />
+                  <Button variant="outline" size="sm" disabled={enviandoUpload} onClick={() => uploadRef.current?.click()}>
+                    {enviandoUpload ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} Anexar arquivo
+                  </Button>
+                </div>
                 {(() => {
                   const prontos = anexos.filter((a) => a.status === "pronto" && a.url);
                   const midiasMockup = igSelecao.length ? igSelecao : prontos.map((a) => a.url!);
@@ -1207,27 +1240,33 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
           <div className="mt-3 space-y-2 border-t pt-3">
             <p className="text-xs font-semibold text-muted-foreground">MONTAR EDIÇÃO (após gravar)</p>
             <Input value={driveUrl} onChange={(e) => setDriveUrl(e.target.value)} placeholder="Link do Drive com o vídeo bruto (compartilhável)" className="text-sm" />
+            {(() => { const linkSalvo = !!(ref as any)?.drive_url; return (
             <div className="flex flex-wrap items-center gap-2">
-              <Select value={fonte} onValueChange={(v) => setFonte(v as any)}>
-                <SelectTrigger className="h-9 w-[260px] text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="literal">Recortar b-rolls da referência (literal)</SelectItem>
-                  <SelectItem value="youtube">Buscar b-rolls no YouTube (automático)</SelectItem>
-                  <SelectItem value="assets">Só timing (eu coloco as mídias no editor)</SelectItem>
-                </SelectContent>
-              </Select>
+              {linkSalvo && (
+                <Select value={fonte} onValueChange={(v) => setFonte(v as any)}>
+                  <SelectTrigger className="h-9 w-[260px] text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="literal">Recortar b-rolls da referência (literal)</SelectItem>
+                    <SelectItem value="youtube">Buscar b-rolls no YouTube (automático)</SelectItem>
+                    <SelectItem value="assets">Só timing (eu coloco as mídias no editor)</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <Button onClick={salvarDrive} size="sm" variant="outline">Salvar link</Button>
-              <Button onClick={montar} disabled={montando} size="sm" variant="secondary">
-                {montando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
-                Montar edição
-              </Button>
-              {(ref as any).job_id && (
+              {linkSalvo && (
+                <Button onClick={montar} disabled={montando} size="sm" variant="secondary">
+                  {montando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Video className="mr-2 h-4 w-4" />}
+                  Montar edição
+                </Button>
+              )}
+              {linkSalvo && (ref as any).job_id && (
                 <Button onClick={() => setEditorOpen(true)} size="sm" disabled={montandoJob}>
                   {montandoJob ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Abrir editor
                 </Button>
               )}
             </div>
-            {fonte === "youtube" && (
+            ); })()}
+            {!!(ref as any)?.drive_url && fonte === "youtube" && (
               <p className="text-[11px] text-amber-600 dark:text-amber-400">
                 ⚠️ Busca automática no YouTube: mantém os mesmos momentos/quantidade de b-roll da referência, mas pode usar
                 conteúdo com direitos autorais e o processamento é mais lento (baixa um clipe por inserção).
