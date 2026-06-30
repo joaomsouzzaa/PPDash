@@ -997,6 +997,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     if (!url.trim()) { toast.error("Cole o link do vídeo de referência."); return; }
     if (!SERVICE_URL_VE) { toast.error("Serviço de vídeo não configurado."); return; }
     setAnalisando(true);
+    setLogAberto(true);
     setProg({ pct: 0, etapa: "iniciando" });
     setLogs([]);
     setInicioAnalise(Date.now());
