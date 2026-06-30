@@ -17,12 +17,12 @@ import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDo
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
-import { uploadComProgresso } from "@/lib/upload";
+import { uploadComProgresso, uploadMidiaVPS } from "@/lib/upload";
 import { analisarReferenciaStream, configurarCookiesInstagram, cookiesStatus } from "@/lib/videoAnalise";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-const MAX_UPLOAD_MB = 200;
+const MAX_UPLOAD_MB = 500;
 
 type Coluna ={ id: string; nome: string; ordem: number; agente_id: string | null };
 type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null };
@@ -278,13 +278,19 @@ export default function Workflow() {
     for (const file of Array.from(files)) {
       if (file.size > MAX_UPLOAD_MB * 1024 * 1024) { toast.error(`${file.name} excede ${MAX_UPLOAD_MB} MB`); continue; }
       const tipo = file.type.startsWith("video") ? "video" : "imagem";
-      const path = `${orgId}/${editing.id}/${crypto.randomUUID()}-${file.name}`;
+      const onProg = (loaded: number, total: number) => setProgresso({ loaded, total, pct: Math.round((loaded / total) * 100) });
       setProgresso({ pct: 0, loaded: 0, total: file.size });
+      // Vídeo vai pra VPS (Storage do Supabase trava em 50MB no plano free); imagem fica no Supabase (isolado por org via RLS).
+      let url: string;
       try {
-        await uploadComProgresso("artes-tarefas", path, file,
-          (loaded, total) => setProgresso({ loaded, total, pct: Math.round((loaded / total) * 100) }));
+        if (tipo === "video") {
+          url = await uploadMidiaVPS(file, orgId, onProg);
+        } else {
+          const path = `${orgId}/${editing.id}/${crypto.randomUUID()}-${file.name}`;
+          await uploadComProgresso("artes-tarefas", path, file, onProg);
+          url = supabase.storage.from("artes-tarefas").getPublicUrl(path).data.publicUrl;
+        }
       } catch (e: any) { toast.error(`Erro ao subir ${file.name}: ${e?.message || "falhou"}`); continue; }
-      const url = supabase.storage.from("artes-tarefas").getPublicUrl(path).data.publicUrl;
       const ins = await supabase.from("tarefa_anexos").insert({ tarefa_id: editing.id, tipo, url, status: "pronto", origem: "upload" });
       if (ins.error) { toast.error(`Erro ao anexar ${file.name}`); continue; }
       ok++;

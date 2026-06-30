@@ -28,12 +28,13 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import tempfile
 import uuid
 
 import anthropic
-from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -549,6 +550,34 @@ async def upload_asset(job_id: str = Form(...), file: UploadFile = File(...), au
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
     return {"ok": True, "path": f"assets/{nome}"}
+
+
+@app.post("/upload-midia")
+async def upload_midia(request: Request, org_id: str, filename: str = "midia", authorization: str = Header(default="")):
+    """Recebe uma mídia (vídeo) direto do navegador como corpo cru e a serve publicamente em
+    /files/uploads/<org_id>/<arquivo>, devolvendo a URL pública. Existe para o Instagram poder
+    baixar vídeos grandes sem depender do Storage do Supabase (plano free trava em 50MB).
+    Streama o corpo direto pro disco, então aguenta arquivos grandes sem estourar memória."""
+    exigir_usuario(authorization)
+    if not PUBLIC_BASE:
+        raise HTTPException(500, "PUBLIC_BASE não configurado")
+    safe_org = re.sub(r"[^a-zA-Z0-9_-]", "", org_id)[:64] or "sem-org"
+    ext = pathlib.Path(pathlib.Path(filename).name).suffix.lower()[:10]
+    nome = f"{uuid.uuid4().hex}{ext}"
+    destino_dir = OUTPUT_DIR / "uploads" / safe_org
+    destino_dir.mkdir(parents=True, exist_ok=True)
+    destino = destino_dir / nome
+    try:
+        with open(destino, "wb") as f:
+            async for chunk in request.stream():
+                f.write(chunk)
+    except Exception as e:
+        destino.unlink(missing_ok=True)
+        raise HTTPException(500, f"Falha ao salvar: {e}")
+    if destino.stat().st_size == 0:
+        destino.unlink(missing_ok=True)
+        raise HTTPException(400, "Arquivo vazio")
+    return {"ok": True, "url": f"{PUBLIC_BASE}/files/uploads/{safe_org}/{nome}"}
 
 
 # Configuração de cookies por plataforma: arquivo de destino, domínios aceitos e cookie-chave.
@@ -1218,9 +1247,26 @@ def _yt_anti_bot() -> list:
              "--retries", "3", "--fragment-retries", "3", "--socket-timeout", "30", "--no-warnings"]
     # Prefere os cookies do YouTube; cai p/ os do Instagram só se não houver (legado).
     ck = YOUTUBE_COOKIES_FILE if YOUTUBE_COOKIES_FILE.exists() else COOKIES_FILE
-    if ck.exists():
-        flags += ["--cookies", str(ck)]
+    use = _cookie_descartavel(ck)
+    if use:
+        flags += ["--cookies", str(use)]
     return flags
+
+
+def _cookie_descartavel(master: pathlib.Path) -> pathlib.Path | None:
+    """⚠️ O yt-dlp REESCREVE o arquivo de --cookies a cada chamada (salva a sessão rotacionada).
+    Em IP de datacenter o YouTube poda/invalida a sessão rápido, e gravar isso de volta CORROMPE o
+    master (perdemos o login após 1-2 usos). Então cada chamada usa uma CÓPIA descartável: o yt-dlp
+    escreve na cópia, e o master (como o usuário subiu) fica intacto, válido pelo seu TTL.
+    Reescreve a cópia a partir do master a cada chamada (downloads são sequenciais → sem corrida)."""
+    if not master.exists():
+        return None
+    copia = master.parent / ".ytcookies_uso.txt"
+    try:
+        shutil.copyfile(str(master), str(copia))
+        return copia
+    except Exception:
+        return master
 
 
 def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf: str = "",
