@@ -50,7 +50,7 @@ async function graphGet(token: string, path: string, params: Record<string, stri
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const r = await fetch(url.toString());
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.error?.error_user_msg || j?.error?.message || `Graph API ${r.status}`);
+  if (!r.ok) throw graphError(j, r.status);
   return j;
 }
 
@@ -60,8 +60,22 @@ async function graphPost(token: string, path: string, params: Record<string, str
   for (const [k, v] of Object.entries(params)) form.set(k, v);
   const r = await fetch(`${GRAPH}${path}`, { method: "POST", body: form, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.error?.error_user_msg || j?.error?.message || `Graph API ${r.status}`);
+  if (!r.ok) throw graphError(j, r.status);
   return j;
+}
+
+// Monta um erro legível preservando o detalhe da Meta (subcode/título/trace),
+// que de outra forma vira só "An unknown error has occurred." (genérico).
+function graphError(j: any, status: number): Error {
+  const e = j?.error || {};
+  const partes = [
+    e.error_user_title,
+    e.error_user_msg || e.message,
+    e.code != null ? `code ${e.code}` : null,
+    e.error_subcode != null ? `subcode ${e.error_subcode}` : null,
+    e.fbtrace_id ? `trace ${e.fbtrace_id}` : null,
+  ].filter(Boolean);
+  return new Error(partes.length ? partes.join(" | ") : `Graph API ${status}`);
 }
 
 // Espera o container de vídeo (Reels) ficar pronto. Retorna true se FINISHED.
@@ -73,6 +87,21 @@ async function aguardarContainer(token: string, creationId: string, tentativas =
     await new Promise((r) => setTimeout(r, intervaloMs));
   }
   return false;
+}
+
+// Publica o container com retry. O media_publish de Reels às vezes devolve um
+// erro genérico transitório mesmo com o container FINISHED; re-tentar resolve.
+async function publicarComRetry(token: string, ig: string, creationId: string, tentativas = 3, intervaloMs = 10000): Promise<any> {
+  let ultimoErro: unknown;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await graphPost(token, `/${ig}/media_publish`, { creation_id: creationId });
+    } catch (err) {
+      ultimoErro = err;
+      if (i < tentativas - 1) await new Promise((r) => setTimeout(r, intervaloMs));
+    }
+  }
+  throw ultimoErro;
 }
 
 // Lógica central de publicação. Atualiza ig_posts conforme avança.
@@ -102,7 +131,7 @@ export async function processarPost(supabase: any, post: any): Promise<{ done: b
       }
       const pronto = await aguardarContainer(token, creationId!);
       if (!pronto) return { done: false }; // o cron tenta de novo depois
-      const pub = await graphPost(token, `/${ig}/media_publish`, { creation_id: creationId! });
+      const pub = await publicarComRetry(token, ig, creationId!);
       await finalizar(supabase, token, post.id, pub.id);
       return { done: true };
     }

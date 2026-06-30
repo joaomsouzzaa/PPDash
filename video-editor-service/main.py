@@ -1210,12 +1210,15 @@ def _queries_youtube(alinhados: list, brief: str = "") -> dict:
     try:
         client = anthropic.Anthropic()
         system = (
-            "Para CADA inserção de b-roll, gere uma BUSCA de YouTube que encontre um vídeo de IMAGEM "
-            "ILUSTRATIVA (b-roll/stock footage) do que está sendo dito. Regras:\n"
-            "- 3 a 6 palavras VISUAIS concretas (objetos, lugares, ações), de preferência em INGLÊS (acha mais stock).\n"
-            "- SEMPRE termine com 'stock footage' ou 'b roll' (ex.: 'stock market crash red graph b roll').\n"
-            "- Prefira imagens CINEMATOGRÁFICAS, sem pessoas falando à câmera e sem texto na tela.\n"
-            "- Evite nomes próprios pouco conhecidos.\n"
+            "Para CADA inserção de b-roll, gere uma BUSCA de YouTube que ache um b-roll/stock footage que "
+            "ILUSTRE LITERALMENTE o que a pessoa fala naquele trecho ('linha'). Regras:\n"
+            "- Use os SUBSTANTIVOS CONCRETOS realmente ditos no trecho (objetos, lugares, ações). 3 a 6 palavras.\n"
+            "- NÃO invente metáfora nem troque o assunto: se o trecho fala de CHUTEIRA, busque chuteira/futebol — "
+            "NÃO vire 'tênis', 'sapato', 'roda de cores' ou 'diferenciação'. Fidelidade ao que é dito.\n"
+            "- Se o trecho for ABSTRATO (sem imagem óbvia), escolha uma imagem NEUTRA do tema central do vídeo, "
+            "nunca um objeto aleatório.\n"
+            "- De preferência em INGLÊS (acha mais stock). SEMPRE termine com 'stock footage' ou 'b roll'.\n"
+            "- Imagens CINEMATOGRÁFICAS, sem pessoas falando à câmera e sem texto na tela. Evite nomes próprios obscuros.\n"
             "Responda APENAS JSON: {\"queries\":[{\"i\":<int>,\"q\":\"...\"}]}"
         )
         user = json.dumps({"brief": brief, "insercoes": itens}, ensure_ascii=False)
@@ -1282,30 +1285,32 @@ def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf:
         return _falha("⚠️ b-roll sem query (descrição vazia)")
     anti = _yt_anti_bot()
     try:
-        # busca mais resultados com a duração, p/ priorizar clipes CURTOS (cara de b-roll/stock).
         p = subprocess.run(["yt-dlp", *anti, "--flat-playlist", "--print", "%(id)s|%(duration)s",
                             f"ytsearch8:{query}"],
                            capture_output=True, text=True, timeout=60)
     except Exception as e:
         return _falha(f"⚠️ b-roll: busca no YouTube falhou ({str(e)[:80]})")
-    cands = []
+    # PRESERVA a ordem de RELEVÂNCIA do YouTube (1º resultado = mais relevante p/ a query).
+    # Antes ordenava por duração e pegava o mais curto → vinha clipe aleatório fora do tema.
+    # Aqui só descarta vídeos longos demais (>5min, costumam ser intro/talking head, não b-roll).
+    ids = []
     for l in (p.stdout or "").splitlines():
         l = l.strip()
         if "|" not in l:
             continue
         vid, dur = l.split("|", 1)
+        vid = vid.strip()
+        if not vid:
+            continue
         try:
             d = float(dur)
         except ValueError:
-            d = -1.0  # duração desconhecida (comum em flat-playlist): aceita, não descarta
-        if not vid:
-            continue
-        if d < 0 or (d >= dur_alvo and d <= 300):  # aceita desconhecida; ignora longos (>5min) e curtos demais
-            cands.append((d if d >= 0 else 9999.0, vid.strip()))
-    cands.sort(key=lambda x: x[0])  # mais curtos primeiro (duração conhecida); desconhecidas no fim
-    ids = [v for _, v in cands][:4]
+            d = -1.0  # duração desconhecida (comum em flat-playlist): aceita
+        if d < 0 or d <= 300:
+            ids.append(vid)
+    ids = ids[:5]
     if not ids:  # fallback: aceita qualquer resultado se o filtro zerou
-        ids = [l.split("|", 1)[0].strip() for l in (p.stdout or "").splitlines() if l.strip()][:4]
+        ids = [l.split("|", 1)[0].strip() for l in (p.stdout or "").splitlines() if l.strip()][:5]
     if not ids:
         return _falha("⚠️ b-roll: busca no YouTube não retornou resultados (possível bloqueio do yt-dlp)")
     sec_end = 8 + max(6, int(dur_alvo) + 6)
