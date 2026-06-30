@@ -522,7 +522,15 @@ function Editor({ edit, setEdit, midias, contaSel, salvando, onSalvar, onCancela
 }) {
   const set = (patch: Partial<IgAutomacao>) => setEdit({ ...edit, ...patch });
   const [verTodas, setVerTodas] = useState(false);
-  const palavrasStr = edit.palavras.join(", ");
+  // Texto cru do input de palavras-chave, desacoplado do array persistido.
+  // Sem isso, digitar "," era apagado: o value vinha de palavras.join() e o
+  // filter(Boolean) descartava o item vazio após a vírgula a cada tecla.
+  const [palavrasStr, setPalavrasStr] = useState(edit.palavras.join(", "));
+  useEffect(() => {
+    setPalavrasStr(edit.palavras.join(", "));
+    // re-sincroniza só ao abrir OUTRA automação, não a cada tecla
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edit.id]);
   const respostas = edit.resposta_comentario_templates;
 
   const toggleMidia = (id: string) => {
@@ -626,7 +634,10 @@ function Editor({ edit, setEdit, midias, contaSel, salvando, onSalvar, onCancela
                     <div className="mt-3 space-y-2">
                       <Input
                         value={palavrasStr}
-                        onChange={(e) => set({ palavras: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+                        onChange={(e) => {
+                          setPalavrasStr(e.target.value);
+                          set({ palavras: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) });
+                        }}
                         placeholder="Franquia, franquia"
                       />
                       <p className="text-xs text-muted-foreground">Use vírgulas para separar as palavras</p>
@@ -634,7 +645,11 @@ function Editor({ edit, setEdit, midias, contaSel, salvando, onSalvar, onCancela
                         <span className="text-xs text-muted-foreground">Por exemplo:</span>
                         {["Preço", "Link", "Comprar"].map((ex) => (
                           <Button key={ex} type="button" variant="outline" size="sm" className="h-6 text-xs"
-                            onClick={() => set({ palavras: Array.from(new Set([...edit.palavras, ex])) })}>{ex}</Button>
+                            onClick={() => {
+                              const novas = Array.from(new Set([...edit.palavras, ex]));
+                              set({ palavras: novas });
+                              setPalavrasStr(novas.join(", "));
+                            }}>{ex}</Button>
                         ))}
                       </div>
                       <div className="flex items-center gap-2 pt-1">
