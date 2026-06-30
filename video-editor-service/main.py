@@ -1061,17 +1061,35 @@ def _queries_youtube(alinhados: list, brief: str = "") -> dict:
         return fallback
 
 
-def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf: str = "") -> bool:
+def _yt_anti_bot() -> list:
+    """Flags comuns p/ driblar o bloqueio de bot do YouTube e tornar o yt-dlp mais resiliente.
+    Usa o client 'android' (não exige login) e reaproveita os cookies (se houver)."""
+    flags = ["--extractor-args", "youtube:player_client=android,web",
+             "--retries", "3", "--fragment-retries", "3", "--socket-timeout", "20", "--no-warnings"]
+    if COOKIES_FILE.exists():
+        flags += ["--cookies", str(COOKIES_FILE)]
+    return flags
+
+
+def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf: str = "",
+                   db=None, job_id: str = "") -> bool:
     """Busca no YouTube, baixa um trecho leve do 1º resultado que funcionar e recorta para dur_alvo.
-    Sem cookies (é YouTube). Retorna True se gerou o arquivo."""
-    if not query:
+    Retorna True se gerou o arquivo. Loga a causa da falha (se db/job_id forem passados)."""
+    def _falha(msg: str):
+        if db is not None and job_id:
+            _log(db, job_id, msg)
         return False
+
+    if not query:
+        return _falha("⚠️ b-roll sem query (descrição vazia)")
+    anti = _yt_anti_bot()
     try:
         # busca mais resultados com a duração, p/ priorizar clipes CURTOS (cara de b-roll/stock).
-        p = subprocess.run(["yt-dlp", "--flat-playlist", "--print", "%(id)s|%(duration)s", f"ytsearch8:{query}"],
+        p = subprocess.run(["yt-dlp", *anti, "--flat-playlist", "--print", "%(id)s|%(duration)s",
+                            f"ytsearch8:{query}"],
                            capture_output=True, text=True, timeout=60)
-    except Exception:
-        return False
+    except Exception as e:
+        return _falha(f"⚠️ b-roll: busca no YouTube falhou ({str(e)[:80]})")
     cands = []
     for l in (p.stdout or "").splitlines():
         l = l.strip()
@@ -1081,18 +1099,22 @@ def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf:
         try:
             d = float(dur)
         except ValueError:
-            d = 9999.0  # duração desconhecida vai pro fim
-        if vid and d >= dur_alvo and d <= 300:  # ignora longos demais (>5min) e curtos que não cobrem o trecho
-            cands.append((d, vid.strip()))
-    cands.sort(key=lambda x: x[0])  # mais curtos primeiro
+            d = -1.0  # duração desconhecida (comum em flat-playlist): aceita, não descarta
+        if not vid:
+            continue
+        if d < 0 or (d >= dur_alvo and d <= 300):  # aceita desconhecida; ignora longos (>5min) e curtos demais
+            cands.append((d if d >= 0 else 9999.0, vid.strip()))
+    cands.sort(key=lambda x: x[0])  # mais curtos primeiro (duração conhecida); desconhecidas no fim
     ids = [v for _, v in cands][:4]
     if not ids:  # fallback: aceita qualquer resultado se o filtro zerou
         ids = [l.split("|", 1)[0].strip() for l in (p.stdout or "").splitlines() if l.strip()][:4]
+    if not ids:
+        return _falha("⚠️ b-roll: busca no YouTube não retornou resultados (possível bloqueio do yt-dlp)")
     sec_end = 8 + max(6, int(dur_alvo) + 6)
     for vid in ids:
         raw = out_path.parent / f"raw_{vid}.mp4"
-        base = ["yt-dlp", f"https://www.youtube.com/watch?v={vid}", "--no-playlist",
-                "-f", "mp4[height<=720]/best[height<=720]/best", "-o", str(raw)]
+        base = ["yt-dlp", *anti, f"https://www.youtube.com/watch?v={vid}", "--no-playlist",
+                "-f", "bv*[height<=720]+ba/b[height<=720]/b", "-o", str(raw)]
         for extra in ([f"--download-sections", f"*8-{sec_end}", "--force-keyframes-at-cuts"], []):
             try:
                 subprocess.run(base + extra, capture_output=True, text=True, timeout=180)
@@ -1113,7 +1135,7 @@ def _youtube_broll(query: str, out_path: pathlib.Path, dur_alvo: float, crop_vf:
         raw.unlink(missing_ok=True)
         if out_path.exists() and out_path.stat().st_size > 10000:
             return True
-    return False
+    return _falha("⚠️ b-roll: todos os candidatos falharam no download/encode (bloqueio ou formato indisponível)")
 
 
 def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_id: str):
@@ -1220,9 +1242,11 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
                 out = assets_dir / f"ins{i}.mp4"
                 dur_alvo = float(a.get("end", 0) or 0) - float(a.get("start", 0) or 0)
                 dur_alvo = max(2.0, min(6.0, dur_alvo or 4.0))
-                if _youtube_broll(queries.get(i, ""), out, dur_alvo, CROP.get(tipo, "")):
+                _log(db, job_id, f"🔎 b-roll {i + 1}/{len(alinhados)}: '{queries.get(i, '')}'")
+                if _youtube_broll(queries.get(i, ""), out, dur_alvo, CROP.get(tipo, ""), db, job_id):
                     asset_id = f"ins{i}"
                     assets_map[asset_id] = f"assets/ins{i}.mp4"
+                    _log(db, job_id, f"✅ b-roll {i + 1} baixado")
             # ancoragem determinística pela fala; fallback no start/end do LLM. + clamp/dur mín/máx.
             start = float(a.get("start", 0) or 0); end = float(a.get("end", 0) or 0)
             anc = _ancorar_no_texto(words_saida, a.get("linha") or a.get("descricao") or "")
@@ -1236,6 +1260,12 @@ def processar_montar(job_id: str, card_id: str, drive_url: str, fonte: str, org_
                 "start": round(start, 3), "end": round(end, 3),
                 "descricao": a.get("descricao", ""),
             })
+        if fonte == "youtube":
+            n_ok, n_tot = len(assets_map), len(alinhados)
+            _log(db, job_id, f"📊 b-rolls do YouTube: {n_ok} de {n_tot} inserções")
+            if n_ok == 0 and n_tot > 0:
+                _log(db, job_id, "⚠️ Nenhum b-roll baixado — o YouTube provavelmente bloqueou o yt-dlp na VPS "
+                                 "(precisa de cookies do YouTube) ou as buscas não acharam vídeo.")
         # ordena e evita sobreposição (empurra o início pro fim do anterior)
         clips = [c for c in clips if c["end"] - c["start"] >= 0.3]
         clips.sort(key=lambda c: c["start"])
