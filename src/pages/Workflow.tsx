@@ -205,6 +205,10 @@ export default function Workflow() {
     const midias = igSelecao.length ? igSelecao : anexos.filter((a) => a.status === "pronto" && a.url).map((a) => a.url!) ;
     if (midias.length === 0) { toast.error("Selecione ao menos uma arte pronta"); return; }
     if (action === "agendar" && !igPublishAt) { toast.error("Escolha a data/hora do agendamento"); return; }
+    if (action === "agendar") {
+      const quando = new Date(igPublishAt).getTime();
+      if (quando < Date.now() + 15 * 60 * 1000) { toast.error("Agende para pelo menos 15 minutos no futuro"); return; }
+    }
     const temVideo = anexos.some((a) => midias.includes(a.url!) && a.tipo === "video");
     const tipo = temVideo ? "reels" : midias.length > 1 ? "carrossel" : "imagem";
     setIgEnviando(true);
@@ -822,7 +826,7 @@ export default function Workflow() {
                               <Button size="sm" disabled={igEnviando} onClick={() => publicarIg("publicar_agora")}>
                                 {igEnviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Publicar agora
                               </Button>
-                              <Input type="datetime-local" value={igPublishAt} onChange={(e) => setIgPublishAt(e.target.value)} className="h-9 w-auto text-xs" />
+                              <Input type="datetime-local" value={igPublishAt} onChange={(e) => setIgPublishAt(e.target.value)} min={new Date(Date.now() + 15 * 60000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} className="h-9 w-auto text-xs" />
                               <Button size="sm" variant="outline" disabled={igEnviando} onClick={() => publicarIg("agendar")}>
                                 <CalendarIcon className="mr-2 h-4 w-4" /> Agendar
                               </Button>

@@ -78,16 +78,21 @@ function graphError(j: any, status: number): Error {
   return new Error(partes.length ? partes.join(" | ") : `Graph API ${status}`);
 }
 
-// Espera o container de vídeo (Reels) ficar pronto. Retorna true se FINISHED.
-async function aguardarContainer(token: string, creationId: string, tentativas = 8, intervaloMs = 5000): Promise<boolean> {
+// Espera o container de vídeo (Reels) processar. FINISHED = pronto p/ publicar,
+// ERROR = a Meta falhou ao processar (intermitente; recriar resolve),
+// PENDING = ainda processando (deixa o cron continuar depois).
+type EstadoContainer = "FINISHED" | "ERROR" | "PENDING";
+async function aguardarContainer(token: string, creationId: string, tentativas = 5, intervaloMs = 5000): Promise<EstadoContainer> {
   for (let i = 0; i < tentativas; i++) {
     const st = await graphGet(token, `/${creationId}`, { fields: "status_code" }).catch(() => null);
-    if (st?.status_code === "FINISHED") return true;
-    if (st?.status_code === "ERROR") throw new Error("Falha ao processar o vídeo (container ERROR).");
+    if (st?.status_code === "FINISHED") return "FINISHED";
+    if (st?.status_code === "ERROR") return "ERROR";
     await new Promise((r) => setTimeout(r, intervaloMs));
   }
-  return false;
+  return "PENDING";
 }
+
+const MAX_TENTATIVAS_REELS = 4; // recriações de container antes de desistir
 
 // Publica o container com retry. O media_publish de Reels às vezes devolve um
 // erro genérico transitório mesmo com o container FINISHED; re-tentar resolve.
@@ -106,7 +111,9 @@ async function publicarComRetry(token: string, ig: string, creationId: string, t
 
 // Lógica central de publicação. Atualiza ig_posts conforme avança.
 // Retorna { done: boolean } — done=false significa "ainda processando" (Reels assíncrono).
-export async function processarPost(supabase: any, post: any): Promise<{ done: boolean }> {
+// esperaTentativas = quantos polls (×5s) aguardar o container nesta passada
+// (curto no "publicar agora" inline; mais longo no cron).
+export async function processarPost(supabase: any, post: any, esperaTentativas = 5): Promise<{ done: boolean }> {
   const { data: conta } = await supabase.from("ig_contas")
     .select("page_token,ig_user_id").eq("id", post.ig_conta_id).maybeSingle();
   if (!conta?.page_token || !conta.ig_user_id) {
@@ -129,8 +136,18 @@ export async function processarPost(supabase: any, post: any): Promise<{ done: b
         creationId = c.id;
         await supabase.from("ig_posts").update({ creation_id: creationId }).eq("id", post.id);
       }
-      const pronto = await aguardarContainer(token, creationId!);
-      if (!pronto) return { done: false }; // o cron tenta de novo depois
+      const estado = await aguardarContainer(token, creationId!, esperaTentativas);
+      if (estado === "PENDING") return { done: false }; // ainda processando: o cron continua depois
+      if (estado === "ERROR") {
+        // Processamento da Meta falhou (intermitente). Descarta o container morto
+        // e deixa o cron recriar do zero, até o limite de tentativas.
+        const tent = (post.tentativas ?? 0) + 1;
+        if (tent >= MAX_TENTATIVAS_REELS) {
+          throw new Error(`A Meta falhou ao processar o vídeo após ${tent} tentativas (erro de processamento do Reels). Tente reprocessar.`);
+        }
+        await supabase.from("ig_posts").update({ creation_id: null, tentativas: tent }).eq("id", post.id);
+        return { done: false };
+      }
       const pub = await publicarComRetry(token, ig, creationId!);
       await finalizar(supabase, token, post.id, pub.id);
       return { done: true };

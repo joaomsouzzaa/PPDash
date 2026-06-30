@@ -60,15 +60,18 @@ async function publicarComRetry(token: string, ig: string, creationId: string, t
   throw ultimoErro;
 }
 
-async function aguardarContainer(token: string, creationId: string, tentativas = 8, intervaloMs = 5000): Promise<boolean> {
+type EstadoContainer = "FINISHED" | "ERROR" | "PENDING";
+async function aguardarContainer(token: string, creationId: string, tentativas = 12, intervaloMs = 5000): Promise<EstadoContainer> {
   for (let i = 0; i < tentativas; i++) {
     const st = await graphGet(token, `/${creationId}`, { fields: "status_code" }).catch(() => null);
-    if (st?.status_code === "FINISHED") return true;
-    if (st?.status_code === "ERROR") throw new Error("Falha ao processar o vídeo (container ERROR).");
+    if (st?.status_code === "FINISHED") return "FINISHED";
+    if (st?.status_code === "ERROR") return "ERROR";
     await new Promise((r) => setTimeout(r, intervaloMs));
   }
-  return false;
+  return "PENDING";
 }
+
+const MAX_TENTATIVAS_REELS = 4; // recriações de container antes de desistir
 
 function normEtapa(s: string) {
   return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -114,8 +117,18 @@ async function processarPost(supabase: any, post: any): Promise<{ done: boolean 
         creationId = c.id;
         await supabase.from("ig_posts").update({ creation_id: creationId }).eq("id", post.id);
       }
-      const pronto = await aguardarContainer(token, creationId!);
-      if (!pronto) return { done: false };
+      const estado = await aguardarContainer(token, creationId!);
+      if (estado === "PENDING") return { done: false };
+      if (estado === "ERROR") {
+        // Processamento da Meta falhou (intermitente). Descarta o container morto
+        // e recria do zero no próximo ciclo do cron, até o limite de tentativas.
+        const tent = (post.tentativas ?? 0) + 1;
+        if (tent >= MAX_TENTATIVAS_REELS) {
+          throw new Error(`A Meta falhou ao processar o vídeo após ${tent} tentativas (erro de processamento do Reels). Tente reprocessar.`);
+        }
+        await supabase.from("ig_posts").update({ creation_id: null, tentativas: tent }).eq("id", post.id);
+        return { done: false };
+      }
       const pub = await publicarComRetry(token, ig, creationId!);
       await finalizar(supabase, token, post.id, pub.id);
       return { done: true };
