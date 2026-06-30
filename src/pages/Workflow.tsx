@@ -17,7 +17,7 @@ import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDo
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
-import { analisarReferenciaStream, configurarCookiesInstagram } from "@/lib/videoAnalise";
+import { analisarReferenciaStream, configurarCookiesInstagram, cookiesStatus } from "@/lib/videoAnalise";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -905,6 +905,14 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     },
   });
 
+  // Status dos cookies do Instagram na VPS (p/ mostrar se está configurado e quando).
+  const { data: cookies } = useQuery({
+    queryKey: ["ig-cookies-status"],
+    queryFn: cookiesStatus,
+    enabled: !!SERVICE_URL_VE,
+    retry: false,
+  });
+
   // Sincroniza os campos com o video_ref salvo (inclusive quando vem do cache do React Query).
   useEffect(() => {
     if (!ref) return;
@@ -1063,16 +1071,27 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       {/* Cookies do Instagram (p/ baixar Reels que exigem login) — envia o cookies.txt direto pra VPS */}
       <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
         🔑 {enviandoCookies ? "Enviando cookies…" : "Configurar/atualizar cookies do Instagram"}
-        <input type="file" accept=".txt" className="hidden" disabled={enviandoCookies}
+        <input type="file" accept=".txt,.json" className="hidden" disabled={enviandoCookies}
           onChange={async (e) => {
             const f = e.target.files?.[0]; e.currentTarget.value = "";
             if (!f) return;
             setEnviandoCookies(true);
-            try { await configurarCookiesInstagram(f); toast.success("Cookies do Instagram atualizados na VPS."); }
+            try {
+              await configurarCookiesInstagram(f);
+              toast.success("Cookies do Instagram atualizados na VPS.");
+              qc.invalidateQueries({ queryKey: ["ig-cookies-status"] });
+            }
             catch (err) { toast.error(err instanceof Error ? err.message : "Falha ao enviar cookies."); }
             finally { setEnviandoCookies(false); }
           }} />
       </label>
+      {cookies && (
+        cookies.configurado
+          ? (cookies.tem_sessao
+              ? <span className="text-xs text-emerald-600">✓ configurado{cookies.atualizado_em ? ` (atualizado em ${new Date(cookies.atualizado_em).toLocaleDateString("pt-BR")})` : ""}</span>
+              : <span className="text-xs text-amber-600">⚠ arquivo sem sessionid — reexporte logado</span>)
+          : <span className="text-xs text-muted-foreground">não configurado</span>
+      )}
 
       {/* Popup: saldo da IA (Anthropic) acabou */}
       <Dialog open={creditoBaixo} onOpenChange={setCreditoBaixo}>
