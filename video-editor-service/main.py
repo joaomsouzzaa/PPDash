@@ -531,22 +531,82 @@ def cookies_status(authorization: str = Header(default="")):
     return {"configurado": True, "atualizado_em": mt.isoformat(), "tem_sessao": "sessionid" in COOKIES_FILE.read_text(errors="replace")}
 
 
+def _cookies_json_para_netscape(obj) -> str | None:
+    """Converte o JSON de cookies exportado por extensões (Cookie-Editor, EditThisCookie) para o
+    formato Netscape cookies.txt que o yt-dlp exige. Retorna None se o formato não for reconhecido.
+    Filtra só cookies de domínio *instagram*."""
+    if isinstance(obj, dict) and isinstance(obj.get("cookies"), list):
+        obj = obj["cookies"]
+    if not isinstance(obj, list):
+        return None
+    linhas = ["# Netscape HTTP Cookie File"]
+    for c in obj:
+        if not isinstance(c, dict):
+            return None
+        nome = c.get("name")
+        valor = c.get("value")
+        dominio = c.get("domain") or ""
+        if nome is None or valor is None or "instagram" not in dominio.lower():
+            continue
+        path = c.get("path") or "/"
+        # flag (TRUE = vale p/ subdomínios): domínio com ponto inicial ou hostOnly=false
+        host_only = c.get("hostOnly")
+        flag = "TRUE" if (dominio.startswith(".") or host_only is False) else "FALSE"
+        secure = "TRUE" if c.get("secure") else "FALSE"
+        exp = c.get("expirationDate") or c.get("expiry") or c.get("expires") or 0
+        try:
+            exp = int(float(exp))
+        except (TypeError, ValueError):
+            exp = 0
+        linhas.append("\t".join([dominio, flag, path, secure, str(exp), str(nome), str(valor)]))
+    if len(linhas) == 1:  # só o cabeçalho = nenhum cookie do instagram
+        return None
+    return "\n".join(linhas) + "\n"
+
+
 @app.post("/configurar-cookies")
 async def configurar_cookies(file: UploadFile = File(...), authorization: str = Header(default="")):
-    """Recebe o cookies.txt (Netscape) do Instagram pela UI e grava na VPS — sem precisar de SSH.
-    Grava os BYTES exatos (preserva os tabs que o yt-dlp exige)."""
+    """Recebe os cookies do Instagram pela UI e grava na VPS — sem precisar de SSH.
+    Aceita o cookies.txt (Netscape) OU o JSON de extensões (auto-converte p/ Netscape),
+    pois o yt-dlp só lê o formato Netscape (tabs)."""
     exigir_usuario(authorization)
     data = await file.read()
     txt = data.decode("utf-8", errors="replace")
-    if "sessionid" not in txt or "instagram" not in txt.lower():
-        raise HTTPException(400, "Arquivo inválido: não parece um cookies.txt do Instagram logado (faltou 'sessionid').")
+
+    convertido = False
+    # 1) Já é Netscape? (cabeçalho padrão ou linhas tab-separadas com sessionid do instagram)
+    eh_netscape = txt.lstrip().startswith("# Netscape HTTP Cookie File") or (
+        "\t" in txt and "sessionid" in txt and "instagram" in txt.lower()
+    )
+    if eh_netscape:
+        saida_bytes = data  # preserva os BYTES exatos (tabs intactos)
+    else:
+        # 2) Tenta JSON de extensão → Netscape
+        try:
+            obj = json.loads(txt)
+        except json.JSONDecodeError:
+            raise HTTPException(400, "Formato não reconhecido. Exporte como cookies.txt (Netscape) — "
+                                     "recomendo a extensão 'Get cookies.txt LOCALLY' — ou um JSON de cookies.")
+        netscape = _cookies_json_para_netscape(obj)
+        if netscape is None:
+            raise HTTPException(400, "JSON de cookies inválido ou sem cookies do Instagram. "
+                                     "Confirme que exportou logado no instagram.com.")
+        saida_bytes = netscape.encode("utf-8")
+        convertido = True
+
+    # Validação final: precisa do sessionid do Instagram
+    saida_txt = saida_bytes.decode("utf-8", errors="replace")
+    if "sessionid" not in saida_txt or "instagram" not in saida_txt.lower():
+        raise HTTPException(400, "Não achei o cookie 'sessionid' do Instagram logado — "
+                                 "confirme que estava logado no instagram.com ao exportar.")
+
     COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    COOKIES_FILE.write_bytes(data)
+    COOKIES_FILE.write_bytes(saida_bytes)
     try:
         os.chmod(COOKIES_FILE, 0o600)
     except Exception:
         pass
-    return {"ok": True}
+    return {"ok": True, "convertido": convertido}
 
 
 @app.post("/cancelar")
