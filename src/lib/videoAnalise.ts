@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const SERVICE_URL = (import.meta.env.VITE_VIDEO_EDITOR_URL as string | undefined)?.replace(/\/$/, "");
 
-export type AnaliseProgresso = { pct: number; etapa: string };
+export type AnaliseProgresso = { pct: number; etapa: string; log?: string };
 
 // Status dos cookies do Instagram na VPS (p/ a UI mostrar se está configurado).
 export async function cookiesStatus(): Promise<{ configurado: boolean; atualizado_em?: string; tem_sessao?: boolean }> {
@@ -51,7 +51,7 @@ export async function analisarReferenciaStream(
   let final: any = null;
   const handle = (obj: any) => {
     if (obj.erro) throw new Error(obj.erro);
-    if (typeof obj.pct === "number") onProgress({ pct: obj.pct, etapa: obj.etapa || "" });
+    if (typeof obj.pct === "number") onProgress({ pct: obj.pct, etapa: obj.etapa || "", log: obj.log });
     if (obj.ok) final = obj;
   };
   // eslint-disable-next-line no-constant-condition

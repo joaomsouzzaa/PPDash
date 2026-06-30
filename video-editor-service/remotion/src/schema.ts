@@ -34,6 +34,8 @@ export const segmentSchema = z.object({
   media: boxSchema.optional(),    // retângulo da MÍDIA por baixo (recorte seco: encolhe box, mídia fica parada)
   rotation: z.number().optional(),// rotação em graus
   zIndex: z.number().optional(),  // ordem de empilhamento entre camadas livres
+  speed: z.number().optional().default(1),      // velocidade do VÍDEO PRINCIPAL (Head) neste trecho
+  assetSpeed: z.number().optional().default(1), // velocidade do ASSET/b-roll deste segmento
 });
 
 // Camada livre (mídia flutuante) na timeline de saída — empilhável por zIndex.
@@ -50,6 +52,7 @@ export const freeLayerSchema = z.object({
   crop: boxSchema.optional(),
   cropY: z.number().optional(),
   assetStart: z.number().optional(),
+  speed: z.number().optional().default(1), // velocidade de reprodução (playbackRate)
 });
 export type FreeLayer = z.infer<typeof freeLayerSchema>;
 
@@ -88,6 +91,7 @@ export const musicSchema = z.object({
   asset: z.string(),                 // caminho relativo (assets/xxx)
   volume: z.number().default(0.5),
   start: z.number().default(0),      // segundos
+  speed: z.number().optional().default(1), // velocidade de reprodução (playbackRate)
 });
 export type Music = z.infer<typeof musicSchema>;
 
@@ -116,6 +120,7 @@ export const musicClipSchema = z.object({
   end: z.number(),
   sourceStart: z.number().optional().default(0),
   volume: z.number().optional().default(0.5),
+  speed: z.number().optional().default(1), // velocidade de reprodução (playbackRate)
 });
 
 // Transform do vídeo principal (talking-head) como camada: caixa/recorte/rotação. Fundo preto atrás.
@@ -183,6 +188,7 @@ export type Clip = {
   media?: { x: number; y: number; w: number; h: number }; // retângulo da MÍDIA por baixo (recorte seco)
   rotation?: number;   // rotação em graus
   zIndex?: number;     // ordem de empilhamento entre camadas livres
+  speed?: number;      // velocidade de reprodução (playbackRate): 1=normal, >1=mais rápido
 };
 
 // Uma camada é "livre" (flutuante, sobreponível, com z-index) quando tem box.
@@ -196,6 +202,7 @@ export type MusicClip = {
   end: number;         // fim na timeline (s)
   sourceStart?: number;// offset dentro do áudio (s)
   volume?: number;     // 0–1
+  speed?: number;      // velocidade de reprodução (playbackRate)
 };
 
 // Corte editável (Fase 3): trecho mantido do vídeo ORIGINAL.
@@ -203,6 +210,7 @@ export type VideoSegment = {
   id: string;
   sourceStart: number;  // s no vídeo original
   sourceEnd: number;
+  speed?: number;       // velocidade de reprodução do trecho (playbackRate); 1=normal
 };
 
 // editor_doc salvo em video_jobs.timeline (autosave).
@@ -236,7 +244,7 @@ function buildFreeLayers(doc: EditorDoc): FreeLayer[] {
       kind: FREE_VIDEO_EXT.test(doc.assets[c.asset] || "") ? "video" as const : "image" as const,
       start: c.start, end: c.end,
       box: c.box!, media: c.media, rotation: c.rotation, zIndex: c.zIndex,
-      crop: c.crop, cropY: c.cropY, assetStart: c.assetStart,
+      crop: c.crop, cropY: c.cropY, assetStart: c.assetStart, speed: c.speed ?? 1,
     }));
 }
 
@@ -253,7 +261,7 @@ export function clipsParaTimeline(doc: EditorDoc): Timeline {
     const end = Math.min(dur, c.end);
     if (end <= start) continue;
     if (start > cursor) segments.push({ start: cursor, end: start, layout: "talking_full", asset: null });
-    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY, crop: c.crop, splitRatio: c.splitRatio, assetStart: c.assetStart });
+    segments.push({ start, end, layout: c.layout, asset: c.asset, cropY: c.cropY, crop: c.crop, splitRatio: c.splitRatio, assetStart: c.assetStart, speed: 1, assetSpeed: c.speed ?? 1 });
     cursor = end;
   }
   if (cursor < dur) segments.push({ start: cursor, end: dur, layout: "talking_full", asset: null });
@@ -275,9 +283,10 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
   const vsegs = doc.videoSegments.filter((v) => v.sourceEnd > v.sourceStart);
   let out = 0;
   const mapped = vsegs.map((v) => {
-    const len = v.sourceEnd - v.sourceStart;
-    const m = { outStart: out, outEnd: out + len, sourceStart: v.sourceStart };
-    out += len;
+    const s = v.speed && v.speed > 0 ? v.speed : 1; // velocidade do vídeo principal neste trecho
+    const outLen = (v.sourceEnd - v.sourceStart) / s; // encurtamento CapCut: saída = fonte/velocidade
+    const m = { outStart: out, outEnd: out + outLen, sourceStart: v.sourceStart, speed: s };
+    out += outLen;
     return m;
   });
   const durationInSeconds = out;
@@ -295,8 +304,9 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
       const a = ord[i], b = ord[i + 1];
       if (b - a < 0.02) continue;
       const ov = overlayEm((a + b) / 2);
-      const srcStart = m.sourceStart + (a - m.outStart);
-      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY, crop: ov?.crop, splitRatio: ov?.splitRatio, assetStart: ov ? (ov.assetStart ?? 0) + (a - ov.start) : undefined });
+      const aSpd = ov?.speed && ov.speed > 0 ? ov.speed : 1;
+      const srcStart = m.sourceStart + (a - m.outStart) * m.speed; // tempo-fonte avança na velocidade do trecho
+      segments.push({ start: srcStart, end: srcStart + (b - a), layout: ov ? ov.layout : "talking_full", asset: ov ? ov.asset : null, cropY: ov?.cropY, crop: ov?.crop, splitRatio: ov?.splitRatio, assetStart: ov ? (ov.assetStart ?? 0) + (a - ov.start) * aSpd : undefined, speed: m.speed, assetSpeed: aSpd });
     }
   }
   if (!segments.length) segments.push({ start: 0, end: Math.max(0.1, durationInSeconds), layout: "talking_full", asset: null });
@@ -305,10 +315,11 @@ export function montarTimeline(doc: EditorDoc): { timeline: Timeline; words: Wor
   const words: Word[] = [];
   for (const w of doc.words || []) {
     for (const m of mapped) {
-      const vEnd = m.sourceStart + (m.outEnd - m.outStart);
+      const vEnd = m.sourceStart + (m.outEnd - m.outStart) * m.speed; // fim do trecho em tempo-fonte
       if (w.start >= m.sourceStart && w.start < vEnd) {
-        const os = m.outStart + (w.start - m.sourceStart);
-        const oe = m.outStart + (Math.min(w.end, vEnd) - m.sourceStart);
+        // tempo de saída = início do trecho + (delta-fonte / velocidade)
+        const os = m.outStart + (w.start - m.sourceStart) / m.speed;
+        const oe = m.outStart + (Math.min(w.end, vEnd) - m.sourceStart) / m.speed;
         words.push({ word: w.word, start: round3(os), end: round3(Math.max(os + 0.05, oe)) });
         break;
       }

@@ -22,7 +22,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
   // Música: lista de pedaços (musicClips) tem prioridade; senão a música única (legado).
   const trilhas = (musicClips && musicClips.length)
     ? musicClips
-    : (music?.asset ? [{ id: "m0", asset: music.asset, start: music.start || 0, end: (timeline.durationInSeconds || 0), sourceStart: 0, volume: music.volume ?? 0.5 }] : []);
+    : (music?.asset ? [{ id: "m0", asset: music.asset, start: music.start || 0, end: (timeline.durationInSeconds || 0), sourceStart: 0, volume: music.volume ?? 0.5, speed: (music as any).speed ?? 1 }] : []);
   const assetUrl = (id: string | null | undefined): string | null =>
     id && assets[id] ? url(mediaBase, assets[id]) : null;
   const isVideoAsset = (s: string | null) => !!s && VIDEO_EXT.test(s);
@@ -46,6 +46,8 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
             crop: seg.crop as any,
             splitRatio: seg.splitRatio,
             assetStartFrame: seg.assetStart ? Math.round(seg.assetStart * fps) : undefined,
+            speed: seg.speed ?? 1,
+            assetSpeed: seg.assetSpeed ?? 1,
             headBox: timeline.head?.box,
             headMedia: timeline.head?.media,
             headCrop: timeline.head?.crop,
@@ -83,7 +85,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
                   width: `${(m.w / b.w) * 100}%`, height: `${(m.h / b.h) * 100}%`,
                 }}>
                   <Asset src={src} isVideo={fl.kind === "video"} preview={preview}
-                    fromFrame={fl.assetStart ? Math.round(fl.assetStart * fps) : undefined} />
+                    fromFrame={fl.assetStart ? Math.round(fl.assetStart * fps) : undefined} playbackRate={(fl as any).speed ?? 1} />
                 </div>
               </div>
             </AbsoluteFill>
@@ -112,7 +114,7 @@ export const Main: React.FC<MainProps> = ({ timeline, words, assets, mediaBase, 
         const dur = Math.max(1, Math.round(((m.end || 0) - (m.start || 0)) * fps));
         return (
           <Sequence key={m.id} from={from} durationInFrames={dur}>
-            <Audio src={url(mediaBase, m.asset)} volume={m.volume ?? 0.5} trimBefore={Math.round((m.sourceStart || 0) * fps)} />
+            <Audio src={url(mediaBase, m.asset)} volume={m.volume ?? 0.5} trimBefore={Math.round((m.sourceStart || 0) * fps)} playbackRate={(m as any).speed ?? 1} />
           </Sequence>
         );
       })}

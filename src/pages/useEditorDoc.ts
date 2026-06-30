@@ -68,6 +68,16 @@ export function useEditorDoc(jobId: string) {
   const updateClip = useCallback((id: string, patch: Partial<Clip>) => {
     setClips((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }, [setClips]);
+  // Velocidade do clip (b-roll/overlay): encurta/alonga a duração na timeline (estilo CapCut).
+  const setClipSpeed = useCallback((id: string, speed: number) => {
+    const s = Math.max(0.1, speed || 1);
+    setClips((cs) => cs.map((c) => {
+      if (c.id !== id) return c;
+      const s0 = c.speed && c.speed > 0 ? c.speed : 1;
+      const novoEnd = c.start + Math.max(0.05, (c.end - c.start) * s0 / s);
+      return { ...c, speed: s, end: Math.round(novoEnd * 1000) / 1000 };
+    }));
+  }, [setClips]);
 
   // Z-order unificado entre camadas livres (clips com box) e textos.
   const allZ = (d: EditorDoc): number[] =>
@@ -128,10 +138,17 @@ export function useEditorDoc(jobId: string) {
   const setVideoVolume = useCallback((v: number) => setDoc((d) => (d ? { ...d, videoVolume: v } : d)), []);
   const setMusicVol = useCallback((v: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, volume: v } } : d)), []);
   const setMusicStart = useCallback((s: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, start: Math.max(0, s) } } : d)), []);
+  const setMusicSpeed = useCallback((v: number) => setDoc((d) => (d && d.music ? { ...d, music: { ...d.music, speed: Math.max(0.1, v || 1) } } : d)), []);
   const removerMusica = useCallback(() => setDoc((d) => (d ? { ...d, music: null } : d)), []);
 
   const videoSegments = doc?.videoSegments ?? null;
   const originalDuration = doc?.originalDuration ?? doc?.durationInSeconds ?? 0;
+  // Velocidade global do vídeo principal (talking-head): aplica a todos os trechos.
+  const mainSpeed = doc?.videoSegments?.[0]?.speed ?? 1;
+  const setMainSpeed = useCallback((v: number) => {
+    const s = Math.max(0.1, v || 1);
+    setDoc((d) => (d && d.videoSegments ? { ...d, videoSegments: d.videoSegments.map((seg) => ({ ...seg, speed: s })) } : d));
+  }, []);
   const trimSeg = useCallback((id: string, patch: Partial<VideoSegment>) => {
     setDoc((d) => (d && d.videoSegments ? { ...d, videoSegments: d.videoSegments.map((s) => (s.id === id ? { ...s, ...patch } : s)) } : d));
   }, []);
@@ -347,13 +364,13 @@ export function useEditorDoc(jobId: string) {
   return {
     playerRef, doc, nome, carregando, mediaBase, fps, durationInFrames,
     timeline, outWords, currentTime, seek,
-    selectedId, setSelectedId, selected, updateClip, addClip, removeClip, splitClip,
+    selectedId, setSelectedId, selected, updateClip, setClipSpeed, addClip, removeClip, splitClip,
     bringToFront, sendToBack, makeFree, head, updateHead,
     undo, redo, copySelection, cutSelection, pasteClipboard,
     selectedTextId, setSelectedTextId, texts, selectedText, addText, updateText, removeText,
     capStyle, setCapStyle, editCaption,
-    videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, removerMusica, uploadMusica, subindoMusica,
-    videoSegments, originalDuration, trimSeg, deleteSeg, splitAt,
+    videoVolume, setVideoVolume, music, setMusicVol, setMusicStart, setMusicSpeed, removerMusica, uploadMusica, subindoMusica,
+    videoSegments, originalDuration, mainSpeed, setMainSpeed, trimSeg, deleteSeg, splitAt,
     assetIds, renderizar, renderizando, VIDEO_EXT,
     isPlaying, togglePlay,
   };

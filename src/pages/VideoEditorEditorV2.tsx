@@ -20,6 +20,8 @@ const LAYOUT_NOME: Record<OverlayLayout, string> = {
   broll_fullscreen: "B-roll tela cheia (com sua voz)",
 };
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
+// Presets de velocidade (playbackRate) disponíveis no editor.
+const SPEED_PRESETS = [0.5, 0.75, 1, 1.1, 1.2, 1.25, 1.5, 1.75, 2, 3] as const;
 type Aba = "midia" | "texto" | "legenda" | "audio";
 
 export default function VideoEditorEditorV2() {
@@ -220,6 +222,11 @@ export default function VideoEditorEditorV2() {
                     <Button variant="ghost" size="sm" className="h-7 text-red-400" onClick={ed.removerMusica}><Trash2 className="h-4 w-4" /></Button></div>
                   <label className="text-[11px] text-neutral-400 flex justify-between"><span>Volume da música</span><span>{Math.round(ed.music.volume * 100)}%</span></label>
                   <input type="range" min={0} max={100} value={Math.round(ed.music.volume * 100)} onChange={(e) => ed.setMusicVol(Number(e.target.value) / 100)} className="w-full" />
+                  <label className="text-[11px] text-neutral-400">Velocidade da música</label>
+                  <Select value={String(ed.music.speed ?? 1)} onValueChange={(v) => ed.setMusicSpeed(Number(v))}>
+                    <SelectTrigger className="h-8 w-full bg-neutral-800 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>{SPEED_PRESETS.map((s) => <SelectItem key={s} value={String(s)}>{s}×</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
               )}
             </div>
@@ -347,6 +354,17 @@ function ClipToolbar({ ed, sel, onAddLayer }: { ed: ReturnType<typeof useEditorD
           </div>
           <div className="flex items-center gap-2 text-[11px] text-neutral-300">Zoom
             <NumBox value={zoom} min={100} max={400} onCommit={setZoom} className="h-7 w-14 rounded border border-neutral-600 bg-neutral-800 px-1 text-right text-[11px]" />%
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] text-neutral-400">Velocidade (acelera o b-roll e encurta na timeline)</label>
+            <div className="flex items-center gap-2">
+              <Select value={String(sel.speed ?? 1)} onValueChange={(v) => ed.setClipSpeed(sel.id, Number(v))}>
+                <SelectTrigger className="h-8 w-24 bg-neutral-800 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>{SPEED_PRESETS.map((s) => <SelectItem key={s} value={String(s)}>{s}×</SelectItem>)}</SelectContent>
+              </Select>
+              <NumBox value={sel.speed ?? 1} min={0.1} max={8} onCommit={(v) => ed.setClipSpeed(sel.id, v)}
+                className="h-7 w-16 rounded border border-neutral-600 bg-neutral-800 px-1 text-right text-[11px]" />×
+            </div>
           </div>
           {ehBroll && (
             <div className="space-y-1">
@@ -501,6 +519,15 @@ function HeadToolbar({ ed }: { ed: ReturnType<typeof useEditorDoc> }) {
       <span className="px-1.5 text-[11px] text-neutral-400">Vídeo principal</span>
       <button title="Tela cheia (resetar)" onClick={() => ed.updateHead({ box: { x: 0, y: 0, w: 1, h: 1 }, media: { x: 0, y: 0, w: 1, h: 1 }, rotation: 0 })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Maximize2 className="h-4 w-4" /></button>
       <button title="Remover recorte" onClick={() => ed.updateHead({ box: ed.head.media ?? ed.head.box })} className="rounded p-1.5 text-neutral-200 hover:bg-neutral-700"><Crop className="h-4 w-4" /></button>
+      {ed.videoSegments && (
+        <div className="flex items-center gap-1 pl-1" title="Velocidade da fala (ajusta as legendas)">
+          <span className="text-[11px] text-neutral-400">Vel.</span>
+          <Select value={String(ed.mainSpeed)} onValueChange={(v) => ed.setMainSpeed(Number(v))}>
+            <SelectTrigger className="h-7 w-20 bg-neutral-800 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>{SPEED_PRESETS.map((s) => <SelectItem key={s} value={String(s)}>{s}×</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }

@@ -309,7 +309,7 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
         raise HTTPException(400, "ref_url obrigatório")
 
     def gen():
-        import base64, glob
+        import base64, glob, threading, queue
         from transcribe_words import transcrever_words
         try:
             ref_id = str(uuid.uuid4())
@@ -317,7 +317,7 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
             framesdir = refdir / "frames"
             framesdir.mkdir(parents=True, exist_ok=True)
 
-            yield json.dumps({"pct": 8, "etapa": "baixando vídeo"}) + "\n"
+            yield json.dumps({"pct": 8, "etapa": "baixando vídeo", "log": "baixando o vídeo de referência"}) + "\n"
             erro = _baixar_referencia(ref_url, str(refdir / "ref.%(ext)s"))
             cand = glob.glob(str(refdir / "ref.*"))
             ref_file = next((c for c in cand if not c.endswith(".jpg")), None)
@@ -337,7 +337,7 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
                 yield json.dumps({"erro": msg}) + "\n"
                 return
 
-            yield json.dumps({"pct": 32, "etapa": "extraindo frames"}) + "\n"
+            yield json.dumps({"pct": 32, "etapa": "extraindo frames", "log": "extraindo frames do vídeo"}) + "\n"
             # Distribui ~32 frames pelo vídeo INTEIRO (antes pegava só os primeiros ~48s).
             N_FRAMES = 32
             dur_ref = _ffprobe_dur(pathlib.Path(ref_file))
@@ -348,17 +348,40 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
             )
             frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:N_FRAMES]
 
-            yield json.dumps({"pct": 45, "etapa": "transcrevendo áudio"}) + "\n"
-            try:
-                transcript = transcrever_words(ref_file)
-            except Exception:
-                transcript = {"segments": []}
+            yield json.dumps({"pct": 45, "etapa": "transcrevendo áudio", "log": "transcrevendo o áudio (0%)"}) + "\n"
+            # A transcrição (Whisper) é bloqueante e não pode dar yield de dentro do callback,
+            # então roda numa thread e empurra o progresso por uma fila que o gerador drena.
+            q: "queue.Queue" = queue.Queue()
+            holder = {"transcript": {"segments": []}}
+
+            def _transcrever():
+                try:
+                    holder["transcript"] = transcrever_words(
+                        ref_file, on_progress=lambda pct: q.put(("prog", pct))
+                    )
+                except Exception:
+                    holder["transcript"] = {"segments": []}
+                finally:
+                    q.put(("done", None))
+
+            th = threading.Thread(target=_transcrever, daemon=True)
+            th.start()
+            while True:
+                kind, payload = q.get()
+                if kind == "done":
+                    break
+                # mapeia 0-100 da transcrição para a faixa visível 45→68 do pipeline geral
+                pct_global = 45 + int(payload * 0.23)
+                yield json.dumps({"pct": pct_global, "etapa": "transcrevendo áudio",
+                                  "log": f"transcrevendo o áudio ({payload}%)"}) + "\n"
+            th.join()
+            transcript = holder["transcript"]
             transcript_txt = "\n".join(
                 f"[{round(float(s.get('start',0)),1)}-{round(float(s.get('end',0)),1)}] {s.get('text','').strip()}"
                 for s in transcript.get("segments", [])
             )
 
-            yield json.dumps({"pct": 70, "etapa": "analisando com IA"}) + "\n"
+            yield json.dumps({"pct": 70, "etapa": "analisando com IA", "log": "a IA está assistindo e escrevendo o roteiro"}) + "\n"
             for linha in _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt):
                 yield linha
         except Exception as e:
@@ -411,7 +434,11 @@ def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frame
             "   - título `## 🎬 ROTEIRO — ...`;\n"
             "   - blocos por tempo `**[mm:ss–mm:ss] — NOME DO BLOCO**` com `🎥 B-roll: ...`, `🗣️ \"fala...\"`, `📝 Texto na tela: **...**`;\n"
             "   - `### 📌 Legenda do post` e `### 📌 Notas de produção`.\n"
-            "   Mantenha a MESMA estrutura psicológica/ganchos da referência, com a mensagem e exemplos do CLIENTE (use a base de conhecimento; sem placeholders se houver base).\n"
+            "   REGRA CENTRAL DA ADAPTAÇÃO (siga à risca): NÃO invente uma história nova sobre o cliente e NÃO troque o caso da referência por outro caso. "
+            "Você CONTA A MESMA HISTÓRIA/o MESMO CASO REAL da referência (mesmos fatos, mesma sequência: gancho → contexto → virada → lição), exatamente como no vídeo original. "
+            "O CLIENTE só ENTRA na virada/lição e no CTA, como contraponto ou solução (\"agora pensa no contrário...\") — ele não vira o protagonista da história. "
+            "Ex.: se a referência conta o caso de uma transmissão que pode ruir por depender de bets, você reconta ESSE caso e só no fim conecta com o cliente como o oposto estável. "
+            "Mantenha a MESMA estrutura psicológica/ganchos E O MESMO ENREDO da referência; use a base de conhecimento do cliente apenas para a parte da virada/CTA (sem placeholders se houver base).\n"
             "2) Depois do roteiro, um ÚNICO bloco ```json com o plano de inserções (e NADA depois dele):\n"
             '```json\n{"insertion_plan":[{"ref_start":<s>,"ref_end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","linha":"trecho da fala"}]}\n```'
         )
@@ -428,7 +455,8 @@ def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frame
 
     if modo == "watch":
         yield json.dumps({"pct": 100, "etapa": "concluído", "ok": True, "ref_id": ref_id,
-                          "ref_url": ref_url, "resposta": texto, "base_vazia": base_vazia}) + "\n"
+                          "ref_url": ref_url, "resposta": texto, "base_vazia": base_vazia,
+                          "log": "análise concluída"}) + "\n"
         return
 
     # Extrai o bloco ```json (insertion_plan); o resto é o roteiro em markdown.
@@ -445,6 +473,7 @@ def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frame
         "pct": 100, "etapa": "concluído", "ok": True, "ref_id": ref_id, "ref_url": ref_url,
         "roteiro": roteiro, "insertion_plan": insertion_plan,
         "transcript": transcript_txt, "base_vazia": base_vazia,
+        "log": "roteiro e plano de inserções prontos",
     }) + "\n"
 
 
@@ -735,7 +764,7 @@ def _clips_para_timeline(doc: dict) -> dict:
             segs.append({"start": cursor, "end": start, "layout": "talking_full", "asset": None})
         segs.append({"start": start, "end": end, "layout": c["layout"], "asset": c["asset"],
                      "cropY": c.get("cropY"), "crop": c.get("crop"), "splitRatio": c.get("splitRatio"),
-                     "assetStart": c.get("assetStart")})
+                     "assetStart": c.get("assetStart"), "speed": 1, "assetSpeed": float(c.get("speed") or 1)})
         cursor = end
     if cursor < dur:
         segs.append({"start": cursor, "end": dur, "layout": "talking_full", "asset": None})
@@ -790,9 +819,10 @@ def _montar_timeline(doc: dict):
     mapped = []
     out = 0.0
     for v in vsegs:
-        length = float(v["sourceEnd"]) - float(v["sourceStart"])
-        mapped.append({"outStart": out, "outEnd": out + length, "sourceStart": float(v["sourceStart"])})
-        out += length
+        spd = float(v.get("speed") or 1) or 1  # velocidade do vídeo principal neste trecho
+        out_len = (float(v["sourceEnd"]) - float(v["sourceStart"])) / spd  # encurtamento CapCut: saída = fonte/velocidade
+        mapped.append({"outStart": out, "outEnd": out + out_len, "sourceStart": float(v["sourceStart"]), "speed": spd})
+        out += out_len
     dur = out
     segs = []
     for m in mapped:
@@ -805,21 +835,23 @@ def _montar_timeline(doc: dict):
             a, b = ordp[i], ordp[i + 1]
             if b - a < 0.02: continue
             ov = ov_em((a + b) / 2)
-            ss = m["sourceStart"] + (a - m["outStart"])
+            a_spd = float(ov.get("speed") or 1) or 1 if ov else 1
+            ss = m["sourceStart"] + (a - m["outStart"]) * m["speed"]  # tempo-fonte avança na velocidade do trecho
             segs.append({"start": round(ss, 3), "end": round(ss + (b - a), 3),
                          "layout": ov["layout"] if ov else "talking_full", "asset": ov["asset"] if ov else None,
                          "cropY": ov.get("cropY") if ov else None,
                          "crop": ov.get("crop") if ov else None, "splitRatio": ov.get("splitRatio") if ov else None,
-                         "assetStart": (float(ov.get("assetStart") or 0) + (a - float(ov["start"]))) if ov else None})
+                         "assetStart": (float(ov.get("assetStart") or 0) + (a - float(ov["start"])) * a_spd) if ov else None,
+                         "speed": m["speed"], "assetSpeed": a_spd})
     if not segs:
         segs = [{"start": 0, "end": max(0.1, dur), "layout": "talking_full", "asset": None}]
     words = []
     for w in doc.get("words", []):
         for m in mapped:
-            v_end = m["sourceStart"] + (m["outEnd"] - m["outStart"])
+            v_end = m["sourceStart"] + (m["outEnd"] - m["outStart"]) * m["speed"]  # fim do trecho em tempo-fonte
             if m["sourceStart"] <= float(w["start"]) < v_end:
-                os_ = m["outStart"] + (float(w["start"]) - m["sourceStart"])
-                oe = m["outStart"] + (min(float(w["end"]), v_end) - m["sourceStart"])
+                os_ = m["outStart"] + (float(w["start"]) - m["sourceStart"]) / m["speed"]
+                oe = m["outStart"] + (min(float(w["end"]), v_end) - m["sourceStart"]) / m["speed"]
                 words.append({"word": w["word"], "start": round(os_, 3), "end": round(max(os_ + 0.05, oe), 3)})
                 break
     return {"video": doc.get("video", "original.mp4"), "fps": fps, "durationInSeconds": dur,

@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X } from "lucide-react";
+import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight } from "lucide-react";
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
@@ -873,12 +873,22 @@ async function moverCardEtapa(tarefaId: string, nomeEtapa: string) {
   if (col) await db.from("tarefas").update({ coluna_id: col.id, updated_at: new Date().toISOString() }).eq("id", tarefaId);
 }
 
+// Formata uma duração em ms como mm:ss (para o tempo decorrido da análise).
+function fmtDecorrido(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
 function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: string | null }) {
   const db = supabase as any;
   const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [analisando, setAnalisando] = useState(false);
   const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
+  const [logs, setLogs] = useState<{ ts: number; etapa: string; pct: number; msg?: string }[]>([]);
+  const [logAberto, setLogAberto] = useState(false);
+  const [inicioAnalise, setInicioAnalise] = useState<number | null>(null);
+  const [agora, setAgora] = useState<number>(Date.now());
   const [enviandoCookies, setEnviandoCookies] = useState(false);
   const [creditoBaixo, setCreditoBaixo] = useState(false);
   const [driveUrl, setDriveUrl] = useState("");
@@ -902,6 +912,13 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     if (ref.drive_url) setDriveUrl(ref.drive_url);
     if (ref.fonte_broll) setFonte(ref.fonte_broll);
   }, [ref]);
+
+  // Timer de tempo decorrido enquanto a análise roda (deixa claro que está vivo nas etapas longas).
+  useEffect(() => {
+    if (!analisando) return;
+    const id = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [analisando]);
 
   // status do job de montagem (se houver)
   const { data: job } = useQuery({
@@ -959,6 +976,9 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
     if (!SERVICE_URL_VE) { toast.error("Serviço de vídeo não configurado."); return; }
     setAnalisando(true);
     setProg({ pct: 0, etapa: "iniciando" });
+    setLogs([]);
+    setInicioAnalise(Date.now());
+    setAgora(Date.now());
     try {
       const orgId = await getOrgId();
       let agente_slug: string | undefined;
@@ -966,8 +986,18 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
         const { data: ag } = await db.from("agentes").select("slug").eq("id", agenteId).maybeSingle();
         agente_slug = ag?.slug || undefined;
       }
+      const onProg = (p: { pct: number; etapa: string; log?: string }) => {
+        setProg({ pct: p.pct, etapa: p.etapa });
+        // De-duplica: se a etapa é a mesma da última linha, atualiza-a (ex.: transcrição emite vários %).
+        setLogs((prev) => {
+          const last = prev[prev.length - 1];
+          const entry = { ts: Date.now(), etapa: p.etapa, pct: p.pct, msg: p.log };
+          if (last && last.etapa === p.etapa) return [...prev.slice(0, -1), { ...entry, ts: last.ts }];
+          return [...prev, entry];
+        });
+      };
       const data = await analisarReferenciaStream(
-        { ref_url: url.trim(), org_id: orgId, agente_slug }, setProg,
+        { ref_url: url.trim(), org_id: orgId, agente_slug }, onProg,
       );
       const video_ref = {
         ref_url: url.trim(), ref_id: data.ref_id, roteiro: data.roteiro,
@@ -1054,6 +1084,37 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
             <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${prog.pct}%` }} />
           </div>
           <p className="text-xs text-muted-foreground capitalize">{prog.etapa}… {prog.pct}%</p>
+        </div>
+      )}
+      {(analisando || logs.length > 0) && (
+        <div className="space-y-1">
+          <button type="button" onClick={() => setLogAberto((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            {logAberto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            Ver log
+            {analisando && inicioAnalise != null && (
+              <span className="ml-1 font-mono">{fmtDecorrido(agora - inicioAnalise)}</span>
+            )}
+          </button>
+          {logAberto && (
+            <div className="max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-xs">
+              {logs.length === 0 ? (
+                <p className="text-muted-foreground">iniciando…</p>
+              ) : (
+                logs.map((l, i) => {
+                  const atual = analisando && i === logs.length - 1;
+                  const t = inicioAnalise != null ? fmtDecorrido(l.ts - inicioAnalise) : "";
+                  return (
+                    <div key={i} className={atual ? "text-foreground" : "text-muted-foreground"}>
+                      <span className="opacity-60">{t}</span>{" "}
+                      <span>{l.msg || l.etapa}</span>{" "}
+                      <span className="opacity-60">· {l.pct}%</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       )}
       {ref?.roteiro && (
