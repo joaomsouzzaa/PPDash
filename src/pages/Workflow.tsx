@@ -15,6 +15,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight, Upload } from "lucide-react";
 import { IgPostMockup } from "@/components/IgPostMockup";
+import { WorkflowCalendar } from "@/components/WorkflowCalendar";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrgId } from "@/lib/org";
 import { uploadComProgresso, uploadMidiaVPS } from "@/lib/upload";
@@ -33,6 +34,7 @@ type Subtarefa = { id: string; titulo: string; concluida: boolean; ordem: number
 type ChecklistItem = { id: string; item: string; concluido: boolean; ordem: number };
 type IgConta = { id: string; ig_user_id: string; ig_username: string | null };
 type IgPost = { id: string; tipo: string; status: string; permalink: string | null; erro: string | null; publish_at: string | null; created_at: string };
+type IgPostCal = { id: string; tarefa_id: string | null; tipo: string; status: string; publish_at: string | null; published_at: string | null; midias: string[] };
 
 const PRIORIDADES: Record<string, string> = { urgente: "Urgente", alta: "Alta", normal: "Normal", baixa: "Baixa" };
 // classes Tailwind no estilo ClickUp (vermelho / amarelo / azul / cinza)
@@ -47,7 +49,7 @@ export default function Workflow() {
   // v4 build check
 
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"kanban" | "lista">("kanban");
+  const [view, setView] = useState<"kanban" | "lista" | "calendario">("kanban");
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [dragOverCard, setDragOverCard] = useState<string | null>(null);
@@ -66,6 +68,16 @@ export default function Workflow() {
       return (data || []) as Tarefa[];
     },
     refetchInterval: 15000, // pega tarefas criadas pelos agentes
+  });
+  const { data: igPostsAll = [] } = useQuery({
+    queryKey: ["ig_posts_all"],
+    queryFn: async () => {
+      const { data } = await supabase.from("ig_posts")
+        .select("id,tarefa_id,tipo,status,publish_at,published_at,midias")
+        .order("publish_at", { ascending: true });
+      return (data || []) as IgPostCal[];
+    },
+    refetchInterval: 30000, // acompanha posts que ainda estão processando/agendados
   });
   const { data: agentes = [] } = useQuery({
     queryKey: ["agentes-min"],
@@ -434,11 +446,12 @@ export default function Workflow() {
             <SidebarTrigger />
             <div className="flex-1">
               <h1 className="text-xl font-bold tracking-tight flex items-center gap-2"><KanbanSquare className="h-5 w-5 text-primary" /> Workflow</h1>
-              <p className="text-sm text-muted-foreground">Tarefas do time e dos agentes (Kanban / Lista)</p>
+              <p className="text-sm text-muted-foreground">Tarefas do time e dos agentes (Kanban / Lista / Calendário)</p>
             </div>
             <div className="flex rounded-md border border-border overflow-hidden">
               <button onClick={() => setView("kanban")} className={`px-3 py-1.5 text-sm flex items-center gap-1 ${view === "kanban" ? "bg-accent" : "hover:bg-accent/60"}`}><KanbanSquare className="h-4 w-4" /> Kanban</button>
               <button onClick={() => setView("lista")} className={`px-3 py-1.5 text-sm flex items-center gap-1 ${view === "lista" ? "bg-accent" : "hover:bg-accent/60"}`}><List className="h-4 w-4" /> Lista</button>
+              <button onClick={() => setView("calendario")} className={`px-3 py-1.5 text-sm flex items-center gap-1 ${view === "calendario" ? "bg-accent" : "hover:bg-accent/60"}`}><CalendarIcon className="h-4 w-4" /> Calendário</button>
             </div>
             <Button variant="outline" onClick={() => setColsOpen(true)}><Settings className="mr-2 h-4 w-4" /> Colunas</Button>
             <Button variant="outline" onClick={() => setLixeiraOpen(true)}><Trash className="mr-2 h-4 w-4" /> Lixeira</Button>
@@ -452,6 +465,8 @@ export default function Workflow() {
                 <p className="text-sm">Rode o SQL do Workflow para criar as colunas (Briefing → Copy → Design → Tráfego → Concluído).</p>
               </div>
             </div>
+          ) : view === "calendario" ? (
+            <WorkflowCalendar tarefas={tarefas} posts={igPostsAll} contas={igContas} onAbrir={abrirTarefa} />
           ) : view === "kanban" ? (
             <div className="flex-1 overflow-x-auto p-6">
               <div className="flex gap-4 h-full min-w-min">
