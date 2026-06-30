@@ -281,12 +281,17 @@ def _baixar_referencia(url: str, out_tmpl: str) -> str:
     """Baixa o vídeo com yt-dlp; usa cookies do Instagram (se houver) e tenta driblar o bloqueio.
     Retorna a mensagem de erro (string) em caso de falha; '' se ok."""
     import glob
-    common = ["-f", "mp4/best", "-o", out_tmpl, "--no-warnings"]
+    common = ["-f", "mp4/best", "-o", out_tmpl, "--no-warnings",
+              "--socket-timeout", "20", "--retries", "3", "--fragment-retries", "3"]
     if COOKIES_FILE.exists():
         common += ["--cookies", str(COOKIES_FILE)]
     erro = ""
     for extra in (["--impersonate", "chrome"], []):  # 1ª tentativa com impersonate; fallback sem
-        p = subprocess.run(["yt-dlp", *extra, *common, url], capture_output=True, text=True)
+        try:
+            p = subprocess.run(["yt-dlp", *extra, *common, url], capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            erro = "timeout: o download passou de 3 min e foi cancelado (provável rate-limit do Instagram)"
+            continue  # tenta o fallback sem impersonate
         if p.returncode == 0:
             return ""
         erro = (p.stderr or p.stdout or "").strip()
