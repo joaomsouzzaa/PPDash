@@ -352,6 +352,10 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
                 capture_output=True, text=True,
             )
             frames = sorted(glob.glob(str(framesdir / "*.jpg")))[:N_FRAMES]
+            # Timestamp aprox. de cada frame (amostrados uniformemente pelo vídeo inteiro),
+            # p/ a IA correlacionar o LAYOUT visual de cada b-roll ao seu ref_start.
+            n = len(frames)
+            frame_ts = [round(i * dur_ref / n, 2) for i in range(n)] if (dur_ref and n) else [0.0] * n
 
             yield json.dumps({"pct": 45, "etapa": "transcrevendo áudio", "log": "transcrevendo o áudio (0%)"}) + "\n"
             # A transcrição (Whisper) é bloqueante e não pode dar yield de dentro do callback,
@@ -387,7 +391,7 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
             )
 
             yield json.dumps({"pct": 70, "etapa": "analisando com IA", "log": "a IA está assistindo e escrevendo o roteiro"}) + "\n"
-            for linha in _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt):
+            for linha in _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt, frame_ts):
                 yield linha
         except Exception as e:
             yield json.dumps({"erro": str(e)[:300]}) + "\n"
@@ -395,7 +399,7 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
-def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt):
+def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frames, transcript_txt, frame_ts=None):
     import base64
     # 3) Persona do agente + base de conhecimento da org (mesmo padrão do agente-chat).
     db = svc()
@@ -452,13 +456,22 @@ def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frame
             "Ex.: se a referência conta o caso de uma transmissão que pode ruir por depender de bets, você reconta ESSE caso e só no fim conecta com o cliente como o oposto estável. "
             "Mantenha a MESMA estrutura psicológica/ganchos E O MESMO ENREDO da referência; use a base de conhecimento do cliente apenas para a parte da virada/CTA (sem placeholders se houver base).\n"
             "2) Depois do roteiro, um ÚNICO bloco ```json com o plano de inserções (e NADA depois dele):\n"
-            '```json\n{"insertion_plan":[{"ref_start":<s>,"ref_end":<s>,"tipo":"broll|print|image|overlay","descricao":"...","linha":"trecho da fala"}]}\n```'
+            '```json\n{"insertion_plan":[{"ref_start":<s>,"ref_end":<s>,"tipo":"broll|print|image|overlay","layout":"split_top|split_bottom|broll_full","descricao":"...","linha":"trecho da fala"}]}\n```\n'
+            "Para CADA inserção, OLHE os FRAMES cujo timestamp `[frame @ ...]` cai no intervalo `ref_start–ref_end` "
+            "e preencha `layout` conforme a referência mostra a tela NAQUELE momento:\n"
+            "   - `split_top` = b-roll ocupa a METADE DE CIMA da tela e a pessoa aparece embaixo;\n"
+            "   - `split_bottom` = b-roll na METADE DE BAIXO e a pessoa em cima;\n"
+            "   - `broll_full` = b-roll em TELA CHEIA (a pessoa some).\n"
+            "   Na dúvida use `broll_full`. Para `tipo` = `print`/`image`/`overlay`, omita `layout`."
         )
         primeiro = f"TRANSCRIÇÃO DA REFERÊNCIA:\n{transcript_txt or '(sem fala detectada)'}\n\nFrames a seguir (em ordem):"
 
     blocos = [{"type": "text", "text": primeiro}]
-    for fp in frames:
+    for i, fp in enumerate(frames):
         b64 = base64.b64encode(pathlib.Path(fp).read_bytes()).decode()
+        if frame_ts and i < len(frame_ts):
+            t = frame_ts[i]
+            blocos.append({"type": "text", "text": f"[frame @ {int(t // 60):02d}:{int(t % 60):02d} = {t:.1f}s]"})
         blocos.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}})
 
     client = anthropic.Anthropic()
@@ -1023,9 +1036,10 @@ def _alinhar_insercoes(insertion_plan: list, transcript_ref: str, transcript_nov
         "ref_start/ref_end, tipo, descrição e a 'linha' falada), (b) TRANSCRIÇÃO da REFERÊNCIA e (c) TRANSCRIÇÃO "
         "do vídeo NOVO (frases com [início-fim] em s). Para CADA inserção, ache no vídeo NOVO o trecho equivalente "
         "(casando o sentido da 'linha'/conteúdo entre as duas transcrições) e devolva start/end NO TEMPO DO NOVO. "
-        "Inclua TODAS as inserções (não pule b-rolls). Classifique o 'layout' observando como aparece na referência:\n"
-        "- 'broll_full' = b-roll ocupa a tela toda;\n- 'split_top' = b-roll na METADE DE CIMA (pessoa embaixo);\n"
-        "- 'split_bottom' = b-roll na METADE DE BAIXO (pessoa em cima);\n- 'print' = print/card; - 'image' = imagem cheia.\n"
+        "Inclua TODAS as inserções (não pule b-rolls). PRESERVE o 'layout' que vier em cada inserção (foi "
+        "detectado olhando os frames da referência) — copie-o EXATAMENTE. Só decida o 'layout' quando ele estiver "
+        "ausente, usando: 'broll_full' (tela toda), 'split_top' (b-roll em cima), 'split_bottom' (b-roll embaixo), "
+        "'print' (print/card), 'image' (imagem cheia).\n"
         "Responda APENAS JSON (copie a 'linha' falada correspondente do vídeo NOVO, p/ ancoragem precisa): "
         '{"clips":[{"start":<s>,"end":<s>,"layout":"broll_full|split_top|split_bottom|print|image","descricao":"...","linha":"trecho falado no NOVO","ref_start":<s>,"ref_end":<s>}]}'
     )
@@ -1038,9 +1052,24 @@ def _alinhar_insercoes(insertion_plan: list, transcript_ref: str, transcript_nov
     if txt.startswith("```"):
         txt = txt.split("```", 2)[1].lstrip("json").strip()
     try:
-        return (json.loads(txt) or {}).get("clips", [])
+        clips = (json.loads(txt) or {}).get("clips", [])
     except Exception:
         return []
+    # O layout detectado pela VISÃO (no insertion_plan) é autoritativo: restaura-o por ref_start,
+    # caso o LLM de alinhamento tenha trocado/omitido. Casa pelo ref_start mais próximo.
+    origs = [p for p in insertion_plan if isinstance(p, dict) and p.get("layout")]
+    for c in clips:
+        if not isinstance(c, dict):
+            continue
+        rs = c.get("ref_start")
+        if rs is None or not origs:
+            continue
+        try:
+            melhor = min(origs, key=lambda p: abs(float(p.get("ref_start", 0)) - float(rs)))
+            c["layout"] = melhor["layout"]
+        except (TypeError, ValueError):
+            pass
+    return clips
 
 
 def _norm_txt(s: str) -> str:
