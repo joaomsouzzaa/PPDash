@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { getTenantSlug } from "@/lib/tenant";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, MessageCircle } from "lucide-react";
 
 type TipoPergunta =
   | "texto_curto" | "texto_longo" | "multipla_escolha" | "sim_nao"
@@ -17,6 +17,13 @@ type Pergunta = {
   id: string; ordem: number; titulo: string; descricao: string | null;
   tipo: TipoPergunta;
   obrigatoria: boolean; opcoes: Opcao[]; logica: Regra[];
+};
+type ConfigPesquisa = {
+  mostrar_resultado?: boolean;
+  resultado_texto?: string;
+  whatsapp_numero?: string;
+  whatsapp_botao?: string;
+  whatsapp_mensagem?: string;
 };
 
 const TIPOS_BIFURCAVEIS: TipoPergunta[] = ["multipla_escolha", "dropdown", "sim_nao"];
@@ -34,6 +41,7 @@ export default function ResponderPesquisa() {
   const [erro, setErro] = useState<string | null>(null);
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState<string | null>(null);
+  const [config, setConfig] = useState<ConfigPesquisa>({});
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
 
   const [idx, setIdx] = useState(0);              // índice da pergunta atual
@@ -53,6 +61,7 @@ export default function ResponderPesquisa() {
       } else {
         setTitulo((data as any).pesquisa.titulo);
         setDescricao((data as any).pesquisa.descricao);
+        setConfig((data as any).pesquisa.config || {});
         setPerguntas(((data as any).perguntas || []).map((p: any) => ({ ...p, opcoes: p.opcoes || [], logica: p.logica || [] })));
       }
       setCarregando(false);
@@ -128,11 +137,46 @@ export default function ResponderPesquisa() {
     return <div className="min-h-screen flex items-center justify-center p-6 text-center"><p className="text-muted-foreground">{erro}</p></div>;
   }
   if (concluido) {
+    // Pontuação: uma pergunta conta quando alguma opção tem `pontos` numérico.
+    const temPonto = (o: Opcao) => typeof o.pontos === "number";
+    const pontuadas = perguntas.filter((p) => opcoesDaPergunta(p).some(temPonto));
+    const maxTotal = pontuadas.reduce(
+      (acc, p) => acc + Math.max(0, ...opcoesDaPergunta(p).map((o) => (temPonto(o) ? (o.pontos as number) : 0))),
+      0,
+    );
+    const total = pontuadas.reduce((acc, p) => {
+      const escolhida = opcoesDaPergunta(p).find((o) => o.id === respostas[p.id]);
+      return acc + (escolhida && temPonto(escolhida) ? (escolhida.pontos as number) : 0);
+    }, 0);
+    const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
+    const mostrarResultado = !!config.mostrar_resultado && maxTotal > 0;
+    const textoResultado = (config.resultado_texto || "Seu resultado: {pct}%").replace(/\{pct\}/g, String(pct));
+    const numeroWa = (config.whatsapp_numero || "").replace(/\D/g, "");
+    const linkWa = numeroWa
+      ? `https://wa.me/${numeroWa}?text=${encodeURIComponent(config.whatsapp_mensagem || "")}`
+      : "";
+
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-3">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-4">
         <CheckCircle2 className="h-12 w-12 text-primary" />
         <h1 className="text-2xl font-semibold">Obrigado!</h1>
         <p className="text-muted-foreground">Sua resposta foi registrada.</p>
+
+        {mostrarResultado && (
+          <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 space-y-2">
+            <div className="text-5xl font-bold text-primary">{pct}%</div>
+            <p className="text-muted-foreground">{textoResultado}</p>
+          </div>
+        )}
+
+        {linkWa && (
+          <a href={linkWa} target="_blank" rel="noreferrer">
+            <Button size="lg" className="bg-[#25D366] hover:bg-[#1ebe5b] text-white">
+              <MessageCircle className="mr-2 h-5 w-5" />
+              {config.whatsapp_botao || "Falar no WhatsApp"}
+            </Button>
+          </a>
+        )}
       </div>
     );
   }

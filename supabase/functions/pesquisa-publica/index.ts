@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
     const { data: pesquisa } = await supabase
       .from("pesquisas")
-      .select("id, titulo, descricao, status")
+      .select("id, titulo, descricao, status, config")
       .eq("org_id", orgId)
       .eq("slug", slug)
       .maybeSingle();
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
         .eq("pesquisa_id", pesquisa.id)
         .order("ordem", { ascending: true });
       return json({
-        pesquisa: { id: pesquisa.id, titulo: pesquisa.titulo, descricao: pesquisa.descricao },
+        pesquisa: { id: pesquisa.id, titulo: pesquisa.titulo, descricao: pesquisa.descricao, config: pesquisa.config ?? {} },
         perguntas: perguntas || [],
       });
     }

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  ClipboardList, Plus, Trash2, ArrowLeft, Link2, BarChart3, GitBranch, Loader2, GripVertical, Download,
+  ClipboardList, Plus, Trash2, ArrowLeft, Link2, BarChart3, GitBranch, Loader2, GripVertical, Download, Settings,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getTenantSlug } from "@/lib/tenant";
@@ -40,6 +40,22 @@ type Pergunta = {
   logica: Regra[];
 };
 type Pesquisa = { id: string; titulo: string; slug: string; descricao: string | null; status: string; created_at: string };
+
+// Configuração da tela final (mostrada ao respondente após enviar).
+type ConfigPesquisa = {
+  mostrar_resultado: boolean;        // exibir % de pontuação ao respondente
+  resultado_texto: string;           // template; {pct} é substituído pela porcentagem
+  whatsapp_numero: string;           // só dígitos com DDI, ex: 5511999999999
+  whatsapp_botao: string;            // texto do botão
+  whatsapp_mensagem: string;         // mensagem pré-preenchida no WhatsApp
+};
+const CONFIG_PADRAO: ConfigPesquisa = {
+  mostrar_resultado: false,
+  resultado_texto: "Seu negócio tem {pct}% de prontidão para se tornar uma franquia.",
+  whatsapp_numero: "",
+  whatsapp_botao: "Antecipar meu atendimento no WhatsApp",
+  whatsapp_mensagem: "Oi, vim do diagnóstico de franqueabilidade e quero antecipar meu atendimento!",
+};
 
 const TIPOS: { value: TipoPergunta; label: string }[] = [
   { value: "texto_curto", label: "Texto curto" },
@@ -187,17 +203,18 @@ export default function Pesquisas() {
 // ============================================================
 function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar: () => void }) {
   const queryClient = useQueryClient();
-  const [meta, setMeta] = useState<{ titulo: string; descricao: string; slug: string; status: string }>({ titulo: "", descricao: "", slug: "", status: "rascunho" });
+  const [meta, setMeta] = useState<{ titulo: string; descricao: string; slug: string; status: string; config: ConfigPesquisa }>({ titulo: "", descricao: "", slug: "", status: "rascunho", config: CONFIG_PADRAO });
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [resultadosOpen, setResultadosOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
       const { data: p } = await db.from("pesquisas").select("*").eq("id", pesquisaId).maybeSingle();
-      if (p) setMeta({ titulo: p.titulo, descricao: p.descricao || "", slug: p.slug, status: p.status });
+      if (p) setMeta({ titulo: p.titulo, descricao: p.descricao || "", slug: p.slug, status: p.status, config: { ...CONFIG_PADRAO, ...(p.config || {}) } });
       const { data: qs } = await db.from("pesquisa_perguntas").select("*").eq("pesquisa_id", pesquisaId).order("ordem", { ascending: true });
       setPerguntas((qs || []).map((q: any) => ({ ...q, opcoes: q.opcoes || [], logica: q.logica || [] })));
       setSelId((qs || [])[0]?.id || null);
@@ -270,7 +287,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
     setSalvando(true);
     try {
       const status = novoStatus ?? meta.status;
-      await db.from("pesquisas").update({ titulo: meta.titulo.trim(), descricao: meta.descricao || null, status }).eq("id", pesquisaId);
+      await db.from("pesquisas").update({ titulo: meta.titulo.trim(), descricao: meta.descricao || null, status, config: meta.config }).eq("id", pesquisaId);
       // Substitui as perguntas (delete + insert) — simples e consistente com a ordem/ids locais.
       await db.from("pesquisa_perguntas").delete().eq("pesquisa_id", pesquisaId);
       if (perguntas.length) {
@@ -303,6 +320,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
             <Input className="max-w-md font-semibold" value={meta.titulo} onChange={(e) => setMeta({ ...meta, titulo: e.target.value })} placeholder="Título da pesquisa" />
             <Badge variant={meta.status === "publicada" ? "default" : "secondary"}>{meta.status === "publicada" ? "Publicada" : "Rascunho"}</Badge>
             <div className="flex-1" />
+            <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}><Settings className="mr-2 h-4 w-4" /> Configurações</Button>
             <Button size="sm" variant="outline" onClick={() => setResultadosOpen(true)}><BarChart3 className="mr-2 h-4 w-4" /> Resultados</Button>
             <Button size="sm" variant="outline" onClick={() => salvar()} disabled={salvando}>
               {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Salvar
@@ -455,7 +473,90 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
       </div>
 
       <ResultadosDialog open={resultadosOpen} onOpenChange={setResultadosOpen} pesquisaId={pesquisaId} perguntas={perguntas} />
+      <ConfigDialog
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        descricao={meta.descricao}
+        config={meta.config}
+        onChange={(patch) => setMeta((m) => ({ ...m, ...patch }))}
+      />
     </SidebarProvider>
+  );
+}
+
+// ============================================================
+// Configurações da pesquisa: descrição + tela final (resultado + botão WhatsApp)
+// ============================================================
+function ConfigDialog({ open, onOpenChange, descricao, config, onChange }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  descricao: string;
+  config: ConfigPesquisa;
+  onChange: (patch: { descricao?: string; config?: ConfigPesquisa }) => void;
+}) {
+  const setCfg = (patch: Partial<ConfigPesquisa>) => onChange({ config: { ...config, ...patch } });
+  const numero = config.whatsapp_numero.replace(/\D/g, "");
+  const preview = numero
+    ? `https://wa.me/${numero}?text=${encodeURIComponent(config.whatsapp_mensagem)}`
+    : "";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Configurações da pesquisa</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-5">
+          <div className="space-y-1">
+            <Label>Descrição (aparece no início do formulário)</Label>
+            <Textarea rows={3} value={descricao} onChange={(e) => onChange({ descricao: e.target.value })} />
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-3">
+            <p className="text-sm font-medium">Tela final (após enviar)</p>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Mostrar resultado (%) ao respondente</Label>
+                <p className="text-[11px] text-muted-foreground">Usa a pontuação das perguntas.</p>
+              </div>
+              <Switch checked={config.mostrar_resultado} onCheckedChange={(v) => setCfg({ mostrar_resultado: v })} />
+            </div>
+            {config.mostrar_resultado && (
+              <div className="space-y-1">
+                <Label>Texto do resultado</Label>
+                <Input value={config.resultado_texto} onChange={(e) => setCfg({ resultado_texto: e.target.value })} />
+                <p className="text-[11px] text-muted-foreground">Use <code>{"{pct}"}</code> onde a porcentagem deve aparecer.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-3">
+            <p className="text-sm font-medium">Botão de WhatsApp na tela final</p>
+            <div className="space-y-1">
+              <Label>Número do WhatsApp (com DDI)</Label>
+              <Input placeholder="Ex: 5511999999999" value={config.whatsapp_numero} onChange={(e) => setCfg({ whatsapp_numero: e.target.value })} />
+              <p className="text-[11px] text-muted-foreground">Deixe vazio para não exibir o botão.</p>
+            </div>
+            <div className="space-y-1">
+              <Label>Texto do botão</Label>
+              <Input value={config.whatsapp_botao} onChange={(e) => setCfg({ whatsapp_botao: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Mensagem pré-preenchida</Label>
+              <Textarea rows={2} value={config.whatsapp_mensagem} onChange={(e) => setCfg({ whatsapp_mensagem: e.target.value })} />
+            </div>
+            {preview && (
+              <a href={preview} target="_blank" rel="noreferrer" className="text-xs text-primary underline break-all">
+                Pré-visualizar link do WhatsApp
+              </a>
+            )}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">Clique em "Salvar" no topo da pesquisa para aplicar as alterações.</p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
