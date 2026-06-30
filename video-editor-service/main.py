@@ -55,6 +55,9 @@ INTERNAL_BASE = os.environ.get("INTERNAL_BASE", "http://127.0.0.1:8080")
 COOKIES_FILE = pathlib.Path(os.environ.get("YTDLP_COOKIES", str(OUTPUT_DIR.parent / "cookies.txt")))
 # Cookies do YouTube (separados): o IP de datacenter da VPS é bloqueado sem login.
 YOUTUBE_COOKIES_FILE = pathlib.Path(os.environ.get("YT_YOUTUBE_COOKIES", str(OUTPUT_DIR.parent / "youtube_cookies.txt")))
+# Provider de PO Token do YouTube (container bgutil na mesma rede docker `vidnet`). Sem ele,
+# o YouTube devolve LOGIN_REQUIRED mesmo com cookies. Ver _yt_anti_bot().
+BGUTIL_POT_URL = os.environ.get("BGUTIL_POT_URL", "http://bgutil-pot:4416")
 # Worker GPU que remove a legenda queimada dos b-rolls (inpainting). Vazio = limpeza desligada.
 VIDEO_CLEANER_URL = os.environ.get("VIDEO_CLEANER_URL", "").rstrip("/")
 MODEL = "claude-opus-4-8"
@@ -1203,10 +1206,16 @@ def _queries_youtube(alinhados: list, brief: str = "") -> dict:
 
 
 def _yt_anti_bot() -> list:
-    """Flags comuns p/ driblar o bloqueio de bot do YouTube e tornar o yt-dlp mais resiliente.
-    Usa o client 'android' (não exige login) e reaproveita os cookies (se houver)."""
-    flags = ["--extractor-args", "youtube:player_client=android,web",
-             "--retries", "3", "--fragment-retries", "3", "--socket-timeout", "20", "--no-warnings"]
+    """Flags p/ driblar o anti-bot do YouTube em IP de datacenter. O YouTube exige, nesse cenário:
+      1) cookies de CONTA LOGADA (passam pelo "confirme que não é um robô");
+      2) um PO Token, gerado pelo provider bgutil via HTTP (container `bgutil-pot`, ver BGUTIL_POT_URL);
+      3) resolver o desafio JS "n" (nsig) — precisa de um runtime JS (Deno, instalado na imagem) +
+         o script solver baixado sob demanda (`--remote-components ejs:github`).
+    Sem os três, o download dá LOGIN_REQUIRED ou "Only images are available". Testado: client `web`."""
+    flags = ["--remote-components", "ejs:github",
+             "--extractor-args", "youtube:player_client=web;fetch_pot=always",
+             "--extractor-args", f"youtubepot-bgutilhttp:base_url={BGUTIL_POT_URL}",
+             "--retries", "3", "--fragment-retries", "3", "--socket-timeout", "30", "--no-warnings"]
     # Prefere os cookies do YouTube; cai p/ os do Instagram só se não houver (legado).
     ck = YOUTUBE_COOKIES_FILE if YOUTUBE_COOKIES_FILE.exists() else COOKIES_FILE
     if ck.exists():

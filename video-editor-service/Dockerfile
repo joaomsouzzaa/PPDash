@@ -41,6 +41,14 @@ ENV REMOTION_DIR=/app/remotion
 COPY main.py transcribe_words.py planner.py ./
 COPY planner/ /app/planner/
 
+# Anti-bot do YouTube (IP de datacenter): Deno (runtime JS p/ resolver o desafio "n"/nsig) +
+# plugin bgutil (provider de PO Token, fala com o container `bgutil-pot` na rede `vidnet`).
+# Ver _yt_anti_bot() em main.py. Fica no fim p/ não invalidar as camadas caras acima (whisper/remotion).
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s -- -y \
+    && pip install --no-cache-dir -U bgutil-ytdlp-pot-provider
+
 ENV PORT=8080
 EXPOSE 8080
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
