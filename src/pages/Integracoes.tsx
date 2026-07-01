@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users, Sheet, SlidersHorizontal, BarChart3 } from "lucide-react";
+import { Plug, Wifi, WifiOff, Loader2, ShoppingCart, Copy, Check, Users, Sheet, SlidersHorizontal, BarChart3, Youtube } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -487,6 +487,9 @@ const Integracoes = () => {
 
             {/* Google Ads */}
             <GoogleAdsSection />
+
+            {/* YouTube (publicar Shorts pelo Workflow) */}
+            <YouTubeSection />
           </div>
         </main>
       </div>
@@ -509,9 +512,10 @@ const GoogleSheetsSection = () => {
   useEffect(() => {
     status();
     // Callback do OAuth: ?code= na URL → troca por tokens.
+    // O YouTube usa o MESMO redirect com state=youtube — deixa a seção do YouTube tratar esse.
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
-    if (code) {
+    if (code && params.get("state") !== "youtube") {
       (async () => {
         setLoading(true);
         const { data, error } = await supabase.functions.invoke("google-sheets", { body: { action: "exchange", code } });
@@ -749,6 +753,106 @@ const GoogleAdsSection = () => {
             )}
 
             {pronto && <p className="text-xs text-muted-foreground">Pronto! Crie um canal em <strong>Canais de Aquisição</strong> com a plataforma <strong>Google Ads</strong>.</p>}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+};
+
+// Conexão de canal do YouTube (Google OAuth com escopo youtube.upload) para
+// publicar/agendar Shorts pelo Workflow. Usa o MESMO redirect do Google Sheets,
+// distinguido por state=youtube (a seção Sheets ignora esse callback).
+const YouTubeSection = () => {
+  const [open, setOpen] = useState(false);
+  const [hasClient, setHasClient] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [canais, setCanais] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const status = async () => {
+    const { data } = await supabase.functions.invoke("youtube-connect", { body: { action: "status" } });
+    if (data) { setConnected(!!data.connected); setCanais(data.canais || []); setHasClient(!!data.has_client); }
+  };
+
+  useEffect(() => {
+    status();
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code && params.get("state") === "youtube") {
+      (async () => {
+        setLoading(true);
+        const { data, error } = await supabase.functions.invoke("youtube-connect", { body: { action: "exchange", code } });
+        setLoading(false);
+        window.history.replaceState({}, "", "/integracoes");
+        if (error || data?.error) sonner.error(`Erro ao conectar YouTube: ${data?.error || error?.message}`);
+        else { sonner.success(`YouTube conectado: ${(data.canais || []).map((c: any) => c.channel_title).join(", ")}`); setOpen(true); status(); }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const conectar = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke("youtube-connect", { body: { action: "get_auth_url" } });
+    setLoading(false);
+    if (error || data?.error) { sonner.error(data?.error || error?.message || "Erro"); return; }
+    window.location.href = data.url;
+  };
+
+  const desconectar = async () => {
+    await supabase.functions.invoke("youtube-connect", { body: { action: "disconnect" } });
+    sonner.success("YouTube desconectado"); status();
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer hover:bg-secondary/40 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                  <Youtube className="h-5 w-5 text-red-500" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">YouTube</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">Publicar e agendar Shorts pelo Workflow</p>
+                </div>
+              </div>
+              <Badge variant={connected ? "default" : "outline"} className="gap-1">
+                {connected ? <><Wifi className="h-3 w-3" /> {canais[0] || "Conectado"}</> : <><WifiOff className="h-3 w-3" /> Desconectado</>}
+              </Badge>
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 space-y-3">
+            {!hasClient ? (
+              <p className="text-xs text-muted-foreground">
+                A integração com o Google ainda não foi habilitada pelo administrador do sistema.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Conecte seu canal do YouTube para publicar e agendar Shorts a partir dos cards do Workflow.
+                  Autorize com a conta Google dona do canal.
+                </p>
+                <div className="flex gap-2">
+                  {!connected ? (
+                    <Button onClick={conectar} disabled={loading}>
+                      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Youtube className="mr-2 h-4 w-4" />} Conectar canal do YouTube
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" size="sm" onClick={conectar} disabled={loading}>Reautorizar</Button>
+                      <Button variant="destructive" size="sm" onClick={desconectar}>Desconectar</Button>
+                    </>
+                  )}
+                </div>
+                {connected && <p className="text-xs text-muted-foreground">Canal(is): {canais.join(", ")}. Agora escolha o canal ao publicar um card no Workflow.</p>}
+              </>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>

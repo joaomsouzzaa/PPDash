@@ -35,6 +35,8 @@ type ChecklistItem = { id: string; item: string; concluido: boolean; ordem: numb
 type IgConta = { id: string; ig_user_id: string; ig_username: string | null };
 type IgPost = { id: string; tipo: string; status: string; permalink: string | null; erro: string | null; publish_at: string | null; created_at: string };
 type IgPostCal = { id: string; tarefa_id: string | null; tipo: string; status: string; publish_at: string | null; published_at: string | null; midias: string[] };
+type YtCanal = { id: string; channel_id: string; channel_title: string | null; thumbnail_url: string | null };
+type YtPost = { id: string; status: string; permalink: string | null; erro: string | null; publish_at: string | null; created_at: string };
 
 const PRIORIDADES: Record<string, string> = { urgente: "Urgente", alta: "Alta", normal: "Normal", baixa: "Baixa" };
 // classes Tailwind no estilo ClickUp (vermelho / amarelo / azul / cinza)
@@ -96,6 +98,11 @@ export default function Workflow() {
   const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[], legenda: "" };
   const [form, setForm] = useState({ ...emptyForm });
   const [comentario, setComentario] = useState("");
+  // Auto-save do card: "idle" (nada a fazer), "saving" (debounce/gravando), "saved" (persistido).
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  // Guarda o id da tarefa já inicializada no form, p/ pular o auto-save do primeiro
+  // preenchimento (quando abrirTarefa popula o form) e só salvar edições reais.
+  const autoSaveInitRef = useRef<string | null>(null);
 
   const { data: respostas = [] } = useQuery({
     queryKey: ["respostas", editing?.id],
@@ -191,51 +198,119 @@ export default function Workflow() {
       return (data || []) as IgPost[];
     },
   });
+  // ---- Canais do YouTube (publicação de Shorts) ----
+  const { data: ytCanais = [] } = useQuery({
+    queryKey: ["yt_canais_min"],
+    queryFn: async () => {
+      const { data } = await supabase.from("yt_canais").select("id,channel_id,channel_title,thumbnail_url").eq("ativo", true).order("created_at");
+      return (data || []) as YtCanal[];
+    },
+  });
+  const { data: ytPosts = [] } = useQuery({
+    queryKey: ["yt_posts", editing?.id],
+    enabled: !!editing,
+    refetchInterval: (q) => ((q.state.data as YtPost[] | undefined)?.some((p) => p.status === "pendente" || p.status === "processando") ? 5000 : false),
+    queryFn: async () => {
+      const { data } = await supabase.from("yt_posts").select("id,status,permalink,erro,publish_at,created_at").eq("tarefa_id", editing!.id).order("created_at", { ascending: false });
+      return (data || []) as YtPost[];
+    },
+  });
   const [igContaId, setIgContaId] = useState<string>("");
   const [igSelecao, setIgSelecao] = useState<string[]>([]);  // urls escolhidas, em ordem
   const [igPublishAt, setIgPublishAt] = useState<string>(""); // datetime-local
   const [igEnviando, setIgEnviando] = useState(false);
+  // Canais escolhidos p/ publicar/agendar (acima do preview). IG ligado por padrão.
+  const [canais, setCanais] = useState({ instagram: true, youtube: false });
+  const [ytCanalId, setYtCanalId] = useState<string>("");
+  const [ytTitulo, setYtTitulo] = useState<string>("");
 
   const toggleMidia = (url: string) =>
     setIgSelecao((s) => (s.includes(url) ? s.filter((x) => x !== url) : [...s, url]));
 
+  // Mídias efetivas (seleção explícita ou todas as artes prontas) e se há vídeo
+  // entre elas — YouTube Shorts exige vídeo, e o IG vira "reels" quando há vídeo.
+  const midiasAtuais = () => (igSelecao.length ? igSelecao : anexos.filter((a) => a.status === "pronto" && a.url).map((a) => a.url!));
+  const temVideoSel = anexos.some((a) => a.tipo === "video" && a.url && midiasAtuais().includes(a.url));
+  const primeiroVideoUrl = () => anexos.find((a) => a.tipo === "video" && a.url && midiasAtuais().includes(a.url))?.url || null;
+  // Se a seleção deixar de ter vídeo, desmarca o YouTube (Shorts só aceita vídeo).
+  useEffect(() => { if (!temVideoSel && canais.youtube) setCanais((c) => ({ ...c, youtube: false })); }, [temVideoSel]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const publicarIg = async (action: "publicar_agora" | "agendar") => {
     if (!editing) return;
-    if (!igContaId) { toast.error("Selecione a conta do Instagram"); return; }
-    const midias = igSelecao.length ? igSelecao : anexos.filter((a) => a.status === "pronto" && a.url).map((a) => a.url!) ;
+    if (!canais.instagram && !canais.youtube) { toast.error("Selecione ao menos um canal (Instagram ou YouTube)"); return; }
+    const midias = midiasAtuais();
     if (midias.length === 0) { toast.error("Selecione ao menos uma arte pronta"); return; }
     if (action === "agendar" && !igPublishAt) { toast.error("Escolha a data/hora do agendamento"); return; }
     if (action === "agendar") {
       const quando = new Date(igPublishAt).getTime();
       if (quando < Date.now() + 15 * 60 * 1000) { toast.error("Agende para pelo menos 15 minutos no futuro"); return; }
     }
-    const temVideo = anexos.some((a) => midias.includes(a.url!) && a.tipo === "video");
+    const publishAtIso = action === "agendar" ? new Date(igPublishAt).toISOString() : null;
+    // Validações por canal antes de disparar
+    if (canais.instagram && !igContaId) { toast.error("Selecione a conta do Instagram"); return; }
+    if (canais.youtube) {
+      if (!ytCanalId) { toast.error("Selecione o canal do YouTube"); return; }
+      if (!primeiroVideoUrl()) { toast.error("O YouTube exige um vídeo na seleção"); return; }
+    }
+
+    const temVideo = temVideoSel;
     const tipo = temVideo ? "reels" : midias.length > 1 ? "carrossel" : "imagem";
     setIgEnviando(true);
-    const { data, error } = await supabase.functions.invoke("instagram-publish", {
-      body: {
-        action, tarefa_id: editing.id, ig_conta_id: igContaId, tipo,
-        legenda: form.legenda || null, midias,
-        publish_at: action === "agendar" ? new Date(igPublishAt).toISOString() : null,
-      },
-    });
+
+    const erros: string[] = [];
+    let algumProcessando = false;
+
+    // ---- Instagram ----
+    if (canais.instagram) {
+      const { data, error } = await supabase.functions.invoke("instagram-publish", {
+        body: {
+          action, tarefa_id: editing.id, ig_conta_id: igContaId, tipo,
+          legenda: form.legenda || null, midias, publish_at: publishAtIso,
+        },
+      });
+      if (error || data?.error) {
+        let msg = data?.error || error?.message || "falhou";
+        try { const b = await (error as any)?.context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+        erros.push(`Instagram: ${msg}`);
+      } else if (data?.processando) algumProcessando = true;
+    }
+
+    // ---- YouTube Shorts ----
+    if (canais.youtube) {
+      const { data, error } = await supabase.functions.invoke("youtube-publish", {
+        body: {
+          action, tarefa_id: editing.id, yt_canal_id: ytCanalId,
+          titulo: ytTitulo || form.titulo, descricao: form.legenda || null,
+          video_url: primeiroVideoUrl(), publish_at: publishAtIso,
+        },
+      });
+      if (error || data?.error) {
+        let msg = data?.error || error?.message || "falhou";
+        try { const b = await (error as any)?.context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+        erros.push(`YouTube: ${msg}`);
+      } else if (data?.processando) algumProcessando = true;
+    }
+
     setIgEnviando(false);
-    if (error || data?.error) {
-      let msg = data?.error || error?.message || "falhou";
-      try { const b = await (error as any)?.context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
-      toast.error(`Erro ao publicar: ${msg}`, { duration: 10000 });
+    if (erros.length) {
+      toast.error(`Erro ao publicar — ${erros.join(" · ")}`, { duration: 10000 });
     } else {
-      toast.success(action === "agendar" ? "Post agendado!" : data?.processando ? "Publicando (vídeo processando)…" : "Post publicado!");
+      toast.success(action === "agendar" ? "Post agendado!" : algumProcessando ? "Publicando (vídeo processando)…" : "Post publicado!");
       setIgSelecao([]); setIgPublishAt("");
       // Move o card: Agendar → "Agendado"; Publicar agora → "Postado".
       await moverCardEtapa(editing.id, action === "agendar" ? "Agendado" : "Postado");
       queryClient.invalidateQueries({ queryKey: ["tarefas"] });
     }
     queryClient.invalidateQueries({ queryKey: ["ig_posts", editing.id] });
+    queryClient.invalidateQueries({ queryKey: ["yt_posts", editing.id] });
   };
   const cancelarIgPost = async (id: string) => {
     await supabase.functions.invoke("instagram-publish", { body: { action: "cancelar", id } });
     queryClient.invalidateQueries({ queryKey: ["ig_posts", editing!.id] });
+  };
+  const cancelarYtPost = async (id: string) => {
+    await supabase.functions.invoke("youtube-publish", { body: { action: "cancelar", id } });
+    queryClient.invalidateQueries({ queryKey: ["yt_posts", editing!.id] });
   };
 
   // Etapa de design? (compara pelo nome da coluna selecionada no form)
@@ -324,25 +399,51 @@ export default function Workflow() {
     setEditing(null);
     setForm({ ...emptyForm, coluna_id: colunaId || colunas[0]?.id || "" });
     setComentario("");
+    autoSaveInitRef.current = null; setAutoSaveStatus("idle");
     setOpen(true);
   };
   const abrirTarefa = (t: Tarefa) => {
     setEditing(t);
     setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [], legenda: t.legenda || "" });
     setComentario("");
+    autoSaveInitRef.current = null; setAutoSaveStatus("idle");
     setOpen(true);
   };
 
+  // Monta o payload da tarefa a partir do form (reusado no Salvar manual e no auto-save).
+  const montarPayloadTarefa = () => ({
+    titulo: form.titulo.trim(), descricao: form.descricao || null,
+    coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, prioridade: form.prioridade,
+    data_inicio: form.data_inicio || null, data_vencimento: form.data_vencimento || null,
+    tempo_estimado: form.tempo_estimado.trim() ? parseInt(form.tempo_estimado, 10) : null,
+    etiquetas: form.etiquetas, legenda: form.legenda || null,
+    updated_at: new Date().toISOString(),
+  });
+
+  // Auto-save (só p/ tarefa existente): grava os campos do form sozinho, com debounce
+  // de 800ms, pra não perder legenda/texto por esquecer o botão Salvar. Anexos e posts
+  // já são persistidos na hora — isto cobre só a tabela `tarefas`. Pula o primeiro
+  // disparo após abrir o card (quando o form é populado por abrirTarefa).
+  useEffect(() => {
+    if (!open || !editing) return;
+    if (autoSaveInitRef.current !== editing.id) { autoSaveInitRef.current = editing.id; return; }
+    if (!form.titulo.trim()) return;
+    setAutoSaveStatus("saving");
+    const id = editing.id;
+    const payload = montarPayloadTarefa();
+    const t = setTimeout(async () => {
+      const { error } = await supabase.from("tarefas").update(payload).eq("id", id);
+      if (error) { setAutoSaveStatus("idle"); toast.error("Falha ao salvar automaticamente"); return; }
+      setAutoSaveStatus("saved");
+      queryClient.invalidateQueries({ queryKey: ["tarefas"] });
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, editing, open]);
+
   const salvar = async () => {
     if (!form.titulo.trim()) { toast.error("Informe o título"); return; }
-    const payload = {
-      titulo: form.titulo.trim(), descricao: form.descricao || null,
-      coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, prioridade: form.prioridade,
-      data_inicio: form.data_inicio || null, data_vencimento: form.data_vencimento || null,
-      tempo_estimado: form.tempo_estimado.trim() ? parseInt(form.tempo_estimado, 10) : null,
-      etiquetas: form.etiquetas, legenda: form.legenda || null,
-      updated_at: new Date().toISOString(),
-    };
+    const payload = montarPayloadTarefa();
     const res = editing
       ? await supabase.from("tarefas").update(payload).eq("id", editing.id)
       : await supabase.from("tarefas").insert({ ...payload, origem: "manual" });
@@ -766,7 +867,7 @@ export default function Workflow() {
 
             {editing && (
               <div className="space-y-3 border-t border-border pt-3">
-                <Label className="flex items-center gap-2 text-sm"><ImageIcon className="h-4 w-4 text-primary" /> Publicar no Instagram</Label>
+                <Label className="flex items-center gap-2 text-sm"><ImageIcon className="h-4 w-4 text-primary" /> Publicar</Label>
                 <div>
                   <input ref={uploadRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => uploadArte(e.target.files)} />
                   <Button variant="outline" size="sm" disabled={enviandoUpload} onClick={() => uploadRef.current?.click()}>
@@ -787,68 +888,112 @@ export default function Workflow() {
                   const prontos = anexos.filter((a) => a.status === "pronto" && a.url);
                   const midiasMockup = igSelecao.length ? igSelecao : prontos.map((a) => a.url!);
                   const conta = igContas.find((c) => c.id === igContaId);
+                  const semCanalMarcado = !canais.instagram && !canais.youtube;
                   return (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {/* Preview / mockup */}
-                      <div className="flex justify-center">
-                        <IgPostMockup imagens={midiasMockup} legenda={form.legenda} username={conta?.ig_username || undefined} />
+                    <div className="space-y-3">
+                      {/* Canais a publicar/agendar (acima do preview) */}
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Canais</p>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox checked={canais.instagram} onCheckedChange={(v) => setCanais((c) => ({ ...c, instagram: !!v }))} />
+                            Instagram
+                          </label>
+                          <label className={`flex items-center gap-2 text-sm ${temVideoSel ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                            <Checkbox checked={canais.youtube} disabled={!temVideoSel} onCheckedChange={(v) => setCanais((c) => ({ ...c, youtube: !!v }))} />
+                            YouTube (Short)
+                          </label>
+                          {!temVideoSel && <span className="text-[11px] text-muted-foreground">o YouTube exige um vídeo na seleção</span>}
+                        </div>
                       </div>
-                      {/* Controles */}
-                      <div className="space-y-2">
-                        {igContas.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">Nenhuma conta do Instagram conectada. Conecte na página Growth → Auto-DM / Integrações.</p>
-                        ) : (
-                          <>
-                            <Select value={igContaId} onValueChange={setIgContaId}>
-                              <SelectTrigger className="h-9"><SelectValue placeholder="Conta do Instagram" /></SelectTrigger>
-                              <SelectContent>{igContas.map((c) => <SelectItem key={c.id} value={c.id}>@{c.ig_username || c.ig_user_id}</SelectItem>)}</SelectContent>
-                            </Select>
 
-                            {prontos.length > 0 && (
-                              <div className="space-y-1">
-                                <p className="text-xs text-muted-foreground">Selecione as mídias (vazio = todas; ordem = ordem de clique p/ carrossel):</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {prontos.map((a) => {
-                                    const idx = igSelecao.indexOf(a.url!);
-                                    return (
-                                      <button type="button" key={a.id} onClick={() => toggleMidia(a.url!)}
-                                        className={`relative h-14 w-14 rounded-md overflow-hidden border-2 ${idx >= 0 ? "border-primary" : "border-transparent"}`}>
-                                        {a.tipo === "video" ? <video src={a.url!} className="h-full w-full object-cover" /> : <img src={a.url!} className="h-full w-full object-cover" alt="" />}
-                                        {idx >= 0 && <span className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-bl">{idx + 1}</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {/* Preview / mockup */}
+                        <div className="flex justify-center">
+                          <IgPostMockup imagens={midiasMockup} legenda={form.legenda} username={conta?.ig_username || undefined} />
+                        </div>
+                        {/* Controles */}
+                        <div className="space-y-2">
+                          {canais.instagram && (
+                            igContas.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">Nenhuma conta do Instagram conectada. Conecte na página Growth → Auto-DM / Integrações.</p>
+                            ) : (
+                              <Select value={igContaId} onValueChange={setIgContaId}>
+                                <SelectTrigger className="h-9"><SelectValue placeholder="Conta do Instagram" /></SelectTrigger>
+                                <SelectContent>{igContas.map((c) => <SelectItem key={c.id} value={c.id}>@{c.ig_username || c.ig_user_id}</SelectItem>)}</SelectContent>
+                              </Select>
+                            )
+                          )}
+
+                          {canais.youtube && (
+                            ytCanais.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">Nenhum canal do YouTube conectado. Conecte em Integrações → YouTube.</p>
+                            ) : (
+                              <>
+                                <Select value={ytCanalId} onValueChange={setYtCanalId}>
+                                  <SelectTrigger className="h-9"><SelectValue placeholder="Canal do YouTube" /></SelectTrigger>
+                                  <SelectContent>{ytCanais.map((c) => <SelectItem key={c.id} value={c.id}>{c.channel_title || c.channel_id}</SelectItem>)}</SelectContent>
+                                </Select>
+                                <Input value={ytTitulo} onChange={(e) => setYtTitulo(e.target.value)} placeholder={`Título do Short (padrão: ${form.titulo || "título da tarefa"})`} className="h-9 text-xs" />
+                              </>
+                            )
+                          )}
+
+                          {prontos.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">Selecione as mídias (vazio = todas; ordem = ordem de clique p/ carrossel):</p>
+                              <div className="flex flex-wrap gap-2">
+                                {prontos.map((a) => {
+                                  const idx = igSelecao.indexOf(a.url!);
+                                  return (
+                                    <button type="button" key={a.id} onClick={() => toggleMidia(a.url!)}
+                                      className={`relative h-14 w-14 rounded-md overflow-hidden border-2 ${idx >= 0 ? "border-primary" : "border-transparent"}`}>
+                                      {a.tipo === "video" ? <video src={a.url!} className="h-full w-full object-cover" /> : <img src={a.url!} className="h-full w-full object-cover" alt="" />}
+                                      {idx >= 0 && <span className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-bl">{idx + 1}</span>}
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            )}
-
-                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                              <Button size="sm" disabled={igEnviando} onClick={() => publicarIg("publicar_agora")}>
-                                {igEnviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Publicar agora
-                              </Button>
-                              <Input type="datetime-local" value={igPublishAt} onChange={(e) => setIgPublishAt(e.target.value)} min={new Date(Date.now() + 15 * 60000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} className="h-9 w-auto text-xs" />
-                              <Button size="sm" variant="outline" disabled={igEnviando} onClick={() => publicarIg("agendar")}>
-                                <CalendarIcon className="mr-2 h-4 w-4" /> Agendar
-                              </Button>
                             </div>
+                          )}
 
-                            {igPosts.length > 0 && (
-                              <div className="space-y-1 pt-2">
-                                {igPosts.map((p) => (
-                                  <div key={p.id} className="flex items-center gap-2 text-xs rounded-md border border-border p-1.5">
-                                    <Badge variant="outline" className="text-[10px]">{p.tipo}</Badge>
-                                    <span className={
-                                      p.status === "publicado" ? "text-green-500" : p.status === "falhou" ? "text-destructive" : "text-amber-500"
-                                    }>{p.status}{p.publish_at && p.status === "pendente" ? ` · ${new Date(p.publish_at).toLocaleString("pt-BR")}` : ""}</span>
-                                    {p.permalink && <a href={p.permalink} target="_blank" rel="noreferrer" className="text-primary underline ml-auto">ver post</a>}
-                                    {p.status === "pendente" && <button type="button" onClick={() => cancelarIgPost(p.id)} className="text-muted-foreground hover:text-destructive ml-auto"><X className="h-3.5 w-3.5" /></button>}
-                                    {p.erro && <span className="text-destructive truncate" title={p.erro}>· {p.erro}</span>}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <Button size="sm" disabled={igEnviando || semCanalMarcado} onClick={() => publicarIg("publicar_agora")}>
+                              {igEnviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Publicar agora
+                            </Button>
+                            <Input type="datetime-local" value={igPublishAt} onChange={(e) => setIgPublishAt(e.target.value)} min={new Date(Date.now() + 15 * 60000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} className="h-9 w-auto text-xs" />
+                            <Button size="sm" variant="outline" disabled={igEnviando || semCanalMarcado} onClick={() => publicarIg("agendar")}>
+                              <CalendarIcon className="mr-2 h-4 w-4" /> Agendar
+                            </Button>
+                          </div>
+
+                          {(igPosts.length > 0 || ytPosts.length > 0) && (
+                            <div className="space-y-1 pt-2">
+                              {igPosts.map((p) => (
+                                <div key={p.id} className="flex items-center gap-2 text-xs rounded-md border border-border p-1.5">
+                                  <Badge variant="outline" className="text-[10px]">IG · {p.tipo}</Badge>
+                                  <span className={
+                                    p.status === "publicado" ? "text-green-500" : p.status === "falhou" ? "text-destructive" : "text-amber-500"
+                                  }>{p.status}{p.publish_at && p.status === "pendente" ? ` · ${new Date(p.publish_at).toLocaleString("pt-BR")}` : ""}</span>
+                                  {p.permalink && <a href={p.permalink} target="_blank" rel="noreferrer" className="text-primary underline ml-auto">ver post</a>}
+                                  {p.status === "pendente" && <button type="button" onClick={() => cancelarIgPost(p.id)} className="text-muted-foreground hover:text-destructive ml-auto"><X className="h-3.5 w-3.5" /></button>}
+                                  {p.erro && <span className="text-destructive truncate" title={p.erro}>· {p.erro}</span>}
+                                </div>
+                              ))}
+                              {ytPosts.map((p) => (
+                                <div key={p.id} className="flex items-center gap-2 text-xs rounded-md border border-border p-1.5">
+                                  <Badge variant="outline" className="text-[10px]">YouTube</Badge>
+                                  <span className={
+                                    p.status === "publicado" ? "text-green-500" : p.status === "falhou" ? "text-destructive" : "text-amber-500"
+                                  }>{p.status}{p.publish_at && p.status === "pendente" ? ` · ${new Date(p.publish_at).toLocaleString("pt-BR")}` : ""}</span>
+                                  {p.permalink && <a href={p.permalink} target="_blank" rel="noreferrer" className="text-primary underline ml-auto">ver Short</a>}
+                                  {p.status === "pendente" && <button type="button" onClick={() => cancelarYtPost(p.id)} className="text-muted-foreground hover:text-destructive ml-auto"><X className="h-3.5 w-3.5" /></button>}
+                                  {p.erro && <span className="text-destructive truncate" title={p.erro}>· {p.erro}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -877,7 +1022,14 @@ export default function Workflow() {
           </div>
           <DialogFooter className="flex sm:justify-between">
             {editing ? <Button variant="ghost" className="text-destructive" onClick={excluir}><Trash2 className="mr-2 h-4 w-4" /> Excluir</Button> : <span />}
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {editing && autoSaveStatus !== "idle" && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
+                  {autoSaveStatus === "saving"
+                    ? (<><Loader2 className="h-3 w-3 animate-spin" /> Salvando…</>)
+                    : (<>Salvo automaticamente</>)}
+                </span>
+              )}
               <Button variant="outline" onClick={() => setOpen(false)}>Fechar</Button>
               <Button onClick={salvar}>{editing ? "Salvar" : "Criar Tarefa"}</Button>
             </div>
