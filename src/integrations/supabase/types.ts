@@ -513,6 +513,7 @@ export type Database = {
           published_at: string | null
           status: string
           tarefa_id: string | null
+          tentativas: number
           tipo: string
         }
         Insert: {
@@ -531,6 +532,7 @@ export type Database = {
           published_at?: string | null
           status?: string
           tarefa_id?: string | null
+          tentativas?: number
           tipo?: string
         }
         Update: {
@@ -549,6 +551,7 @@ export type Database = {
           published_at?: string | null
           status?: string
           tarefa_id?: string | null
+          tentativas?: number
           tipo?: string
         }
         Relationships: [
@@ -564,114 +567,6 @@ export type Database = {
             columns: ["tarefa_id"]
             isOneToOne: false
             referencedRelation: "tarefas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      yt_canais: {
-        Row: {
-          access_token: string | null
-          ativo: boolean
-          channel_id: string
-          channel_title: string | null
-          created_at: string
-          id: string
-          org_id: string | null
-          refresh_token: string | null
-          thumbnail_url: string | null
-          token_expiry: string | null
-          updated_at: string
-        }
-        Insert: {
-          access_token?: string | null
-          ativo?: boolean
-          channel_id: string
-          channel_title?: string | null
-          created_at?: string
-          id?: string
-          org_id?: string | null
-          refresh_token?: string | null
-          thumbnail_url?: string | null
-          token_expiry?: string | null
-          updated_at?: string
-        }
-        Update: {
-          access_token?: string | null
-          ativo?: boolean
-          channel_id?: string
-          channel_title?: string | null
-          created_at?: string
-          id?: string
-          org_id?: string | null
-          refresh_token?: string | null
-          thumbnail_url?: string | null
-          token_expiry?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      yt_posts: {
-        Row: {
-          created_at: string
-          descricao: string | null
-          erro: string | null
-          id: string
-          org_id: string | null
-          permalink: string | null
-          publish_at: string | null
-          published_at: string | null
-          status: string
-          tarefa_id: string | null
-          titulo: string | null
-          video_url: string
-          youtube_video_id: string | null
-          yt_canal_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          descricao?: string | null
-          erro?: string | null
-          id?: string
-          org_id?: string | null
-          permalink?: string | null
-          publish_at?: string | null
-          published_at?: string | null
-          status?: string
-          tarefa_id?: string | null
-          titulo?: string | null
-          video_url: string
-          youtube_video_id?: string | null
-          yt_canal_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          descricao?: string | null
-          erro?: string | null
-          id?: string
-          org_id?: string | null
-          permalink?: string | null
-          publish_at?: string | null
-          published_at?: string | null
-          status?: string
-          tarefa_id?: string | null
-          titulo?: string | null
-          video_url?: string
-          youtube_video_id?: string | null
-          yt_canal_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "yt_posts_tarefa_id_fkey"
-            columns: ["tarefa_id"]
-            isOneToOne: false
-            referencedRelation: "tarefas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "yt_posts_yt_canal_id_fkey"
-            columns: ["yt_canal_id"]
-            isOneToOne: false
-            referencedRelation: "yt_canais"
             referencedColumns: ["id"]
           },
         ]
@@ -1507,6 +1402,7 @@ export type Database = {
       }
       pesquisas: {
         Row: {
+          config: Json
           created_at: string
           descricao: string | null
           id: string
@@ -1516,6 +1412,7 @@ export type Database = {
           titulo: string
         }
         Insert: {
+          config?: Json
           created_at?: string
           descricao?: string | null
           id?: string
@@ -1525,6 +1422,7 @@ export type Database = {
           titulo: string
         }
         Update: {
+          config?: Json
           created_at?: string
           descricao?: string | null
           id?: string
@@ -1728,6 +1626,152 @@ export type Database = {
           nome?: string
           org_id?: string | null
           palavras_chave?: string | null
+        }
+        Relationships: []
+      }
+      prospect_analises: {
+        Row: {
+          analise: Json
+          bio: string | null
+          created_at: string | null
+          empresa_handle: string | null
+          followers: number | null
+          foto_url: string | null
+          handle: string
+          id: string
+          is_business: boolean | null
+          job_id: string | null
+          mensagem_parte1: string | null
+          mensagem_parte2: string | null
+          niche_match: boolean
+          nome: string | null
+          org_id: string | null
+          origem: string
+          segmento: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          analise?: Json
+          bio?: string | null
+          created_at?: string | null
+          empresa_handle?: string | null
+          followers?: number | null
+          foto_url?: string | null
+          handle: string
+          id?: string
+          is_business?: boolean | null
+          job_id?: string | null
+          mensagem_parte1?: string | null
+          mensagem_parte2?: string | null
+          niche_match?: boolean
+          nome?: string | null
+          org_id?: string | null
+          origem?: string
+          segmento?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          analise?: Json
+          bio?: string | null
+          created_at?: string | null
+          empresa_handle?: string | null
+          followers?: number | null
+          foto_url?: string | null
+          handle?: string
+          id?: string
+          is_business?: boolean | null
+          job_id?: string | null
+          mensagem_parte1?: string | null
+          mensagem_parte2?: string | null
+          niche_match?: boolean
+          nome?: string | null
+          org_id?: string | null
+          origem?: string
+          segmento?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_analises_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "prospect_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospect_jobs: {
+        Row: {
+          created_at: string | null
+          id: string
+          log: string | null
+          nicho: string
+          org_id: string | null
+          perfil_isca: string
+          status: string
+          total_encontrados: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          log?: string | null
+          nicho: string
+          org_id?: string | null
+          perfil_isca: string
+          status?: string
+          total_encontrados?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          log?: string | null
+          nicho?: string
+          org_id?: string | null
+          perfil_isca?: string
+          status?: string
+          total_encontrados?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      prospect_produtos: {
+        Row: {
+          ativo: boolean
+          created_at: string | null
+          descricao: string | null
+          gatilhos: string[]
+          id: string
+          nome: string
+          org_id: string | null
+          publico_alvo: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string | null
+          descricao?: string | null
+          gatilhos?: string[]
+          id?: string
+          nome: string
+          org_id?: string | null
+          publico_alvo?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string | null
+          descricao?: string | null
+          gatilhos?: string[]
+          id?: string
+          nome?: string
+          org_id?: string | null
+          publico_alvo?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -2242,6 +2286,114 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      yt_canais: {
+        Row: {
+          access_token: string | null
+          ativo: boolean
+          channel_id: string
+          channel_title: string | null
+          created_at: string
+          id: string
+          org_id: string | null
+          refresh_token: string | null
+          thumbnail_url: string | null
+          token_expiry: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token?: string | null
+          ativo?: boolean
+          channel_id: string
+          channel_title?: string | null
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          refresh_token?: string | null
+          thumbnail_url?: string | null
+          token_expiry?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string | null
+          ativo?: boolean
+          channel_id?: string
+          channel_title?: string | null
+          created_at?: string
+          id?: string
+          org_id?: string | null
+          refresh_token?: string | null
+          thumbnail_url?: string | null
+          token_expiry?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      yt_posts: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          erro: string | null
+          id: string
+          org_id: string | null
+          permalink: string | null
+          publish_at: string | null
+          published_at: string | null
+          status: string
+          tarefa_id: string | null
+          titulo: string | null
+          video_url: string
+          youtube_video_id: string | null
+          yt_canal_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          erro?: string | null
+          id?: string
+          org_id?: string | null
+          permalink?: string | null
+          publish_at?: string | null
+          published_at?: string | null
+          status?: string
+          tarefa_id?: string | null
+          titulo?: string | null
+          video_url: string
+          youtube_video_id?: string | null
+          yt_canal_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          erro?: string | null
+          id?: string
+          org_id?: string | null
+          permalink?: string | null
+          publish_at?: string | null
+          published_at?: string | null
+          status?: string
+          tarefa_id?: string | null
+          titulo?: string | null
+          video_url?: string
+          youtube_video_id?: string | null
+          yt_canal_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "yt_posts_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "yt_posts_yt_canal_id_fkey"
+            columns: ["yt_canal_id"]
+            isOneToOne: false
+            referencedRelation: "yt_canais"
             referencedColumns: ["id"]
           },
         ]

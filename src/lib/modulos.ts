@@ -42,6 +42,7 @@ export const MODULOS_CATALOGO: ModuloDef[] = [
       { key: "growth.autodm", nome: "Auto-DM Instagram", url: "/auto-dm" },
       { key: "growth.videoeditor", nome: "Vídeo Editor", url: "/video-editor" },
       { key: "growth.pesquisas", nome: "Pesquisas", url: "/pesquisas" },
+      { key: "growth.scrapingprospect", nome: "Scraping Prospect", url: "/scraping-prospect" },
     ],
   },
 ];

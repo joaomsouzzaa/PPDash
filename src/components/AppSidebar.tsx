@@ -26,6 +26,7 @@ import {
   Megaphone,
   ClipboardList,
   Scissors,
+  UserSearch,
 } from "lucide-react";
 import { useItensOcultos } from "@/hooks/useModulos";
 import { MODULOS_CATALOGO } from "@/lib/modulos";
@@ -65,6 +66,7 @@ const ICONS: Record<string, any> = {
   "growth.autodm": MessageSquare,
   "growth.videoeditor": Scissors,
   "growth.pesquisas": ClipboardList,
+  "growth.scrapingprospect": UserSearch,
 };
 
 export function AppSidebar() {
