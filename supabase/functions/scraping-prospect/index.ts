@@ -56,17 +56,36 @@ async function getKey(supabase: any, provider: string, orgId: string | null, env
   return key;
 }
 
-// Config do modelo de IA (org sobrescreve; default Anthropic Claude).
+// Descobre qual provider de IA tem chave configurada e devolve provider+modelo+apiKey.
+// ai_config só tem (org_id, provider, api_key) — não há coluna de modelo, então usamos
+// um modelo padrão por provider. Preferência: anthropic > openai > google.
+const ORDEM_PROVIDERS = ["anthropic", "openai", "google"];
+const MODELO_PADRAO: Record<string, string> = {
+  anthropic: "claude-opus-4-8",
+  openai: "gpt-4o",
+  google: "gemini-1.5-pro",
+};
+const ENV_PROVIDER: Record<string, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  google: "GOOGLE_API_KEY",
+};
+
 async function getAIConfig(supabase: any, orgId: string | null): Promise<{ provider: string; modelo: string; apiKey: string }> {
-  let provider = "anthropic";
-  let modelo = "claude-opus-4-8";
+  const comChave = new Set<string>();
   if (orgId) {
-    const { data } = await supabase.from("ai_config").select("provider,modelo").eq("org_id", orgId).limit(1);
-    if (data?.[0]?.provider) { provider = data[0].provider; if (data[0].modelo) modelo = data[0].modelo; }
+    const { data } = await supabase.from("ai_config").select("provider,api_key").eq("org_id", orgId);
+    (data || []).forEach((r: any) => { if (r.api_key) comChave.add(r.provider); });
   }
-  const envName = provider === "openai" ? "OPENAI_API_KEY" : provider === "google" ? "GOOGLE_API_KEY" : "ANTHROPIC_API_KEY";
-  const apiKey = await getKey(supabase, provider, orgId, envName);
-  return { provider, modelo, apiKey };
+  if (comChave.size === 0) {
+    const { data } = await supabase.from("ai_config").select("provider,api_key");
+    (data || []).forEach((r: any) => { if (r.api_key) comChave.add(r.provider); });
+  }
+  let provider = ORDEM_PROVIDERS.find((p) => comChave.has(p))
+    || ORDEM_PROVIDERS.find((p) => Deno.env.get(ENV_PROVIDER[p]))
+    || "anthropic";
+  const apiKey = await getKey(supabase, provider, orgId, ENV_PROVIDER[provider]);
+  return { provider, modelo: MODELO_PADRAO[provider], apiKey };
 }
 
 function handleLimpo(raw: string): string {
@@ -106,15 +125,18 @@ async function buscarPerfis(token: string, usernames: string[]): Promise<any[]> 
   })).filter((p) => p.handle);
 }
 
-// Puxa uma lista de seguidores do perfil isca via instagram-follower-scraper.
-// Retorna username/fullName (SEM bio — precisa de buscarPerfis depois).
+// Puxa uma lista de seguidores do perfil isca. Não existe actor oficial da Apify
+// para seguidores; usamos o actor no-cookies mais usado da store.
+// Retorna apenas os @ (SEM bio — precisa de buscarPerfis depois).
 async function buscarSeguidores(token: string, perfilIsca: string, limite: number): Promise<string[]> {
-  const arr = await apifyRun(token, "apify~instagram-follower-scraper", {
-    usernames: [perfilIsca],
+  const arr = await apifyRun(token, "scraping_solutions~instagram-scraper-followers-following-no-cookies", {
+    Account: [perfilIsca],
     resultsLimit: limite,
+    dataToScrape: "Followers",
   });
   const handles = arr
-    .map((it) => it.username || it.handle || "")
+    .map((it) => it.username || it.handle || it.ownerUsername || it.user_name || "")
+    .map((h: string) => (h || "").replace(/^@/, "").trim())
     .filter((h: string) => !!h);
   return [...new Set(handles)] as string[];
 }
