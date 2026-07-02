@@ -1228,6 +1228,9 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [editandoRoteiro, setEditandoRoteiro] = useState(false);
   const [roteiroEdit, setRoteiroEdit] = useState("");
   const [salvandoRoteiro, setSalvandoRoteiro] = useState(false);
+  const [editandoBriefing, setEditandoBriefing] = useState(false);
+  const [briefingEdit, setBriefingEdit] = useState("");
+  const [salvandoBriefing, setSalvandoBriefing] = useState(false);
 
   const { data: ref } = useQuery({
     queryKey: ["video_ref", tarefaId],
@@ -1334,6 +1337,23 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       toast.error(e instanceof Error ? e.message : "Falha ao salvar o roteiro.");
     } finally {
       setSalvandoRoteiro(false);
+    }
+  };
+
+  // Salva um ajuste manual no briefing adaptado (só o campo `briefing`, mantendo o resto do video_ref).
+  const salvarBriefing = async () => {
+    if (!briefingEdit.trim()) { toast.error("O briefing não pode ficar vazio."); return; }
+    setSalvandoBriefing(true);
+    try {
+      const vr = { ...(ref || {}), briefing: briefingEdit };
+      await db.from("tarefas").update({ video_ref: vr, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      setEditandoBriefing(false);
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      toast.success("Briefing atualizado.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar o briefing.");
+    } finally {
+      setSalvandoBriefing(false);
     }
   };
 
@@ -1768,11 +1788,30 @@ function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId
         <div className="space-y-2 rounded-md border p-3 text-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-muted-foreground">BRIEFING ADAPTADO (para o designer)</p>
-            <Button onClick={limpar} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Limpar / Nova análise
-            </Button>
+            {!editandoBriefing && (
+              <div className="flex items-center gap-1">
+                <Button onClick={() => { setBriefingEdit(ref.briefing); setEditandoBriefing(true); }} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                </Button>
+                <Button onClick={limpar} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> Limpar / Nova análise
+                </Button>
+              </div>
+            )}
           </div>
-          <p className="whitespace-pre-wrap text-sm">{ref.briefing}</p>
+          {editandoBriefing ? (
+            <div className="space-y-2">
+              <Textarea value={briefingEdit} onChange={(e) => setBriefingEdit(e.target.value)} rows={14} className="text-sm" />
+              <div className="flex items-center gap-2">
+                <Button onClick={salvarBriefing} disabled={salvandoBriefing} size="sm">
+                  {salvandoBriefing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Salvar
+                </Button>
+                <Button onClick={() => setEditandoBriefing(false)} disabled={salvandoBriefing} size="sm" variant="ghost">Cancelar</Button>
+              </div>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap text-sm">{ref.briefing}</p>
+          )}
 
           {/* Arte pronta: o designer cola o link do Drive com a arte final */}
           <div className="mt-3 space-y-2 border-t pt-3">
