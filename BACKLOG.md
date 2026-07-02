@@ -1,18 +1,26 @@
 # Backlog
 
-## Personalizar e-mail de convite de equipe (Supabase Auth)
+## Personalizar e-mail de convite de equipe (Supabase Auth) + SMTP próprio
 
-**Status:** pendente — depende de configurar SMTP próprio.
+**Status:** pendente — depende de configurar SMTP próprio. **A falha crítica já foi
+mitigada** (2026-07-02): o convite não quebra mais no rate limit; falta só o e-mail
+automático personalizado.
 
-**Contexto:**
-- O convite é enviado em `supabase/functions/admin/index.ts` (case `invite_member`) via
-  `auth.admin.inviteUserByEmail`, que usa o template "Invite user" do Supabase Auth.
-- Hoje o template está no padrão em inglês ("You've been invited") e o remetente é o do
-  Supabase. Reclamação: e-mails sem personalização e às vezes não chegam (provedor padrão
-  do Supabase tem limite baixo e cai em spam).
+**Já feito (2026-07-02):**
+- Erro `email rate limit exceeded` ao convidar vários membros: o SMTP padrão do Supabase
+  tem teto de **2 e-mails/hora** (`rate_limit_email_sent=2`, `smtp_host` vazio = sem SMTP).
+- `invite_member` (`supabase/functions/admin/index.ts`, deployada v13) agora tenta o e-mail
+  e, se falhar, cria o usuário e devolve `invite_link` via `generateLink` (não envia e-mail,
+  sem rate limit) + `email_enviado`. O front (`Equipe.tsx`) mostra o link com botão Copiar
+  para envio manual. Commit `ae61b34`, pushado.
+
+**Contexto (o que ainda falta):**
+- O convite por e-mail, quando sai, usa o template padrão em inglês ("You've been invited") e
+  o remetente do Supabase. Sem personalização e cai em spam / limite baixo.
 - Tentativa de editar o template via Management API (`PATCH /config/auth`) retornou:
   *"Email template modification is not available for free tier projects using the default
   email provider. Please upgrade your plan or configure a custom SMTP provider."*
+- **Precisa do usuário:** API key de um provedor (Resend recomendado) + domínio verificado.
 
 **O que fazer (quando retomarmos):**
 1. Escolher provedor de envio e obter credenciais (recomendado: **Resend** — free 3k/mês;
