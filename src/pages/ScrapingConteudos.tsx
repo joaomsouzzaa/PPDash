@@ -78,14 +78,33 @@ export default function ScrapingConteudos() {
     setScraping(true);
     setConteudos([]); setSelecionados([]); setTranscricoes({}); setAnalise("");
     try {
+      // Inicia o run no Apify (retorna rápido) e faz polling do status — o crawl de
+      // posts é lento demais para uma resposta síncrona.
       const { data, error } = await supabase.functions.invoke("scraping-instagram", {
         body: { action: "scrape", handle: handle.trim(), limit: 50, dias: Number(dias) },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setConta(data.conta);
-      setConteudos(data.itens || []);
-      if (!data.itens?.length) toast.message("Nenhum conteúdo encontrado para esse perfil.");
+
+      const { runId, datasetId } = data;
+      const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+      // ~75 tentativas × 4s ≈ 5 min de tolerância.
+      for (let i = 0; i < 75; i++) {
+        await sleep(4000);
+        const { data: st, error: se } = await supabase.functions.invoke("scraping-instagram", {
+          body: { action: "status", runId, datasetId },
+        });
+        if (se) throw se;
+        if (st?.status === "SUCCEEDED") {
+          setConteudos(st.itens || []);
+          if (!st.itens?.length) toast.message("Nenhum conteúdo encontrado para esse perfil.");
+          return;
+        }
+        if (st?.error) throw new Error(st.error);
+        // READY/RUNNING → continua o polling.
+      }
+      toast.error("O scraping demorou demais. Tente novamente.");
     } catch (e: any) {
       toast.error(e?.message || "Falha no scraping");
     } finally {

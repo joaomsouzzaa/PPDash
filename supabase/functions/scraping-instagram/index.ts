@@ -65,7 +65,11 @@ function normalizarItem(it: any) {
   };
 }
 
-async function scrape(supabase: any, orgId: string | null, handle: string, limit: number, dias: number) {
+// O crawl de posts do Instagram é lento (30s a minutos). Rodá-lo de forma síncrona
+// segura a conexão até o gateway do Supabase estourar o timeout → o browser recebe
+// FunctionsFetchError. Por isso o scrape é assíncrono: inicia o run e devolve o runId;
+// o front faz polling via a ação "status".
+async function iniciarScrape(supabase: any, orgId: string | null, handle: string, limit: number, dias: number) {
   const token = await getKey(supabase, "apify", orgId, "APIFY_TOKEN");
   const conta = handleLimpo(handle);
   if (!conta) throw new Error("Informe um @ de Instagram válido");
@@ -73,7 +77,7 @@ async function scrape(supabase: any, orgId: string | null, handle: string, limit
   const janela = Math.min(Math.max(dias || 30, 1), 365);
   const desde = new Date(Date.now() - janela * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const url = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
+  const url = `https://api.apify.com/v2/acts/apify~instagram-scraper/runs?token=${encodeURIComponent(token)}`;
   const r = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -87,8 +91,35 @@ async function scrape(supabase: any, orgId: string | null, handle: string, limit
   });
   const txt = await r.text();
   if (!r.ok) throw new Error(`Apify: ${txt.slice(0, 300)}`);
+  let run: any;
+  try { run = JSON.parse(txt); } catch { throw new Error("Resposta inesperada do Apify"); }
+  const runId = run?.data?.id;
+  const datasetId = run?.data?.defaultDatasetId;
+  if (!runId || !datasetId) throw new Error("Apify não retornou o run");
+
+  return { conta, runId, datasetId };
+}
+
+// Consulta o status do run e, quando concluído, baixa e normaliza os itens do dataset.
+async function statusScrape(supabase: any, orgId: string | null, runId: string, datasetId: string) {
+  if (!runId || !datasetId) throw new Error("runId/datasetId ausentes");
+  const token = await getKey(supabase, "apify", orgId, "APIFY_TOKEN");
+
+  const sr = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${encodeURIComponent(token)}`);
+  const stxt = await sr.text();
+  if (!sr.ok) throw new Error(`Apify: ${stxt.slice(0, 300)}`);
+  let sj: any;
+  try { sj = JSON.parse(stxt); } catch { throw new Error("Resposta inesperada do Apify"); }
+  const status: string = sj?.data?.status || "UNKNOWN";
+
+  if (status === "READY" || status === "RUNNING") return { status };
+  if (status !== "SUCCEEDED") return { status, error: `Apify: run ${status}` };
+
+  const dr = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?clean=true&token=${encodeURIComponent(token)}`);
+  const dtxt = await dr.text();
+  if (!dr.ok) throw new Error(`Apify: ${dtxt.slice(0, 300)}`);
   let arr: any[];
-  try { arr = JSON.parse(txt); } catch { throw new Error("Resposta inesperada do Apify"); }
+  try { arr = JSON.parse(dtxt); } catch { throw new Error("Resposta inesperada do Apify"); }
   if (!Array.isArray(arr)) arr = [];
 
   const itens = arr
@@ -97,7 +128,7 @@ async function scrape(supabase: any, orgId: string | null, handle: string, limit
     .filter((it) => it.isVideo && it.videoUrl) // apenas vídeos/reels — nunca imagem ou post estático
     .sort((a, b) => b.engajamento - a.engajamento);
 
-  return { conta, total: itens.length, itens };
+  return { status, total: itens.length, itens };
 }
 
 // Baixa o vídeo e transcreve com Whisper (OpenAI).
@@ -136,7 +167,11 @@ Deno.serve(async (req) => {
     const action = body?.action;
 
     if (action === "scrape") {
-      const out = await scrape(supabase, orgId, body.handle, body.limit, body.dias);
+      const out = await iniciarScrape(supabase, orgId, body.handle, body.limit, body.dias);
+      return json(out);
+    }
+    if (action === "status") {
+      const out = await statusScrape(supabase, orgId, body.runId, body.datasetId);
       return json(out);
     }
     if (action === "transcrever") {
