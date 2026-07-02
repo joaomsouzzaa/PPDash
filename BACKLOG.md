@@ -1,5 +1,77 @@
 # Backlog
 
+## Publicar Reels/posts no Instagram (Workflow) — bloqueado por Advanced Access (App Review)
+
+**Status:** diagnosticado e confirmado em produção (2026-06-30). **Não é bug de código** —
+é bloqueio de permissão da Meta (Standard vs Advanced Access). Aguardando App Review.
+
+**Problema:** ao publicar Reels pelo card do Workflow ("Publicar agora"/"Agendar"), o post
+falha. Container cria e chega a FINISHED, mas o `media_publish` retorna sempre **`code 1`**
+("An unknown error has occurred", sem subcode).
+
+**Causa-raiz (com dados):** app `Scale Dashboard` (`24154258840827764`) está **Live**, com
+`instagram_content_publish` apenas em **Standard access ("Ativo")**. Publicação pela Graph API
+(Page token → `/{ig}/media_publish`) exige **Advanced Access** — Standard não publica nem pra
+conta do próprio admin (testado com token admin → `code 1`). Adicionar a conta como
+**"Instagram Tester"** NÃO resolve (esse papel é da API de Instagram com login do Instagram,
+trilha diferente da nossa). Conta @premiapao é Business legítima, vídeo dentro das specs.
+
+**O que fazer (painel Meta, App `24154258840827764` — mesmo app do Lead Ads e Auto-DM):**
+1. **Business Verification** concluída (serve pros 3 itens Meta deste backlog).
+2. **App Review → Advanced Access** para `instagram_content_publish` (enviar sozinho pra
+   review focado/mais rápido; as outras permissões continuam "Ativo" no Standard).
+3. **Screencast** do fluxo: login Facebook mostrando o consentimento de `instagram_content_publish`
+   → conectar IG Business → Workflow: escolher mídia + legenda + conta → "Publicar agora" →
+   status vira publicado → abrir o perfil do IG e mostrar o Reels no ar. App em produção, não localhost.
+   (Justificativa de uso + roteiro completo já escritos na conversa de 2026-06-30.)
+
+**Já feito no código (deployado 2026-06-30, funciona assim que o acesso liberar):**
+- `graphError()` nas edge `instagram-publish`/`-scheduler`: erro real da Meta (subcode/título/fbtrace)
+  vai pra `ig_posts.erro` (antes era só "unknown error").
+- `publicarComRetry()` (3×10s) no `media_publish`; retry de recriação de container no `ERROR 2207077`
+  (falha intermitente de processamento da Meta) via coluna `ig_posts.tentativas` (máx 4).
+- Front `Workflow.tsx`: agendamento exige ≥15min no futuro. Commit `dc6a9bb`, pushado.
+
+**Verificar quando aprovado:** clicar "Publicar agora" num card com Reels → status `publicado`
++ `permalink` preenchido; `select status, erro, permalink from ig_posts order by created_at desc`
+deixa de mostrar `code 1`. Ver [[ig-publish-code1-bloqueio]] na memória.
+
+---
+
+## Auto-DM Instagram — 2ª DM do opt-in só chega pra quem tem papel no app (App Review)
+
+**Status:** diagnosticado e confirmado em produção (2026-07-02). **Não é bug de código** —
+é bloqueio de permissão da Meta (Acesso Padrão vs Avançado). Aguardando App Review.
+
+**Problema:** no modo "2 etapas (opt-in)" do `/auto-dm`, a **1ª DM** (botão sem link) chega
+pra todos, mas a **2ª DM** (com o link, disparada ao tocar o botão) só chega pra **uma pessoa**.
+
+**Causa-raiz (com dados):** toda linha `ig_automacao_logs` com `comment_id like 'pb:%'` de
+usuário sem papel no app tem `acoes.erros = "(#200) ... não tem acesso avançado à permissão
+instagram_manage_messages e o usuário destinatário não tem função no app"`. Só existe **1**
+`link_ok:true` na tabela (o usuário com role). A 1ª DM é *Private Reply* ao comentário
+(`recipient:{comment_id}`, liberado no Acesso Padrão); a 2ª é mensagem livre
+(`recipient:{id:igsid}` em `enviarLink`), que exige **Acesso Avançado** a `instagram_manage_messages`.
+
+**Decisão do João (2026-07-02):** seguir via **App Review** e manter o opt-in de 2 etapas
+(workaround "modo direto" — link já na 1ª DM — descartado por enquanto).
+
+**O que fazer (painel Meta, App `24154258840827764` — mesmo app do Lead Ads):**
+1. App em **modo Live** + **Business Verification** concluída + Política de Privacidade/ícone.
+2. **App Review → Advanced Access** para `instagram_manage_messages` (confirmar `instagram_manage_comments`).
+3. **Screencast** do fluxo fim-a-fim (comentário → 1ª DM com botão → toque → 2ª DM com link),
+   gravado com conta **com papel no app** (hoje já funciona), enfatizando mensagem **solicitada
+   pelo usuário** + instruções de teste passo a passo pro revisor.
+4. **Enquanto aguarda:** adicionar como testers/roles as contas que precisam funcionar (pra elas já funciona).
+
+**Verificar quando aprovado:** conta **sem** papel comenta e toca o botão → 2ª DM chega; e a
+query `select comment_id, acoes, created_at from ig_automacao_logs where comment_id like 'pb:%'
+order by created_at desc` passa a mostrar `link_ok:true` / `erros:[]` (antes: `(#200)`).
+
+> Obs.: é o **mesmo** App ID do item Meta Lead Ads abaixo, então a Business Verification serve pros dois.
+
+---
+
 ## Personalizar e-mail de convite de equipe (Supabase Auth) + SMTP próprio
 
 **Status:** pendente — depende de configurar SMTP próprio. **A falha crítica já foi
