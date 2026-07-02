@@ -59,6 +59,7 @@ export default function Equipe() {
     { nome: "", email: "", senha: "", modulos: [] }
   );
   const [convidar, setConvidar] = useState(true);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -112,13 +113,28 @@ export default function Equipe() {
     try {
       const org_id = profile?.org_id;
       if (convidar) {
-        await adminAction("invite_member", { email: form.email, nome: form.nome, modulos: form.modulos, org_id });
-        toast.success("Convite enviado por e-mail.");
+        const res = await adminAction<{ email_enviado?: boolean; invite_link?: string | null }>(
+          "invite_member", { email: form.email, nome: form.nome, modulos: form.modulos, org_id }
+        );
+        if (res?.email_enviado) {
+          toast.success("Convite enviado por e-mail.");
+          setInviteLink(null);
+          setOpen(false);
+        } else if (res?.invite_link) {
+          // SMTP indisponível/rate limit: mostra o link para o admin enviar manualmente.
+          toast.message("Membro criado. Copie e envie o link de convite (e-mail não pôde ser enviado agora).");
+          setInviteLink(res.invite_link);
+          // mantém o diálogo aberto para exibir o link
+        } else {
+          toast.success("Membro criado.");
+          setInviteLink(null);
+          setOpen(false);
+        }
       } else {
         await adminAction("create_member", { ...form, org_id });
         toast.success("Membro criado.");
+        setOpen(false);
       }
-      setOpen(false);
       setForm({ nome: "", email: "", senha: "", modulos: [] });
       await carregar();
     } catch (e) { toast.error((e as Error).message); }
@@ -151,7 +167,7 @@ export default function Equipe() {
       descricao="Gerencie os usuários e os módulos que cada um acessa"
       icone={<Users className="h-5 w-5 text-primary" />}
       acoes={
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setInviteLink(null); }}>
           <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> Novo membro</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Novo membro</DialogTitle></DialogHeader>
@@ -181,6 +197,27 @@ export default function Equipe() {
                 />
               </div>
             </div>
+            {inviteLink && (
+              <div className="space-y-1 rounded-md border border-border p-2">
+                <Label className="text-xs">Link de convite (envie para a pessoa)</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={inviteLink} onFocus={(e) => e.currentTarget.select()} className="text-xs" />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={async () => {
+                      try { await navigator.clipboard.writeText(inviteLink); toast.success("Link copiado."); }
+                      catch { toast.error("Não foi possível copiar."); }
+                    }}
+                  >
+                    Copiar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O e-mail automático não pôde ser enviado (limite do provedor). Envie este link para a pessoa definir a senha.
+                </p>
+              </div>
+            )}
             <DialogFooter>
               <Button onClick={criar} disabled={salvando}>
                 {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {convidar ? "Enviar convite" : "Criar"}

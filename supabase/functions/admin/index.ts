@@ -220,16 +220,44 @@ Deno.serve(async (req) => {
 
         let userId = existente;
         let convidado = false;
+        let inviteLink: string | null = null;
+        let emailEnviado = false;
         if (!userId) {
-          // usuário novo: envia convite para definir senha
           const redirectTo = (Deno.env.get("APP_URL") || "https://appgrowthstack.vercel.app") + "/definir-senha";
+          convidado = true;
+          // 1) Tenta o convite por e-mail (envia o e-mail e cria o usuário).
           const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
             data: { nome },
             redirectTo,
           });
-          if (invErr) return json({ error: invErr.message }, 400);
-          userId = invited.user.id;
-          convidado = true;
+          if (!invErr && invited?.user) {
+            userId = invited.user.id;
+            emailEnviado = true;
+          } else {
+            // 2) E-mail falhou (ex.: rate limit do SMTP padrão / sem SMTP).
+            // Garante o usuário e gera um link manual para definir a senha,
+            // que NÃO envia e-mail — logo, não esbarra no rate limit.
+            userId = await acharUserPorEmail(email);
+            if (!userId) {
+              const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+                type: "invite",
+                email,
+                options: { data: { nome }, redirectTo },
+              });
+              if (linkErr) return json({ error: linkErr.message }, 400);
+              userId = linkData.user.id;
+              inviteLink = linkData.properties?.action_link ?? null;
+            } else {
+              // Usuário chegou a ser criado apesar do erro de e-mail: gera link de recuperação.
+              const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+                type: "recovery",
+                email,
+                options: { redirectTo },
+              });
+              if (linkErr) return json({ error: linkErr.message }, 400);
+              inviteLink = linkData.properties?.action_link ?? null;
+            }
+          }
           await admin.from("profiles").update({ nome: nome || null, status: "ativo" }).eq("id", userId);
         }
         await admin.from("memberships").upsert({
@@ -240,7 +268,7 @@ Deno.serve(async (req) => {
         });
         await setModulos(userId, orgId, modulos);
         // usuário já existia (outra org): apenas vinculado, sem novo convite/senha
-        return json({ ok: true, user_id: userId, convidado, reused: !!existente });
+        return json({ ok: true, user_id: userId, convidado, reused: !!existente, invite_link: inviteLink, email_enviado: emailEnviado });
       }
       case "set_member_modules": {
         const { user_id, modulos, org_id } = payload;
