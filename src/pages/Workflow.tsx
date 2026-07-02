@@ -1535,11 +1535,30 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
         <div className="space-y-2 rounded-md border p-3 text-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-muted-foreground">ROTEIRO ADAPTADO</p>
-            <Button onClick={limpar} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Limpar / Nova análise
-            </Button>
+            {!editandoRoteiro && (
+              <div className="flex items-center gap-1">
+                <Button onClick={() => { setRoteiroEdit(ref.roteiro); setEditandoRoteiro(true); }} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                </Button>
+                <Button onClick={limpar} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> Limpar / Nova análise
+                </Button>
+              </div>
+            )}
           </div>
-          <p className="whitespace-pre-wrap text-sm">{ref.roteiro}</p>
+          {editandoRoteiro ? (
+            <div className="space-y-2">
+              <Textarea value={roteiroEdit} onChange={(e) => setRoteiroEdit(e.target.value)} rows={14} className="text-sm" />
+              <div className="flex items-center gap-2">
+                <Button onClick={salvarRoteiro} disabled={salvandoRoteiro} size="sm">
+                  {salvandoRoteiro ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Salvar
+                </Button>
+                <Button onClick={() => setEditandoRoteiro(false)} disabled={salvandoRoteiro} size="sm" variant="ghost">Cancelar</Button>
+              </div>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap text-sm">{ref.roteiro}</p>
+          )}
           {Array.isArray(ref.insertion_plan) && ref.insertion_plan.length > 0 && (
             <>
               <p className="mt-2 text-xs font-semibold text-muted-foreground">PLANO DE INSERÇÕES ({ref.insertion_plan.length})</p>
