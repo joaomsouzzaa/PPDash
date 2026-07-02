@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTenantSlug } from "@/lib/tenant";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { DiagnosticoFranqueabilidade, type AnaliseDiagnostico, type Score } from "@/components/DiagnosticoFranqueabilidade";
 
 // As tabelas de pesquisas ainda não estão no types.ts gerado — usamos `db` (cast).
 const db = supabase as any;
@@ -38,11 +39,34 @@ type Pergunta = {
   obrigatoria: boolean;
   opcoes: Opcao[];
   logica: Regra[];
+  pilar: string | null;   // pilar do diagnóstico (agrupa perguntas pontuadas)
+  campo: string | null;   // papel na captura: nome | negocio | instagram | segmento | faturamento
 };
+
+// Pilares do Diagnóstico de Franqueabilidade (usados no score por pilar).
+const PILARES = [
+  "Maturidade & validação",
+  "Rentabilidade",
+  "Padronização & replicabilidade",
+  "Independência do fundador",
+  "Marca & jurídico",
+  "Transmissibilidade do know-how",
+  "Mercado & escalabilidade",
+  "Capacidade de investimento",
+];
+// Campos de captura que alimentam o schema de entrada da IA.
+const CAMPOS: { value: string; label: string }[] = [
+  { value: "nome", label: "Nome (contato)" },
+  { value: "negocio", label: "Nome do negócio" },
+  { value: "instagram", label: "Instagram da marca" },
+  { value: "segmento", label: "Segmento" },
+  { value: "faturamento", label: "Faixa de faturamento" },
+];
 type Pesquisa = { id: string; titulo: string; slug: string; descricao: string | null; status: string; created_at: string };
 
 // Configuração da tela final (mostrada ao respondente após enviar).
 type ConfigPesquisa = {
+  diagnostico_ia: boolean;           // gerar relatório consultivo por IA (Claude Sonnet)
   mostrar_resultado: boolean;        // exibir % de pontuação ao respondente
   resultado_texto: string;           // template; {pct} é substituído pela porcentagem
   whatsapp_numero: string;           // só dígitos com DDI, ex: 5511999999999
@@ -50,8 +74,9 @@ type ConfigPesquisa = {
   whatsapp_mensagem: string;         // mensagem pré-preenchida no WhatsApp
 };
 const CONFIG_PADRAO: ConfigPesquisa = {
+  diagnostico_ia: false,
   mostrar_resultado: false,
-  resultado_texto: "Seu negócio tem {pct}% de prontidão para se tornar uma franquia.",
+  resultado_texto: "Você está {pct}% pronto pra virar franquia.",
   whatsapp_numero: "",
   whatsapp_botao: "Antecipar meu atendimento no WhatsApp",
   whatsapp_mensagem: "Oi, vim do diagnóstico de franqueabilidade e quero antecipar meu atendimento!",
@@ -216,7 +241,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
       const { data: p } = await db.from("pesquisas").select("*").eq("id", pesquisaId).maybeSingle();
       if (p) setMeta({ titulo: p.titulo, descricao: p.descricao || "", slug: p.slug, status: p.status, config: { ...CONFIG_PADRAO, ...(p.config || {}) } });
       const { data: qs } = await db.from("pesquisa_perguntas").select("*").eq("pesquisa_id", pesquisaId).order("ordem", { ascending: true });
-      setPerguntas((qs || []).map((q: any) => ({ ...q, opcoes: q.opcoes || [], logica: q.logica || [] })));
+      setPerguntas((qs || []).map((q: any) => ({ ...q, opcoes: q.opcoes || [], logica: q.logica || [], pilar: q.pilar ?? null, campo: q.campo ?? null })));
       setSelId((qs || [])[0]?.id || null);
     })();
   }, [pesquisaId]);
@@ -230,7 +255,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
     const nova: Pergunta = {
       id: uuid(), pesquisa_id: pesquisaId, ordem: perguntas.length,
       titulo: "Nova pergunta", descricao: "", tipo: "texto_curto",
-      obrigatoria: true, opcoes: [], logica: [],
+      obrigatoria: true, opcoes: [], logica: [], pilar: null, campo: null,
     };
     setPerguntas((prev) => [...prev, nova]);
     setSelId(nova.id);
@@ -294,6 +319,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
         const rows = perguntas.map((p, i) => ({
           id: p.id, pesquisa_id: pesquisaId, ordem: i, titulo: p.titulo, descricao: p.descricao || null,
           tipo: p.tipo, obrigatoria: p.obrigatoria, opcoes: p.opcoes, logica: p.logica,
+          pilar: p.pilar || null, campo: p.campo || null,
         }));
         const { error } = await db.from("pesquisa_perguntas").insert(rows);
         if (error) throw error;
@@ -419,6 +445,33 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
                   <Switch checked={sel.obrigatoria} onCheckedChange={(v) => upd(sel.id, { obrigatoria: v })} />
                 </div>
 
+                {/* Diagnóstico: pilar (perguntas pontuadas) e campo de captura. */}
+                <div className="space-y-2 border-t border-border pt-3">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Diagnóstico de franqueabilidade</Label>
+                  {TIPOS_OPCOES.includes(sel.tipo) && (
+                    <div className="space-y-1">
+                      <Label>Pilar</Label>
+                      <Select value={sel.pilar ?? "__none__"} onValueChange={(v) => upd(sel.id, { pilar: v === "__none__" ? null : v })}>
+                        <SelectTrigger><SelectValue placeholder="Sem pilar" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sem pilar</SelectItem>
+                          {PILARES.map((pl) => <SelectItem key={pl} value={pl}>{pl}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label>Campo de captura</Label>
+                    <Select value={sel.campo ?? "__none__"} onValueChange={(v) => upd(sel.id, { campo: v === "__none__" ? null : v })}>
+                      <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhum</SelectItem>
+                        {CAMPOS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 {TIPOS_OPCOES.includes(sel.tipo) && (
                   <div className="space-y-2">
                     <Label>Opções</Label>
@@ -472,7 +525,7 @@ function EditorPesquisa({ pesquisaId, onVoltar }: { pesquisaId: string; onVoltar
         </main>
       </div>
 
-      <ResultadosDialog open={resultadosOpen} onOpenChange={setResultadosOpen} pesquisaId={pesquisaId} perguntas={perguntas} />
+      <ResultadosDialog open={resultadosOpen} onOpenChange={setResultadosOpen} pesquisaId={pesquisaId} slug={meta.slug} perguntas={perguntas} />
       <ConfigDialog
         open={configOpen}
         onOpenChange={setConfigOpen}
@@ -517,8 +570,16 @@ function ConfigDialog({ open, onOpenChange, descricao, config, onChange }: {
 
             <div className="flex items-center justify-between">
               <div>
+                <Label>Gerar diagnóstico com IA</Label>
+                <p className="text-[11px] text-muted-foreground">Relatório consultivo (Claude Sonnet) a partir dos pilares e do Instagram da marca.</p>
+              </div>
+              <Switch checked={config.diagnostico_ia} onCheckedChange={(v) => setCfg({ diagnostico_ia: v })} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
                 <Label>Mostrar resultado (%) ao respondente</Label>
-                <p className="text-[11px] text-muted-foreground">Usa a pontuação das perguntas.</p>
+                <p className="text-[11px] text-muted-foreground">Usa a pontuação das perguntas. Ignorado quando o diagnóstico de IA está ligado (o relatório já mostra o %).</p>
               </div>
               <Switch checked={config.mostrar_resultado} onCheckedChange={(v) => setCfg({ mostrar_resultado: v })} />
             </div>
@@ -560,17 +621,45 @@ function ConfigDialog({ open, onOpenChange, descricao, config, onChange }: {
   );
 }
 
-function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
-  open: boolean; onOpenChange: (v: boolean) => void; pesquisaId: string; perguntas: Pergunta[];
+type RespostaRow = {
+  id: string; respostas: Record<string, any>; created_at: string;
+  score?: Score | null; analise?: AnaliseDiagnostico | null; analise_status?: string | null;
+};
+
+function ResultadosDialog({ open, onOpenChange, pesquisaId, slug, perguntas }: {
+  open: boolean; onOpenChange: (v: boolean) => void; pesquisaId: string; slug: string; perguntas: Pergunta[];
 }) {
+  const queryClient = useQueryClient();
+  const [verId, setVerId] = useState<string | null>(null);
+  const [gerando, setGerando] = useState(false);
+
   const { data: respostas = [] } = useQuery({
     queryKey: ["pesquisa_respostas", pesquisaId],
     enabled: open,
     queryFn: async () => {
       const { data } = await db.from("pesquisa_respostas").select("*").eq("pesquisa_id", pesquisaId).order("created_at", { ascending: false });
-      return (data || []) as { id: string; respostas: Record<string, any>; created_at: string }[];
+      return (data || []) as RespostaRow[];
     },
   });
+
+  const verResp = respostas.find((r) => r.id === verId) || null;
+
+  // Chama a edge function para gerar (ou regenerar) o relatório de IA da resposta.
+  const gerarDiagnostico = async (respostaId: string, forcar = false) => {
+    setGerando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("pesquisa-publica", {
+        body: { acao: "diagnostico", slug, org: getTenantSlug(), resposta_id: respostaId, forcar },
+      });
+      if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message);
+      if ((data as any)?.erro_ia) toast.error("IA indisponível — mostrando apenas o percentual.");
+      await queryClient.invalidateQueries({ queryKey: ["pesquisa_respostas", pesquisaId] });
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao gerar diagnóstico");
+    } finally {
+      setGerando(false);
+    }
+  };
 
   const labelOpcao = (p: Pergunta, valor: any) => {
     const ops = opcoesDaPergunta(p);
@@ -590,18 +679,13 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
     (acc, p) => acc + Math.max(0, ...opcoesDaPergunta(p).map((o) => (temPonto(o) ? (o.pontos as number) : 0))),
     0,
   );
-  const faixaDe = (pct: number) =>
-    pct >= 80 ? "Pronto para franquear"
-      : pct >= 60 ? "Quase lá"
-      : pct >= 40 ? "Precisa estruturar"
-      : "Ainda não é o momento";
   const calcularScore = (r: { respostas: Record<string, any> }) => {
     const total = perguntasPontuadas.reduce((acc, p) => {
       const escolhida = opcoesDaPergunta(p).find((o) => o.id === r.respostas?.[p.id]);
       return acc + (escolhida && temPonto(escolhida) ? (escolhida.pontos as number) : 0);
     }, 0);
     const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
-    return { total, pct, faixa: faixaDe(pct) };
+    return { total, pct };
   };
 
   // Exporta as respostas em CSV (separador ; e BOM para abrir corretamente no Excel pt-BR).
@@ -610,14 +694,14 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
     const cabecalho = [
       "Data",
       ...perguntas.map((p, i) => `${i + 1}. ${p.titulo}`),
-      ...(temPontuacao ? ["Pontuação", "%", "Faixa"] : []),
+      ...(temPontuacao ? ["Pontuação", "%"] : []),
     ];
     const linhas = respostas.map((r) => {
       const s = temPontuacao ? calcularScore(r) : null;
       return [
         new Date(r.created_at).toLocaleString("pt-BR"),
         ...perguntas.map((p) => valorCelula(p, r)),
-        ...(s ? [`${s.total}/${maxTotal}`, `${s.pct}%`, s.faixa] : []),
+        ...(s ? [`${s.total}/${maxTotal}`, `${s.pct}%`] : []),
       ];
     });
     const csv = [cabecalho, ...linhas].map((l) => l.map(esc).join(";")).join("\r\n");
@@ -651,7 +735,7 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
                 {perguntas.map((p, i) => <TableHead key={p.id}>{i + 1}. {p.titulo}</TableHead>)}
                 {temPontuacao && <TableHead className="text-center">Pontuação</TableHead>}
                 {temPontuacao && <TableHead className="text-center">%</TableHead>}
-                {temPontuacao && <TableHead>Faixa</TableHead>}
+                <TableHead>Diagnóstico</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -665,7 +749,15 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
                   ))}
                   {s && <TableCell className="text-center font-medium">{s.total}/{maxTotal}</TableCell>}
                   {s && <TableCell className="text-center font-medium">{s.pct}%</TableCell>}
-                  {s && <TableCell className="text-sm">{s.faixa}</TableCell>}
+                  <TableCell>
+                    {r.analise_status === "gerada" ? (
+                      <Button size="sm" variant="outline" onClick={() => setVerId(r.id)}>Ver relatório</Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" disabled={gerando} onClick={() => gerarDiagnostico(r.id)}>
+                        {gerando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Gerar"}
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
                 );
               })}
@@ -673,6 +765,21 @@ function ResultadosDialog({ open, onOpenChange, pesquisaId, perguntas }: {
           </Table>
         )}
       </DialogContent>
+
+      {/* Visualização do relatório de IA de uma resposta. */}
+      <Dialog open={!!verId} onOpenChange={(v) => !v && setVerId(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between pr-8">
+              <span>Diagnóstico de franqueabilidade</span>
+              <Button size="sm" variant="outline" disabled={gerando} onClick={() => verId && gerarDiagnostico(verId, true)}>
+                {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Regenerar
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          {verResp && <DiagnosticoFranqueabilidade analise={verResp.analise ?? null} score={verResp.score ?? null} />}
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
