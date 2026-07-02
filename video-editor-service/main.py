@@ -306,10 +306,114 @@ def _baixar_referencia(url: str, out_tmpl: str) -> str:
     return erro
 
 
-def _baixar_imagens_referencia(url: str, out_tmpl: str) -> str:
-    """Baixa as IMAGENS de um post/carrossel (não força mp4, aceita jpg/png/webp de cada slide).
-    Retorna a mensagem de erro (string) em caso de falha; '' se ok."""
-    common = ["-o", out_tmpl, "--no-warnings", "--yes-playlist",
+# UA "minimalista" de propósito: com um UA de Chrome COMPLETO o Instagram serve o app React
+# (sem as imagens no HTML); com este UA simples ele serve o EmbedSimple leve com o contextJSON.
+_UA_BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+
+def _instagram_shortcode(url: str):
+    m = re.search(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", url or "")
+    return m.group(1) if m else None
+
+
+def _instagram_imagens_embed(url: str):
+    """Extrai as URLs das imagens (todos os slides do carrossel) pela página de EMBED pública
+    do Instagram — funciona de IP de datacenter SEM cookies (a API privada de mídia bloqueia).
+    Retorna (lista_urls, erro)."""
+    import urllib.request, time
+    sc = _instagram_shortcode(url)
+    if not sc:
+        return [], "não é um link de post/carrossel do Instagram"
+    # Tenta o embed algumas vezes: o IG às vezes devolve o app React pesado (sem imagens)
+    # em vez do EmbedSimple; um novo request costuma trazer a versão leve.
+    html = ""
+    ultimo_erro = ""
+    for tentativa in range(4):
+        try:
+            req = urllib.request.Request(f"https://www.instagram.com/p/{sc}/embed/captioned/",
+                                         headers={"User-Agent": _UA_BROWSER})
+            html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+            if '"contextJSON":"' in html or "t51." in html:
+                break
+        except Exception as e:
+            ultimo_erro = str(e)[:150]
+        time.sleep(1.5)
+    if not html:
+        return [], f"falha ao abrir o embed do post: {ultimo_erro or 'sem resposta'}"
+
+    urls = []
+    # 1) contextJSON tem todos os slides (display_url por item do carrossel).
+    key = '"contextJSON":"'
+    i = html.find(key)
+    if i >= 0:
+        i += len(key)
+        buf, esc = [], False
+        while i < len(html):
+            c = html[i]
+            if esc:
+                buf.append(c); esc = False
+            elif c == "\\":
+                buf.append(c); esc = True
+            elif c == '"':
+                break
+            else:
+                buf.append(c)
+            i += 1
+        try:
+            data = json.loads(json.loads('"' + "".join(buf) + '"'))
+
+            def walk(o):
+                if isinstance(o, dict):
+                    for k, v in o.items():
+                        if k == "display_url" and isinstance(v, str):
+                            urls.append(v)
+                        else:
+                            walk(v)
+                elif isinstance(o, list):
+                    for v in o:
+                        walk(v)
+            walk(data)
+        except Exception:
+            pass
+    # 2) Fallback: imagens de conteúdo do srcset (t51...-15).
+    if not urls:
+        for m in re.finditer(r'https:[^\s"\\]*?t51\.[0-9\-]*-15[^\s"\\]*?\.jpg[^\s"\\]*', html):
+            urls.append(m.group(0).replace("&amp;", "&"))
+    uniq = list(dict.fromkeys(urls))
+    if not uniq:
+        return [], "não encontrei imagens no post (pode ser privado ou só vídeo)"
+    return uniq, ""
+
+
+def _baixar_imagens_referencia(url: str, out_dir: str) -> str:
+    """Baixa as IMAGENS de um post/carrossel para out_dir (img.NNN.jpg). Para Instagram usa a
+    página de embed (sem cookies); para outras plataformas cai no yt-dlp. Retorna erro ('' se ok)."""
+    import urllib.request
+    outp = pathlib.Path(out_dir)
+    outp.mkdir(parents=True, exist_ok=True)
+
+    if "instagram.com" in (url or "").lower():
+        img_urls, erro = _instagram_imagens_embed(url)
+        if img_urls:
+            baixadas = 0
+            for idx, u in enumerate(img_urls[:15]):
+                try:
+                    req = urllib.request.Request(u, headers={"User-Agent": _UA_BROWSER})
+                    dados = urllib.request.urlopen(req, timeout=30).read()
+                    if len(dados) > 2000:  # ignora ícones/1px
+                        (outp / f"img.{idx:03d}.jpg").write_bytes(dados)
+                        baixadas += 1
+                except Exception:
+                    continue
+            if baixadas:
+                return ""
+            return "falha ao baixar as imagens do post (CDN indisponível)"
+        # sem imagens pelo embed → tenta yt-dlp (pode ser vídeo/reel)
+        if erro and "não é um link" not in erro:
+            pass
+
+    # Fallback genérico (não-Instagram ou embed vazio): yt-dlp
+    common = ["-o", str(outp / "img.%(autonumber)03d.%(ext)s"), "--no-warnings", "--yes-playlist",
               "--socket-timeout", "20", "--retries", "3", "--fragment-retries", "3"]
     if COOKIES_FILE.exists():
         common += ["--cookies", str(COOKIES_FILE)]
@@ -318,7 +422,7 @@ def _baixar_imagens_referencia(url: str, out_tmpl: str) -> str:
         try:
             p = subprocess.run(["yt-dlp", *extra, *common, url], capture_output=True, text=True, timeout=180)
         except subprocess.TimeoutExpired:
-            erro = "timeout: o download passou de 3 min e foi cancelado (provável rate-limit do Instagram)"
+            erro = "timeout: o download passou de 3 min e foi cancelado (provável rate-limit)"
             continue
         if p.returncode == 0:
             return ""
@@ -546,7 +650,7 @@ def _gen_estatico(ref_url, org_id, agente_slug):
         imgsdir.mkdir(parents=True, exist_ok=True)
 
         yield json.dumps({"pct": 12, "etapa": "baixando post", "log": "baixando o post/carrossel de referência"}) + "\n"
-        erro = _baixar_imagens_referencia(ref_url, str(imgsdir / "img.%(autonumber)03d.%(ext)s"))
+        erro = _baixar_imagens_referencia(ref_url, str(imgsdir))
         imgs = [i for i in sorted(glob.glob(str(imgsdir / "*")))
                 if i.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
 
@@ -562,15 +666,7 @@ def _gen_estatico(ref_url, org_id, agente_slug):
                 imgs = sorted(glob.glob(str(imgsdir / "frame*.jpg")))
 
         if not imgs:
-            el = (erro or "").lower()
-            login = ("login" in el or "cookies" in el or "rate-limit" in el or "rate limit" in el
-                     or "logged-in" in el or "logged in" in el or "empty media response" in el or "401" in el)
-            ig = "instagram.com" in (ref_url or "").lower()
-            if login and ig:
-                msg = ("Esse post do Instagram exige login para baixar as imagens. Configure os cookies do Instagram "
-                       "na VPS (me avise) ou use um link público.")
-            else:
-                msg = f"Não consegui baixar imagens do post: {(erro or 'sem mídia encontrada')[-200:]}"
+            msg = f"Não consegui baixar as imagens do post: {(erro or 'sem mídia encontrada')[-200:]}. Confira se o link está correto e se o post é público."
             yield json.dumps({"erro": msg}) + "\n"
             return
 

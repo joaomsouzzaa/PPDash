@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight, Upload } from "lucide-react";
+import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Pencil, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight, Upload } from "lucide-react";
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { WorkflowCalendar } from "@/components/WorkflowCalendar";
 import { supabase } from "@/integrations/supabase/client";
@@ -1225,6 +1225,9 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [fonte, setFonte] = useState<"literal" | "assets" | "youtube">("literal");
   const [montando, setMontando] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editandoRoteiro, setEditandoRoteiro] = useState(false);
+  const [roteiroEdit, setRoteiroEdit] = useState("");
+  const [salvandoRoteiro, setSalvandoRoteiro] = useState(false);
 
   const { data: ref } = useQuery({
     queryKey: ["video_ref", tarefaId],
@@ -1314,6 +1317,23 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       qc.invalidateQueries({ queryKey: ["tarefas"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
+    }
+  };
+
+  // Salva um ajuste manual no roteiro adaptado (só o campo `roteiro`, mantendo o resto do video_ref).
+  const salvarRoteiro = async () => {
+    if (!roteiroEdit.trim()) { toast.error("O roteiro não pode ficar vazio."); return; }
+    setSalvandoRoteiro(true);
+    try {
+      const vr = { ...(ref || {}), roteiro: roteiroEdit };
+      await db.from("tarefas").update({ video_ref: vr, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      setEditandoRoteiro(false);
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      toast.success("Roteiro atualizado.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar o roteiro.");
+    } finally {
+      setSalvandoRoteiro(false);
     }
   };
 
@@ -1609,7 +1629,6 @@ function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId
   const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
   const [driveUrl, setDriveUrl] = useState("");
   const [creditoBaixo, setCreditoBaixo] = useState(false);
-  const [enviandoCookies, setEnviandoCookies] = useState(false);
 
   const { data: ref } = useQuery({
     queryKey: ["video_ref", tarefaId],
@@ -1617,13 +1636,6 @@ function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId
       const { data } = await db.from("tarefas").select("video_ref").eq("id", tarefaId).maybeSingle();
       return data?.video_ref || null;
     },
-  });
-
-  const { data: cookies } = useQuery({
-    queryKey: ["ig-cookies-status"],
-    queryFn: () => cookiesStatus("instagram"),
-    enabled: !!SERVICE_URL_VE,
-    retry: false,
   });
 
   // Sincroniza os campos com o que já foi salvo no card.
@@ -1706,31 +1718,6 @@ function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId
           {analisando ? (prog ? `${prog.pct}%` : "Analisando…") : "Analisar referência"}
         </Button>
       </div>
-
-      {/* Cookies do Instagram (p/ baixar posts que exigem login) */}
-      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-        🔑 {enviandoCookies ? "Enviando cookies…" : "Configurar/atualizar cookies do Instagram"}
-        <input type="file" accept=".txt,.json" className="hidden" disabled={enviandoCookies}
-          onChange={async (e) => {
-            const f = e.target.files?.[0]; e.currentTarget.value = "";
-            if (!f) return;
-            setEnviandoCookies(true);
-            try {
-              await configurarCookiesInstagram(f);
-              toast.success("Cookies do Instagram atualizados na VPS.");
-              qc.invalidateQueries({ queryKey: ["ig-cookies-status"] });
-            }
-            catch (err) { toast.error(err instanceof Error ? err.message : "Falha ao enviar cookies."); }
-            finally { setEnviandoCookies(false); }
-          }} />
-      </label>
-      {cookies && (
-        cookies.configurado
-          ? (cookies.tem_sessao
-              ? <span className="text-xs text-emerald-600">✓ configurado{cookies.atualizado_em ? ` (atualizado em ${new Date(cookies.atualizado_em).toLocaleDateString("pt-BR")})` : ""}</span>
-              : <span className="text-xs text-amber-600">⚠ arquivo sem sessionid — reexporte logado</span>)
-          : <span className="text-xs text-muted-foreground">não configurado</span>
-      )}
 
       {/* Popup: saldo da IA (Anthropic) acabou */}
       <Dialog open={creditoBaixo} onOpenChange={setCreditoBaixo}>
