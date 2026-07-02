@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { KanbanSquare, List, Plus, Trash2, Bot, Send, Settings, ArrowUp, ArrowDown, Image as ImageIcon, Video, Loader2, Paperclip, Maximize2, Download, Trash, RotateCcw, Calendar as CalendarIcon, Clock, Flag, Tag, User, ListChecks, GitBranch, X, ChevronDown, ChevronRight, Upload } from "lucide-react";
 import { IgPostMockup } from "@/components/IgPostMockup";
 import { WorkflowCalendar } from "@/components/WorkflowCalendar";
@@ -26,7 +27,7 @@ import { toast } from "sonner";
 const MAX_UPLOAD_MB = 500;
 
 type Coluna ={ id: string; nome: string; ordem: number; agente_id: string | null };
-type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; responsavel_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null };
+type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; responsavel_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null; tipo?: string | null };
 type Agente = { id: string; nome: string };
 type Membro = { id: string; nome: string };
 type Resposta = { id: string; autor: string | null; conteudo: string; created_at: string };
@@ -47,6 +48,23 @@ const prioClasse: Record<string, string> = {
   normal: "bg-blue-500/15 text-blue-500 border-blue-500/30",
   baixa: "bg-muted text-muted-foreground border-border",
 };
+
+// Seção do card que pode ser minimizada/maximizada (resolve o scroll longo do popup).
+function SecaoColapsavel({ titulo, icon, defaultOpen = true, children }: { titulo: string; icon?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
+  const [aberta, setAberta] = useState(defaultOpen);
+  return (
+    <Collapsible open={aberta} onOpenChange={setAberta} className="border-t border-border pt-3">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-medium">
+        {icon}
+        <span>{titulo}</span>
+        <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function Workflow() {
   // v4 build check
@@ -118,7 +136,7 @@ export default function Workflow() {
   // ---- Dialog da tarefa ----
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tarefa | null>(null);
-  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", responsavel_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[], legenda: "" };
+  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", responsavel_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[], legenda: "", tipo: "reels" };
   const [form, setForm] = useState({ ...emptyForm });
   const [comentario, setComentario] = useState("");
   // Auto-save do card: "idle" (nada a fazer), "saving" (debounce/gravando), "saved" (persistido).
@@ -427,7 +445,7 @@ export default function Workflow() {
   };
   const abrirTarefa = (t: Tarefa) => {
     setEditing(t);
-    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", responsavel_id: t.responsavel_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [], legenda: t.legenda || "" });
+    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", responsavel_id: t.responsavel_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [], legenda: t.legenda || "", tipo: t.tipo || "reels" });
     setComentario("");
     autoSaveInitRef.current = null; setAutoSaveStatus("idle");
     setOpen(true);
@@ -439,7 +457,7 @@ export default function Workflow() {
     coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, responsavel_id: form.responsavel_id || null, prioridade: form.prioridade,
     data_inicio: form.data_inicio || null, data_vencimento: form.data_vencimento || null,
     tempo_estimado: form.tempo_estimado.trim() ? parseInt(form.tempo_estimado, 10) : null,
-    etiquetas: form.etiquetas, legenda: form.legenda || null,
+    etiquetas: form.etiquetas, legenda: form.legenda || null, tipo: form.tipo || "reels",
     updated_at: new Date().toISOString(),
   });
 
@@ -731,6 +749,21 @@ export default function Workflow() {
             <Textarea rows={3} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Adicione uma descrição..."
               className="border-0 px-0 shadow-none resize-none focus-visible:ring-0" />
 
+            {/* Tipo de conteúdo: define qual inteligência de referência o card usa */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Tipo:</span>
+              <div className="inline-flex rounded-full border border-border p-0.5">
+                <button type="button" onClick={() => setForm({ ...form, tipo: "reels" })}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${form.tipo === "reels" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                  <Video className="h-3.5 w-3.5" /> Reels
+                </button>
+                <button type="button" onClick={() => setForm({ ...form, tipo: "estatico" })}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${form.tipo === "estatico" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                  <ImageIcon className="h-3.5 w-3.5" /> Estático
+                </button>
+              </div>
+            </div>
+
             {/* Linha de chips de atributos */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Etapa / Status */}
@@ -811,7 +844,8 @@ export default function Workflow() {
 
             {/* Subtarefas e Checklist (só ao editar — precisam de tarefa salva) */}
             {editing && (
-              <div className="space-y-3 border-t border-border pt-3">
+              <SecaoColapsavel titulo="Subtarefas e Checklist" icon={<GitBranch className="h-4 w-4 text-primary" />} defaultOpen>
+              <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-2 text-sm"><GitBranch className="h-4 w-4 text-primary" /> Subtarefas</Label>
                   {subtarefas.map((s) => (
@@ -841,11 +875,12 @@ export default function Workflow() {
                   </div>
                 </div>
               </div>
+              </SecaoColapsavel>
             )}
 
             {editing && isDesign && (
-              <div className="space-y-2 border-t border-border pt-3">
-                <Label className="flex items-center gap-2"><Paperclip className="h-4 w-4 text-primary" /> Design — gerar arte</Label>
+              <SecaoColapsavel titulo="Design — gerar arte" icon={<Paperclip className="h-4 w-4 text-primary" />} defaultOpen={false}>
+              <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Usa o briefing/copy desta tarefa como prompt e anexa a arte aqui.</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={provider} onValueChange={(v) => setProvider(v as any)}>
@@ -905,20 +940,28 @@ export default function Workflow() {
                   </div>
                 )}
               </div>
+              </SecaoColapsavel>
             )}
 
-            {/* Vídeo de referência → roteiro adaptado (v3 Fase 3A) */}
-            {editing && <ReferenciaVideo tarefaId={editing.id} agenteId={editing.agente_id} />}
+            {/* Referência → roteiro (Reels) ou briefing de design (Estático) */}
+            {editing && form.tipo === "estatico"
+              ? <SecaoColapsavel titulo="Post de referência (IA gera o briefing)" icon={<ImageIcon className="h-4 w-4 text-primary" />} defaultOpen={false}>
+                  <ReferenciaEstatico tarefaId={editing.id} agenteId={editing.agente_id} />
+                </SecaoColapsavel>
+              : editing && (
+                <SecaoColapsavel titulo="Vídeo de referência (IA gera o roteiro)" icon={<Video className="h-4 w-4 text-primary" />} defaultOpen={false}>
+                  <ReferenciaVideo tarefaId={editing.id} agenteId={editing.agente_id} />
+                </SecaoColapsavel>
+              )}
 
             {/* Legenda + publicação no Instagram */}
-            <div className="space-y-2 border-t border-border pt-3">
-              <Label className="flex items-center gap-2 text-sm"><Send className="h-4 w-4 text-primary" /> Legenda do Instagram</Label>
+            <SecaoColapsavel titulo="Legenda do Instagram" icon={<Send className="h-4 w-4 text-primary" />} defaultOpen>
               <Textarea rows={3} value={form.legenda} onChange={(e) => setForm({ ...form, legenda: e.target.value })} placeholder="Texto que vai sair na publicação (com emojis, hashtags, etc.)" className="text-sm" />
-            </div>
+            </SecaoColapsavel>
 
             {editing && (
-              <div className="space-y-3 border-t border-border pt-3">
-                <Label className="flex items-center gap-2 text-sm"><ImageIcon className="h-4 w-4 text-primary" /> Publicar</Label>
+              <SecaoColapsavel titulo="Publicar" icon={<ImageIcon className="h-4 w-4 text-primary" />} defaultOpen={false}>
+              <div className="space-y-3">
                 <div>
                   <input ref={uploadRef} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => uploadArte(e.target.files)} />
                   <Button variant="outline" size="sm" disabled={enviandoUpload} onClick={() => uploadRef.current?.click()}>
@@ -950,11 +993,13 @@ export default function Workflow() {
                             <Checkbox checked={canais.instagram} onCheckedChange={(v) => setCanais((c) => ({ ...c, instagram: !!v }))} />
                             Instagram
                           </label>
-                          <label className={`flex items-center gap-2 text-sm ${temVideoSel ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
-                            <Checkbox checked={canais.youtube} disabled={!temVideoSel} onCheckedChange={(v) => setCanais((c) => ({ ...c, youtube: !!v }))} />
-                            YouTube (Short)
-                          </label>
-                          {!temVideoSel && <span className="text-[11px] text-muted-foreground">o YouTube exige um vídeo na seleção</span>}
+                          {form.tipo !== "estatico" && (
+                            <label className={`flex items-center gap-2 text-sm ${temVideoSel ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                              <Checkbox checked={canais.youtube} disabled={!temVideoSel} onCheckedChange={(v) => setCanais((c) => ({ ...c, youtube: !!v }))} />
+                              YouTube (Short)
+                            </label>
+                          )}
+                          {form.tipo !== "estatico" && !temVideoSel && <span className="text-[11px] text-muted-foreground">o YouTube exige um vídeo na seleção</span>}
                         </div>
                       </div>
 
@@ -1050,11 +1095,12 @@ export default function Workflow() {
                   );
                 })()}
               </div>
+              </SecaoColapsavel>
             )}
 
             {editing && (
-              <div className="space-y-2 border-t border-border pt-3">
-                <Label>Histórico / Respostas</Label>
+              <SecaoColapsavel titulo="Histórico / Respostas" defaultOpen={false}>
+              <div className="space-y-2">
                 <div className="space-y-2 max-h-56 overflow-y-auto">
                   {respostas.length === 0 ? <p className="text-xs text-muted-foreground">Sem respostas ainda.</p> :
                     respostas.map((r) => (
@@ -1069,6 +1115,7 @@ export default function Workflow() {
                   <Button variant="outline" size="icon" onClick={addComentario}><Send className="h-4 w-4" /></Button>
                 </div>
               </div>
+              </SecaoColapsavel>
             )}
           </div>
           <DialogFooter className="flex sm:justify-between">
@@ -1351,8 +1398,7 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const montandoJob = job?.status === "processando" || job?.status === "pendente";
 
   return (
-    <div className="space-y-2 border-t border-border pt-3">
-      <Label className="flex items-center gap-2 text-sm"><Video className="h-4 w-4 text-primary" /> Vídeo de referência (IA gera o roteiro)</Label>
+    <div className="space-y-2">
       <div className="flex gap-2">
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Cole o link (Instagram, YouTube, TikTok…)" className="text-sm" />
         <Button onClick={analisar} disabled={analisando} size="sm">
@@ -1546,6 +1592,188 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
               )}
             </DialogContent>
           </Dialog>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Post/carrossel de referência → briefing adaptado para o DESIGNER (tipo Estático)
+// ============================================================
+function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId: string | null }) {
+  const db = supabase as any;
+  const qc = useQueryClient();
+  const [url, setUrl] = useState("");
+  const [analisando, setAnalisando] = useState(false);
+  const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
+  const [driveUrl, setDriveUrl] = useState("");
+  const [creditoBaixo, setCreditoBaixo] = useState(false);
+  const [enviandoCookies, setEnviandoCookies] = useState(false);
+
+  const { data: ref } = useQuery({
+    queryKey: ["video_ref", tarefaId],
+    queryFn: async () => {
+      const { data } = await db.from("tarefas").select("video_ref").eq("id", tarefaId).maybeSingle();
+      return data?.video_ref || null;
+    },
+  });
+
+  const { data: cookies } = useQuery({
+    queryKey: ["ig-cookies-status"],
+    queryFn: () => cookiesStatus("instagram"),
+    enabled: !!SERVICE_URL_VE,
+    retry: false,
+  });
+
+  // Sincroniza os campos com o que já foi salvo no card.
+  useEffect(() => {
+    if (!ref) return;
+    if (ref.ref_url) setUrl(ref.ref_url);
+    if (ref.drive_url) setDriveUrl(ref.drive_url);
+  }, [ref]);
+
+  const analisar = async () => {
+    if (!url.trim()) { toast.error("Cole o link do post/carrossel de referência."); return; }
+    if (!SERVICE_URL_VE) { toast.error("Serviço não configurado."); return; }
+    setAnalisando(true);
+    setProg({ pct: 0, etapa: "iniciando" });
+    try {
+      const orgId = await getOrgId();
+      let agente_slug: string | undefined;
+      if (agenteId) {
+        const { data: ag } = await db.from("agentes").select("slug").eq("id", agenteId).maybeSingle();
+        agente_slug = ag?.slug || undefined;
+      }
+      const data = await analisarReferenciaStream(
+        { ref_url: url.trim(), org_id: orgId, agente_slug, modo: "estatico" },
+        (p) => setProg({ pct: p.pct, etapa: p.etapa }),
+      );
+      const briefing = (data as any).briefing || (data as any).roteiro || "";
+      const video_ref = { modo: "estatico", ref_url: url.trim(), briefing };
+      await db.from("tarefas").update({ video_ref, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      if (briefing) {
+        await db.from("tarefa_respostas").insert({ tarefa_id: tarefaId, autor: "Agente de Copy", conteudo: `🖼️ Briefing adaptado da referência (post estático):\n\n${briefing}` });
+        qc.invalidateQueries({ queryKey: ["respostas", tarefaId] });
+      }
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      toast.success("Referência analisada — briefing para o designer gerado.");
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "Falha ao analisar a referência.";
+      if (ERRO_CREDITO_API.test(m)) setCreditoBaixo(true);
+      else toast.error(m);
+    } finally {
+      setAnalisando(false);
+      setProg(null);
+    }
+  };
+
+  // Salva o link do Drive com a arte pronta e move o card para "Para Editar".
+  const salvarDrive = async () => {
+    if (!driveUrl.trim()) { toast.error("Cole o link do Drive com a arte."); return; }
+    try {
+      const vr = { ...(ref || {}), modo: "estatico", drive_url: driveUrl.trim() };
+      await db.from("tarefas").update({ video_ref: vr, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      await moverCardEtapa(tarefaId, "Para Editar");
+      toast.success("Link salvo — card movido para 'Para Editar'.");
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      qc.invalidateQueries({ queryKey: ["tarefas"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
+    }
+  };
+
+  const limpar = async () => {
+    if (!window.confirm("Limpar o briefing adaptado para fazer uma nova análise?")) return;
+    try {
+      await db.from("tarefas").update({ video_ref: null, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      setUrl(""); setProg(null); setDriveUrl("");
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      qc.invalidateQueries({ queryKey: ["tarefas"] });
+      toast.success("Briefing limpo — cole uma nova referência.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao limpar.");
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">A IA analisa o post/carrossel de referência e gera um briefing adaptado pra PremiaPão pro designer criar a arte.</p>
+      <div className="flex gap-2">
+        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Cole o link do post/carrossel (Instagram…)" className="text-sm" />
+        <Button onClick={analisar} disabled={analisando} size="sm">
+          {analisando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+          {analisando ? (prog ? `${prog.pct}%` : "Analisando…") : "Analisar referência"}
+        </Button>
+      </div>
+
+      {/* Cookies do Instagram (p/ baixar posts que exigem login) */}
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+        🔑 {enviandoCookies ? "Enviando cookies…" : "Configurar/atualizar cookies do Instagram"}
+        <input type="file" accept=".txt,.json" className="hidden" disabled={enviandoCookies}
+          onChange={async (e) => {
+            const f = e.target.files?.[0]; e.currentTarget.value = "";
+            if (!f) return;
+            setEnviandoCookies(true);
+            try {
+              await configurarCookiesInstagram(f);
+              toast.success("Cookies do Instagram atualizados na VPS.");
+              qc.invalidateQueries({ queryKey: ["ig-cookies-status"] });
+            }
+            catch (err) { toast.error(err instanceof Error ? err.message : "Falha ao enviar cookies."); }
+            finally { setEnviandoCookies(false); }
+          }} />
+      </label>
+      {cookies && (
+        cookies.configurado
+          ? (cookies.tem_sessao
+              ? <span className="text-xs text-emerald-600">✓ configurado{cookies.atualizado_em ? ` (atualizado em ${new Date(cookies.atualizado_em).toLocaleDateString("pt-BR")})` : ""}</span>
+              : <span className="text-xs text-amber-600">⚠ arquivo sem sessionid — reexporte logado</span>)
+          : <span className="text-xs text-muted-foreground">não configurado</span>
+      )}
+
+      {/* Popup: saldo da IA (Anthropic) acabou */}
+      <Dialog open={creditoBaixo} onOpenChange={setCreditoBaixo}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">⚠️ Sua IA está sem saldo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>A análise não rodou porque o <b>saldo de créditos da API de IA (Anthropic)</b> acabou.</p>
+            <p>Para voltar a funcionar, adicione créditos no painel da Anthropic. Dica: ative o <b>Auto-reload</b> lá para recarregar sozinho.</p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setCreditoBaixo(false)}>Fechar</Button>
+            <Button onClick={() => window.open(ANTHROPIC_BILLING_URL, "_blank", "noopener,noreferrer")}>Adicionar créditos</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {analisando && prog && (
+        <div className="space-y-1">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${prog.pct}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground capitalize">{prog.etapa}… {prog.pct}%</p>
+        </div>
+      )}
+
+      {ref?.briefing && (
+        <div className="space-y-2 rounded-md border p-3 text-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground">BRIEFING ADAPTADO (para o designer)</p>
+            <Button onClick={limpar} disabled={analisando} size="sm" variant="ghost" className="h-7 text-xs">
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Limpar / Nova análise
+            </Button>
+          </div>
+          <p className="whitespace-pre-wrap text-sm">{ref.briefing}</p>
+
+          {/* Arte pronta: o designer cola o link do Drive com a arte final */}
+          <div className="mt-3 space-y-2 border-t pt-3">
+            <p className="text-xs font-semibold text-muted-foreground">ARTE PRONTA (após o designer criar)</p>
+            <Input value={driveUrl} onChange={(e) => setDriveUrl(e.target.value)} placeholder="Link do Drive com a arte pronta (compartilhável)" className="text-sm" />
+            <Button onClick={salvarDrive} size="sm" variant="outline">Salvar link</Button>
+          </div>
         </div>
       )}
     </div>

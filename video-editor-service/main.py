@@ -306,6 +306,28 @@ def _baixar_referencia(url: str, out_tmpl: str) -> str:
     return erro
 
 
+def _baixar_imagens_referencia(url: str, out_tmpl: str) -> str:
+    """Baixa as IMAGENS de um post/carrossel (não força mp4, aceita jpg/png/webp de cada slide).
+    Retorna a mensagem de erro (string) em caso de falha; '' se ok."""
+    common = ["-o", out_tmpl, "--no-warnings", "--yes-playlist",
+              "--socket-timeout", "20", "--retries", "3", "--fragment-retries", "3"]
+    if COOKIES_FILE.exists():
+        common += ["--cookies", str(COOKIES_FILE)]
+    erro = ""
+    for extra in (["--impersonate", "chrome"], []):
+        try:
+            p = subprocess.run(["yt-dlp", *extra, *common, url], capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            erro = "timeout: o download passou de 3 min e foi cancelado (provável rate-limit do Instagram)"
+            continue
+        if p.returncode == 0:
+            return ""
+        erro = (p.stderr or p.stdout or "").strip()
+        if "impersonate" not in erro.lower():
+            break
+    return erro
+
+
 @app.post("/analisar-referencia")
 def analisar_referencia(body: dict, authorization: str = Header(default="")):
     """v3 Fase 3A (streaming NDJSON com progresso): baixa a referência, analisa e devolve
@@ -322,6 +344,10 @@ def analisar_referencia(body: dict, authorization: str = Header(default="")):
     def gen():
         import base64, glob, threading, queue
         from transcribe_words import transcrever_words
+        if modo == "estatico":
+            # Post/carrossel estático: pipeline próprio (imagens, sem áudio/transcrição).
+            yield from _gen_estatico(ref_url, org_id, agente_slug)
+            return
         try:
             ref_id = str(uuid.uuid4())
             refdir = WORK_DIR / "ref" / ref_id
@@ -506,6 +532,122 @@ def _analisar_claude(ref_id, ref_url, modo, pergunta, org_id, agente_slug, frame
         "roteiro": roteiro, "insertion_plan": insertion_plan,
         "transcript": transcript_txt, "base_vazia": base_vazia,
         "log": "roteiro e plano de inserções prontos",
+    }) + "\n"
+
+
+def _gen_estatico(ref_url, org_id, agente_slug):
+    """Pipeline do tipo Estático: baixa as imagens do post/carrossel de referência e gera
+    um BRIEFING adaptado pro designer (sem áudio/transcrição, sem plano de inserções)."""
+    import glob
+    try:
+        ref_id = str(uuid.uuid4())
+        refdir = WORK_DIR / "ref" / ref_id
+        imgsdir = refdir / "imgs"
+        imgsdir.mkdir(parents=True, exist_ok=True)
+
+        yield json.dumps({"pct": 12, "etapa": "baixando post", "log": "baixando o post/carrossel de referência"}) + "\n"
+        erro = _baixar_imagens_referencia(ref_url, str(imgsdir / "img.%(autonumber)03d.%(ext)s"))
+        imgs = [i for i in sorted(glob.glob(str(imgsdir / "*")))
+                if i.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+
+        # Fallback: se veio um vídeo (post marcado como estático por engano), extrai alguns frames.
+        if not imgs:
+            vids = [v for v in glob.glob(str(imgsdir / "*")) if v.lower().endswith((".mp4", ".mov", ".webm", ".mkv"))]
+            if vids:
+                yield json.dumps({"pct": 30, "etapa": "extraindo frames", "log": "o link é um vídeo — extraindo quadros"}) + "\n"
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", vids[0], "-vf", "fps=1/2,scale=640:-2", "-frames:v", "8", str(imgsdir / "frame%03d.jpg")],
+                    capture_output=True, text=True,
+                )
+                imgs = sorted(glob.glob(str(imgsdir / "frame*.jpg")))
+
+        if not imgs:
+            el = (erro or "").lower()
+            login = ("login" in el or "cookies" in el or "rate-limit" in el or "rate limit" in el
+                     or "logged-in" in el or "logged in" in el or "empty media response" in el or "401" in el)
+            ig = "instagram.com" in (ref_url or "").lower()
+            if login and ig:
+                msg = ("Esse post do Instagram exige login para baixar as imagens. Configure os cookies do Instagram "
+                       "na VPS (me avise) ou use um link público.")
+            else:
+                msg = f"Não consegui baixar imagens do post: {(erro or 'sem mídia encontrada')[-200:]}"
+            yield json.dumps({"erro": msg}) + "\n"
+            return
+
+        imgs = imgs[:12]  # limita p/ não estourar tokens de visão
+        yield json.dumps({"pct": 62, "etapa": "analisando com IA", "log": "a IA está analisando o post e escrevendo o briefing"}) + "\n"
+        for linha in _analisar_estatico_claude(ref_id, ref_url, org_id, agente_slug, imgs):
+            yield linha
+    except Exception as e:
+        yield json.dumps({"erro": str(e)[:300]}) + "\n"
+
+
+def _analisar_estatico_claude(ref_id, ref_url, org_id, agente_slug, imagens):
+    """Visão da IA sobre um post/carrossel estático → briefing pro DESIGNER recriar a arte
+    adaptada ao cliente. Prompt focado em DESIGN (layout, cor, tipografia, copy por slide),
+    diferente do prompt de Reels (que foca em roteiro/áudio/plano de b-roll)."""
+    import base64
+    db = svc()
+    persona = ""
+    if org_id:
+        q = db.table("agentes").select("nome,system_prompt,slug").eq("org_id", org_id)
+        ags = (q.execute().data) or []
+        ag = next((a for a in ags if agente_slug and a.get("slug") == agente_slug), None) \
+            or next((a for a in ags if "copy" in (a.get("slug") or a.get("nome") or "").lower()), None) \
+            or next((a for a in ags if "design" in (a.get("slug") or a.get("nome") or "").lower()), None) \
+            or (ags[0] if ags else None)
+        if ag:
+            persona = ag.get("system_prompt") or ""
+    base_conh = ""
+    if org_id:
+        bc = (db.table("base_conhecimento").select("titulo,conteudo").eq("org_id", org_id).eq("ativo", True).execute().data) or []
+        base_conh = "\n\n".join(f"## {b['titulo']}\n{b.get('conteudo','')}" for b in bc if (b.get("conteudo") or "").strip())
+
+    base_vazia = not base_conh
+    base_bloco = (
+        "# Base de Conhecimento do cliente (a verdade sobre marca/produto/público — baseie-se nela)\n" + base_conh + "\n\n"
+        if base_conh else
+        "# Base de Conhecimento: VAZIA. Não invente dados do cliente; onde faltar, marque com [colchetes].\n\n"
+    )
+
+    sistema = (
+        (persona + "\n\n" if persona else "") + base_bloco
+        + "Você é um DIRETOR DE ARTE/ESTRATEGISTA DE CONTEÚDO ESTÁTICO. Recebe as IMAGENS de um post ou carrossel de "
+        "REFERÊNCIA e adapta a ideia para o cliente, gerando um BRIEFING para que um DESIGNER recrie a arte.\n"
+        "REGRA CENTRAL DA ADAPTAÇÃO: mantenha o MESMO conceito visual, o MESMO formato (post único vs carrossel), a MESMA "
+        "estrutura/sequência de slides e os MESMOS ganchos da referência. NÃO invente um conceito novo: você só TROCA a "
+        "mensagem/tema para o contexto do cliente (produto/marca/público da Base de Conhecimento). Sem base, use [colchetes].\n"
+        "ANALISE nas imagens: formato (post único ou carrossel de N slides), composição/layout, paleta de cores, "
+        "hierarquia tipográfica, e o TEXTO exato de cada slide.\n"
+        "REGRA DE FORMATAÇÃO (OBRIGATÓRIA): escreva em TEXTO PURO. NÃO use markdown — nada de `*`/`**` (negrito) nem `#`/`##` "
+        "(títulos). Para destacar use MAIÚSCULAS. O texto é exibido cru.\n"
+        "Estruture o briefing NESTA ordem:\n"
+        "   FORMATO: (ex.: Carrossel de 5 slides / Post único quadrado)\n"
+        "   CONCEITO: a ideia central do post, já adaptada ao cliente\n"
+        "   REFERÊNCIA VISUAL: layout/composição, paleta de cores, tipografia e hierarquia observadas na referência\n"
+        "   CONTEÚDO SLIDE A SLIDE: para CADA slide (ou o post único), o TEXTO/headline adaptado ao cliente + descrição do "
+        "visual (o que aparece, como posicionar)\n"
+        "   LEGENDA DO POST: sugestão de legenda para a publicação\n"
+        "   NOTAS PARA O DESIGNER: dicas práticas de execução (fontes, cores, elementos de marca, o que evitar)."
+    )
+    primeiro = "Imagens do post/carrossel de referência (na ordem dos slides):"
+
+    blocos = [{"type": "text", "text": primeiro}]
+    for i, fp in enumerate(imagens):
+        b64 = base64.b64encode(pathlib.Path(fp).read_bytes()).decode()
+        ext = pathlib.Path(fp).suffix.lower().lstrip(".")
+        media_type = "image/png" if ext == "png" else "image/webp" if ext == "webp" else "image/jpeg"
+        blocos.append({"type": "text", "text": f"[slide {i + 1}]"})
+        blocos.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}})
+
+    client = anthropic.Anthropic()
+    resp = client.messages.create(model=MODEL, max_tokens=8000, system=sistema, messages=[{"role": "user", "content": blocos}])
+    briefing = "".join(b.text for b in resp.content if b.type == "text").strip()
+
+    yield json.dumps({
+        "pct": 100, "etapa": "concluído", "ok": True, "ref_id": ref_id, "ref_url": ref_url,
+        "briefing": briefing, "base_vazia": base_vazia,
+        "log": "briefing para o designer pronto",
     }) + "\n"
 
 
