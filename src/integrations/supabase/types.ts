@@ -1959,6 +1959,7 @@ export type Database = {
           org_id: string | null
           origem: string | null
           prioridade: string | null
+          responsavel_id: string | null
           tempo_estimado: number | null
           titulo: string
           updated_at: string | null
@@ -1979,6 +1980,7 @@ export type Database = {
           org_id?: string | null
           origem?: string | null
           prioridade?: string | null
+          responsavel_id?: string | null
           tempo_estimado?: number | null
           titulo: string
           updated_at?: string | null
@@ -1999,6 +2001,7 @@ export type Database = {
           org_id?: string | null
           origem?: string | null
           prioridade?: string | null
+          responsavel_id?: string | null
           tempo_estimado?: number | null
           titulo?: string
           updated_at?: string | null

@@ -26,8 +26,9 @@ import { toast } from "sonner";
 const MAX_UPLOAD_MB = 500;
 
 type Coluna ={ id: string; nome: string; ordem: number; agente_id: string | null };
-type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null };
+type Tarefa = { id: string; titulo: string; descricao: string | null; coluna_id: string | null; agente_id: string | null; responsavel_id: string | null; prioridade: string; ordem: number; origem: string; data_inicio: string | null; data_vencimento: string | null; tempo_estimado: number | null; etiquetas: string[] | null; legenda: string | null };
 type Agente = { id: string; nome: string };
+type Membro = { id: string; nome: string };
 type Resposta = { id: string; autor: string | null; conteudo: string; created_at: string };
 type Anexo = { id: string; tipo: string; url: string | null; status: string; created_at: string };
 type Subtarefa = { id: string; titulo: string; concluida: boolean; ordem: number };
@@ -88,14 +89,36 @@ export default function Workflow() {
       return (data || []) as Agente[];
     },
   });
+  // Membros da org (usuários reais com acesso ao app) — pra atribuir responsável.
+  const { data: membros = [] } = useQuery({
+    queryKey: ["membros-org"],
+    queryFn: async () => {
+      const orgId = await getOrgId();
+      if (!orgId) return [] as Membro[];
+      const { data: mems } = await supabase
+        .from("memberships")
+        .select("user_id")
+        .eq("org_id", orgId)
+        .eq("status", "ativo");
+      const ids = ((mems as { user_id: string }[]) ?? []).map((m) => m.user_id);
+      if (ids.length === 0) return [] as Membro[];
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id,nome,email")
+        .in("id", ids);
+      return ((profs as { id: string; nome: string | null; email: string | null }[]) ?? [])
+        .map((p) => ({ id: p.id, nome: p.nome || p.email || "Sem nome" })) as Membro[];
+    },
+  });
 
   const agenteNome = (id: string | null) => agentes.find((a) => a.id === id)?.nome;
+  const membroNome = (id: string | null) => membros.find((m) => m.id === id)?.nome;
   const colunaNome = (id: string | null) => colunas.find((c) => c.id === id)?.nome;
 
   // ---- Dialog da tarefa ----
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tarefa | null>(null);
-  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[], legenda: "" };
+  const emptyForm = { titulo: "", descricao: "", coluna_id: "", agente_id: "", responsavel_id: "", prioridade: "normal", data_inicio: "", data_vencimento: "", tempo_estimado: "" as string, etiquetas: [] as string[], legenda: "" };
   const [form, setForm] = useState({ ...emptyForm });
   const [comentario, setComentario] = useState("");
   // Auto-save do card: "idle" (nada a fazer), "saving" (debounce/gravando), "saved" (persistido).
@@ -404,7 +427,7 @@ export default function Workflow() {
   };
   const abrirTarefa = (t: Tarefa) => {
     setEditing(t);
-    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [], legenda: t.legenda || "" });
+    setForm({ titulo: t.titulo, descricao: t.descricao || "", coluna_id: t.coluna_id || "", agente_id: t.agente_id || "", responsavel_id: t.responsavel_id || "", prioridade: t.prioridade || "normal", data_inicio: t.data_inicio || "", data_vencimento: t.data_vencimento || "", tempo_estimado: t.tempo_estimado != null ? String(t.tempo_estimado) : "", etiquetas: t.etiquetas || [], legenda: t.legenda || "" });
     setComentario("");
     autoSaveInitRef.current = null; setAutoSaveStatus("idle");
     setOpen(true);
@@ -413,7 +436,7 @@ export default function Workflow() {
   // Monta o payload da tarefa a partir do form (reusado no Salvar manual e no auto-save).
   const montarPayloadTarefa = () => ({
     titulo: form.titulo.trim(), descricao: form.descricao || null,
-    coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, prioridade: form.prioridade,
+    coluna_id: form.coluna_id || null, agente_id: form.agente_id || null, responsavel_id: form.responsavel_id || null, prioridade: form.prioridade,
     data_inicio: form.data_inicio || null, data_vencimento: form.data_vencimento || null,
     tempo_estimado: form.tempo_estimado.trim() ? parseInt(form.tempo_estimado, 10) : null,
     etiquetas: form.etiquetas, legenda: form.legenda || null,
@@ -602,6 +625,7 @@ export default function Workflow() {
                                 {t.data_vencimento && <Badge variant="outline" className={`text-[10px] flex items-center gap-1 ${estaAtrasada(t.data_vencimento) ? "text-red-500 border-red-500/40" : ""}`}><CalendarIcon className="h-3 w-3" />{fmtData(t.data_vencimento)}</Badge>}
                                 <Badge variant="outline" className={`text-[10px] border ${prioClasse[t.prioridade] || ""}`}>{PRIORIDADES[t.prioridade] || t.prioridade}</Badge>
                                 {t.agente_id && <Badge variant="secondary" className="text-[10px] flex items-center gap-1"><Bot className="h-3 w-3" />{agenteNome(t.agente_id)}</Badge>}
+                                {t.responsavel_id && <Badge variant="secondary" className="text-[10px] flex items-center gap-1"><User className="h-3 w-3" />{membroNome(t.responsavel_id)}</Badge>}
                                 {t.origem === "delegacao" && <Badge variant="outline" className="text-[10px]">auto</Badge>}
                               </div>
                             </CardContent>
@@ -619,15 +643,16 @@ export default function Workflow() {
               <div className="rounded-lg border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>Tarefa</TableHead><TableHead>Etapa</TableHead><TableHead>Responsável</TableHead><TableHead>Vencimento</TableHead><TableHead>Prioridade</TableHead><TableHead>Origem</TableHead></TableRow>
+                    <TableRow><TableHead>Tarefa</TableHead><TableHead>Etapa</TableHead><TableHead>Responsável</TableHead><TableHead>Agente</TableHead><TableHead>Vencimento</TableHead><TableHead>Prioridade</TableHead><TableHead>Origem</TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
                     {tarefas.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma tarefa ainda.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma tarefa ainda.</TableCell></TableRow>
                     ) : tarefas.map((t) => (
                       <TableRow key={t.id} className="cursor-pointer" onClick={() => abrirTarefa(t)}>
                         <TableCell className="font-medium">{t.titulo}</TableCell>
                         <TableCell>{colunaNome(t.coluna_id) || "—"}</TableCell>
+                        <TableCell>{membroNome(t.responsavel_id) || "—"}</TableCell>
                         <TableCell>{agenteNome(t.agente_id) || "—"}</TableCell>
                         <TableCell className={estaAtrasada(t.data_vencimento) ? "text-red-500" : ""}>{t.data_vencimento ? fmtData(t.data_vencimento) : "—"}</TableCell>
                         <TableCell><Badge variant="outline" className={`text-[10px] border ${prioClasse[t.prioridade] || ""}`}>{PRIORIDADES[t.prioridade] || t.prioridade}</Badge></TableCell>
@@ -694,10 +719,16 @@ export default function Workflow() {
                 <SelectContent>{colunas.map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
               </Select>
 
-              {/* Responsável */}
+              {/* Agente (IA) */}
               <Select value={form.agente_id || "_none"} onValueChange={(v) => setForm({ ...form, agente_id: v === "_none" ? "" : v })}>
+                <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><Bot className="h-3.5 w-3.5" /><SelectValue placeholder="Agente" /></SelectTrigger>
+                <SelectContent><SelectItem value="_none">— Sem agente</SelectItem>{agentes.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
+              </Select>
+
+              {/* Responsável (usuário da equipe) */}
+              <Select value={form.responsavel_id || "_none"} onValueChange={(v) => setForm({ ...form, responsavel_id: v === "_none" ? "" : v })}>
                 <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><User className="h-3.5 w-3.5" /><SelectValue placeholder="Responsável" /></SelectTrigger>
-                <SelectContent><SelectItem value="_none">— Sem responsável</SelectItem>{agentes.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="_none">— Sem responsável</SelectItem>{membros.map((m) => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}</SelectContent>
               </Select>
 
               {/* Data de vencimento */}
