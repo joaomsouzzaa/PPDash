@@ -443,6 +443,26 @@ export default function Workflow() {
     updated_at: new Date().toISOString(),
   });
 
+  // Grava um patch na tarefa NA HORA (sem esperar o debounce). Usado nos selects/pickers
+  // — assim "salva só de selecionar", sem precisar clicar fora ou rolar o card.
+  const persistCampo = async (patch: Record<string, unknown>) => {
+    if (!editing) return;
+    setAutoSaveStatus("saving");
+    const { error } = await supabase.from("tarefas")
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", editing.id);
+    if (error) { setAutoSaveStatus("idle"); toast.error("Falha ao salvar"); return; }
+    setAutoSaveStatus("saved");
+    queryClient.invalidateQueries({ queryKey: ["tarefas"] });
+  };
+
+  // Grava o form inteiro imediatamente. Chamado ao fechar o card, pra não perder uma
+  // edição feita nos últimos 800ms (o debounce seria cancelado ao desmontar o dialog).
+  const flushTarefa = () => {
+    if (!editing || !form.titulo.trim()) return;
+    void supabase.from("tarefas").update(montarPayloadTarefa()).eq("id", editing.id)
+      .then(({ error }) => { if (!error) queryClient.invalidateQueries({ queryKey: ["tarefas"] }); });
+  };
+
   // Auto-save (só p/ tarefa existente): grava os campos do form sozinho, com debounce
   // de 800ms, pra não perder legenda/texto por esquecer o botão Salvar. Anexos e posts
   // já são persistidos na hora — isto cobre só a tabela `tarefas`. Pula o primeiro
@@ -700,7 +720,7 @@ export default function Workflow() {
       </Dialog>
 
       {/* Popup da tarefa */}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(o) => { if (!o) flushTarefa(); setOpen(o); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader className="sr-only"><DialogTitle>{editing ? "Tarefa" : "Nova tarefa"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -714,19 +734,19 @@ export default function Workflow() {
             {/* Linha de chips de atributos */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Etapa / Status */}
-              <Select value={form.coluna_id} onValueChange={(v) => setForm({ ...form, coluna_id: v })}>
+              <Select value={form.coluna_id} onValueChange={(v) => { setForm({ ...form, coluna_id: v }); persistCampo({ coluna_id: v || null }); }}>
                 <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><ListChecks className="h-3.5 w-3.5" /><SelectValue placeholder="Etapa" /></SelectTrigger>
                 <SelectContent>{colunas.map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent>
               </Select>
 
               {/* Agente (IA) */}
-              <Select value={form.agente_id || "_none"} onValueChange={(v) => setForm({ ...form, agente_id: v === "_none" ? "" : v })}>
+              <Select value={form.agente_id || "_none"} onValueChange={(v) => { const val = v === "_none" ? "" : v; setForm({ ...form, agente_id: val }); persistCampo({ agente_id: val || null }); }}>
                 <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><Bot className="h-3.5 w-3.5" /><SelectValue placeholder="Agente" /></SelectTrigger>
                 <SelectContent><SelectItem value="_none">— Sem agente</SelectItem>{agentes.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}</SelectContent>
               </Select>
 
               {/* Responsável (usuário da equipe) */}
-              <Select value={form.responsavel_id || "_none"} onValueChange={(v) => setForm({ ...form, responsavel_id: v === "_none" ? "" : v })}>
+              <Select value={form.responsavel_id || "_none"} onValueChange={(v) => { const val = v === "_none" ? "" : v; setForm({ ...form, responsavel_id: val }); persistCampo({ responsavel_id: val || null }); }}>
                 <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-xs"><User className="h-3.5 w-3.5" /><SelectValue placeholder="Responsável" /></SelectTrigger>
                 <SelectContent><SelectItem value="_none">— Sem responsável</SelectItem>{membros.map((m) => <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}</SelectContent>
               </Select>
@@ -740,8 +760,8 @@ export default function Workflow() {
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar mode="single" selected={form.data_vencimento ? new Date(form.data_vencimento + "T00:00:00") : undefined}
-                    onSelect={(d) => setForm({ ...form, data_vencimento: d ? d.toISOString().slice(0, 10) : "" })} />
-                  {form.data_vencimento && <div className="border-t p-2"><Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setForm({ ...form, data_vencimento: "" })}>Limpar</Button></div>}
+                    onSelect={(d) => { const val = d ? d.toISOString().slice(0, 10) : ""; setForm({ ...form, data_vencimento: val }); persistCampo({ data_vencimento: val || null }); }} />
+                  {form.data_vencimento && <div className="border-t p-2"><Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => { setForm({ ...form, data_vencimento: "" }); persistCampo({ data_vencimento: null }); }}>Limpar</Button></div>}
                 </PopoverContent>
               </Popover>
 
@@ -754,13 +774,13 @@ export default function Workflow() {
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar mode="single" selected={form.data_inicio ? new Date(form.data_inicio + "T00:00:00") : undefined}
-                    onSelect={(d) => setForm({ ...form, data_inicio: d ? d.toISOString().slice(0, 10) : "" })} />
-                  {form.data_inicio && <div className="border-t p-2"><Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setForm({ ...form, data_inicio: "" })}>Limpar</Button></div>}
+                    onSelect={(d) => { const val = d ? d.toISOString().slice(0, 10) : ""; setForm({ ...form, data_inicio: val }); persistCampo({ data_inicio: val || null }); }} />
+                  {form.data_inicio && <div className="border-t p-2"><Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => { setForm({ ...form, data_inicio: "" }); persistCampo({ data_inicio: null }); }}>Limpar</Button></div>}
                 </PopoverContent>
               </Popover>
 
               {/* Prioridade */}
-              <Select value={form.prioridade} onValueChange={(v) => setForm({ ...form, prioridade: v })}>
+              <Select value={form.prioridade} onValueChange={(v) => { setForm({ ...form, prioridade: v }); persistCampo({ prioridade: v }); }}>
                 <SelectTrigger className={`h-8 w-auto gap-1.5 rounded-full border px-3 text-xs ${prioClasse[form.prioridade] || ""}`}><Flag className="h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
                 <SelectContent>{Object.entries(PRIORIDADES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
               </Select>

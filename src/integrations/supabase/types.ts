@@ -1961,6 +1961,7 @@ export type Database = {
           prioridade: string | null
           responsavel_id: string | null
           tempo_estimado: number | null
+          tipo: string
           titulo: string
           updated_at: string | null
           video_ref: Json | null
@@ -1982,6 +1983,7 @@ export type Database = {
           prioridade?: string | null
           responsavel_id?: string | null
           tempo_estimado?: number | null
+          tipo?: string
           titulo: string
           updated_at?: string | null
           video_ref?: Json | null
@@ -2003,6 +2005,7 @@ export type Database = {
           prioridade?: string | null
           responsavel_id?: string | null
           tempo_estimado?: number | null
+          tipo?: string
           titulo?: string
           updated_at?: string | null
           video_ref?: Json | null
