@@ -1228,9 +1228,6 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
   const [editandoRoteiro, setEditandoRoteiro] = useState(false);
   const [roteiroEdit, setRoteiroEdit] = useState("");
   const [salvandoRoteiro, setSalvandoRoteiro] = useState(false);
-  const [editandoBriefing, setEditandoBriefing] = useState(false);
-  const [briefingEdit, setBriefingEdit] = useState("");
-  const [salvandoBriefing, setSalvandoBriefing] = useState(false);
 
   const { data: ref } = useQuery({
     queryKey: ["video_ref", tarefaId],
@@ -1337,23 +1334,6 @@ function ReferenciaVideo({ tarefaId, agenteId }: { tarefaId: string; agenteId: s
       toast.error(e instanceof Error ? e.message : "Falha ao salvar o roteiro.");
     } finally {
       setSalvandoRoteiro(false);
-    }
-  };
-
-  // Salva um ajuste manual no briefing adaptado (só o campo `briefing`, mantendo o resto do video_ref).
-  const salvarBriefing = async () => {
-    if (!briefingEdit.trim()) { toast.error("O briefing não pode ficar vazio."); return; }
-    setSalvandoBriefing(true);
-    try {
-      const vr = { ...(ref || {}), briefing: briefingEdit };
-      await db.from("tarefas").update({ video_ref: vr, updated_at: new Date().toISOString() }).eq("id", tarefaId);
-      setEditandoBriefing(false);
-      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
-      toast.success("Briefing atualizado.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao salvar o briefing.");
-    } finally {
-      setSalvandoBriefing(false);
     }
   };
 
@@ -1668,6 +1648,9 @@ function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId
   const [prog, setProg] = useState<{ pct: number; etapa: string } | null>(null);
   const [driveUrl, setDriveUrl] = useState("");
   const [creditoBaixo, setCreditoBaixo] = useState(false);
+  const [editandoBriefing, setEditandoBriefing] = useState(false);
+  const [briefingEdit, setBriefingEdit] = useState("");
+  const [salvandoBriefing, setSalvandoBriefing] = useState(false);
 
   const { data: ref } = useQuery({
     queryKey: ["video_ref", tarefaId],
@@ -1731,6 +1714,23 @@ function ReferenciaEstatico({ tarefaId, agenteId }: { tarefaId: string; agenteId
       qc.invalidateQueries({ queryKey: ["tarefas"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao salvar.");
+    }
+  };
+
+  // Salva um ajuste manual no briefing adaptado (só o campo `briefing`, mantendo o resto do video_ref).
+  const salvarBriefing = async () => {
+    if (!briefingEdit.trim()) { toast.error("O briefing não pode ficar vazio."); return; }
+    setSalvandoBriefing(true);
+    try {
+      const vr = { ...(ref || {}), briefing: briefingEdit };
+      await db.from("tarefas").update({ video_ref: vr, updated_at: new Date().toISOString() }).eq("id", tarefaId);
+      setEditandoBriefing(false);
+      qc.invalidateQueries({ queryKey: ["video_ref", tarefaId] });
+      toast.success("Briefing atualizado.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao salvar o briefing.");
+    } finally {
+      setSalvandoBriefing(false);
     }
   };
 
