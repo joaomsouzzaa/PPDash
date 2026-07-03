@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Normaliza telefone BR p/ chave de dedup (últimos 11 díg., tira 55). Espelha _shared/telefone.ts.
+function normalizarTelefone(raw?: string | null): string | null {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (!d) return null;
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  if (d.length > 11) d = d.slice(-11);
+  return d || null;
+}
+
 // Dispatcher genérico de sincronização de CRM por organização.
 // Lê public.integracoes (crm + credenciais + config) e despacha para o conector certo:
 //   - clint:      pull dos /deals (igual ao antigo clint-sync), backfill por email/deal_id.
@@ -17,6 +26,22 @@ function svc() {
 const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const fmtBRdt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// Busca TODOS os leads (paginado). PostgREST devolve no máx. 1000 linhas/request;
+// sem paginar, o snapshot de dedup fica incompleto e o sync duplica/não vincula
+// os leads além da linha 1000.
+async function fetchAllLeads(supabase: any, cols: string, orgId: string | null): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    let q = supabase.from("leads").select(cols).range(from, from + 999);
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data, error } = await q;
+    if (error || !data || !data.length) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
 const getPath = (obj: any, path: string): any => path.split(".").reduce((acc: any, seg: string) => (acc == null ? undefined : acc[seg]), obj);
 
 // ---- Render do template editável (mesmo do clint-sync) ----
@@ -113,19 +138,30 @@ async function syncClint(supabase: any, orgId: string | null, integ: any, body: 
   const candidatos = new Map<string, any>();
   for (const d of deals) if (d.id && !candidatos.has(d.id)) candidatos.set(d.id, d);
 
-  let q2 = supabase.from("leads").select("id, email, data_lead, clint_deal_id");
-  if (orgId) q2 = q2.eq("org_id", orgId);
-  const { data: nossos } = await q2;
+  const nossos = await fetchAllLeads(supabase, "id, email, telefone, data_lead, clint_deal_id", orgId);
   const existSet = new Set((nossos || []).map((l: any) => l.clint_deal_id).filter(Boolean));
   const porEmail = new Map<string, any[]>();
   for (const l of nossos || []) { const e = norm(l.email || ""); if (!e) continue; if (!porEmail.has(e)) porEmail.set(e, []); porEmail.get(e)!.push(l); }
+  const porTel = new Map<string, any[]>();
+  for (const l of nossos || []) { const t = normalizarTelefone(l.telefone); if (!t) continue; if (!porTel.has(t)) porTel.set(t, []); porTel.get(t)!.push(l); }
 
   const inseridos: any[] = []; const naoInseridos: any[] = []; const rowsToInsert: any[] = []; const vinculos: any[] = []; const claimed = new Set<string>(); let vinculados = 0;
   for (const d of candidatos.values()) {
     if (existSet.has(d.id)) continue;
-    const pool = (porEmail.get(norm(d.contact?.email || "")) || []).filter((l) => !l.clint_deal_id && !claimed.has(l.id))
-      .sort((a, b) => Math.abs(+new Date(a.data_lead) - +new Date(d.created_at)) - Math.abs(+new Date(b.data_lead) - +new Date(d.created_at)));
-    if (pool.length) { claimed.add(pool[0].id); vinculos.push({ id: pool[0].id, deal: d.id }); vinculados++; continue; }
+    // Já temos esse contato (por telefone ou email)? Não duplica. Se não tiver
+    // deal_id, vincula (backfill); se já tiver outro deal, só pula a inserção.
+    const telDeal = normalizarTelefone(d.contact?.fullPhone || d.contact?.phone || null);
+    const emailNorm = norm(d.contact?.email || "");
+    const seen = new Set<string>(); const mesmos: any[] = [];
+    for (const l of [...(telDeal ? porTel.get(telDeal) || [] : []), ...(emailNorm ? porEmail.get(emailNorm) || [] : [])]) {
+      if (!seen.has(l.id)) { seen.add(l.id); mesmos.push(l); }
+    }
+    if (mesmos.length) {
+      const semDeal = mesmos.filter((l) => !l.clint_deal_id && !claimed.has(l.id))
+        .sort((a, b) => Math.abs(+new Date(a.data_lead) - +new Date(d.created_at)) - Math.abs(+new Date(b.data_lead) - +new Date(d.created_at)));
+      if (semDeal.length) { claimed.add(semDeal[0].id); vinculos.push({ id: semDeal[0].id, deal: d.id }); vinculados++; }
+      continue;
+    }
     let f: any = {}; let tags = "";
     const emailDeal = (d.contact?.email || "").trim();
     if (emailDeal) try { const cj = await clintGet(`/contacts?email=${encodeURIComponent(emailDeal)}&limit=1`); const c = (cj.data || [])[0] || {}; f = c.fields || {}; tags = (c.tags || []).map((t: any) => t.name).join(", "); } catch { /* segue */ }
@@ -144,11 +180,16 @@ async function syncClint(supabase: any, orgId: string | null, integ: any, body: 
       is_sql: /sql|reuni|venda|ganho/.test(st) ? "Sim" : null, is_reuniao_agendada: /reuni|venda|ganho/.test(st) ? "Sim" : null,
       is_reuniao_realizada: /realizad|venda|ganho/.test(st) ? "Sim" : null, is_venda_realizada: /venda|ganho/.test(st) ? "Sim" : null, custom,
     });
+    // Registra o contato p/ não duplicar dentro da mesma execução (2 negócios do mesmo lead novo).
+    const marcador = { id: `pending:${d.id}`, clint_deal_id: d.id, data_lead: d.created_at };
+    if (telDeal) { if (!porTel.has(telDeal)) porTel.set(telDeal, []); porTel.get(telDeal)!.push(marcador); }
+    if (emailNorm) { if (!porEmail.has(emailNorm)) porEmail.set(emailNorm, []); porEmail.get(emailNorm)!.push(marcador); }
     inseridos.push({ nome: d.contact?.name || "(sem nome)", email: d.contact?.email || "", stage: d.stage || "", motivo });
   }
   if (!dry) for (const v of vinculos) await supabase.from("leads").update({ clint_deal_id: v.deal }).eq("id", v.id);
   if (!dry && rowsToInsert.length) {
-    const { error } = await supabase.from("leads").insert(rowsToInsert);
+    // upsert com ignoreDuplicates: rede de segurança do índice único (org_id, telefone_norm).
+    const { error } = await supabase.from("leads").upsert(rowsToInsert, { onConflict: "org_id,telefone_norm", ignoreDuplicates: true });
     if (error) { for (const i of inseridos) naoInseridos.push({ nome: i.nome, email: i.email, motivo: "erro ao inserir: " + error.message }); inseridos.length = 0; }
   }
   const clintCount = candidatos.size;
@@ -180,9 +221,10 @@ async function syncRdStation(supabase: any, orgId: string | null, _integ: any, b
     .eq("org_id", orgId).eq("status", "erro").gte("created_at", cutoff);
 
   // Snapshot p/ dedupe.
-  const { data: nossos } = await supabase.from("leads").select("id, email, telefone, crm_external_id").eq("org_id", orgId);
+  const nossos = await fetchAllLeads(supabase, "id, email, telefone, crm_external_id", orgId);
   const byExt = new Set((nossos || []).map((l: any) => l.crm_external_id).filter(Boolean));
   const byEmail = new Set((nossos || []).map((l: any) => norm(l.email || "")).filter(Boolean));
+  const byTel = new Set((nossos || []).map((l: any) => normalizarTelefone(l.telefone)).filter(Boolean));
 
   const recebidos = (eventos || []).length;
   const inseridos: any[] = []; const det: string[] = [];
@@ -192,7 +234,8 @@ async function syncRdStation(supabase: any, orgId: string | null, _integ: any, b
     const val = (appField: string): any => { const k = mapa[appField]; return k == null ? undefined : getPath(payload, k); };
     const ext = (val("crm_external_id") != null ? String(val("crm_external_id")) : ev.external_id) || null;
     const email = val("email") ? String(val("email")) : null;
-    if ((ext && byExt.has(ext)) || (email && byEmail.has(norm(email)))) { jaTinha++; if (!dry) await supabase.from("webhook_eventos").update({ status: "duplicado" }).eq("id", ev.id); continue; }
+    const telNorm = normalizarTelefone(val("telefone") != null ? String(val("telefone")) : null);
+    if ((ext && byExt.has(ext)) || (telNorm && byTel.has(telNorm)) || (email && byEmail.has(norm(email)))) { jaTinha++; if (!dry) await supabase.from("webhook_eventos").update({ status: "duplicado" }).eq("id", ev.id); continue; }
     const tagsRaw = String(val("tags") ?? "");
     const custom: Record<string, unknown> = {};
     for (const d of customDefs || []) { const v = val("custom:" + d.chave); if (v !== undefined) custom[d.chave] = v; }
@@ -214,7 +257,7 @@ async function syncRdStation(supabase: any, orgId: string | null, _integ: any, b
     const { data: ins, error } = await supabase.from("leads").insert(lead).select("id").maybeSingle();
     if (error) { det.push(`⚠️ ${lead.nome || "(sem nome)"} · ${email || ""} — erro: ${error.message}`); continue; }
     await supabase.from("webhook_eventos").update({ status: "processado", lead_id: ins?.id ?? null }).eq("id", ev.id);
-    if (ext) byExt.add(ext); if (email) byEmail.add(norm(email));
+    if (ext) byExt.add(ext); if (email) byEmail.add(norm(email)); if (telNorm) byTel.add(telNorm);
     inseridos.push({ nome: lead.nome, email });
   }
   const total = (nossos || []).length + inseridos.length;

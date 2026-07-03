@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Upload, Download, Loader2, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { LEAD_CAMPOS_PADRAO } from "@/lib/leadFields";
+import { normalizarTelefone } from "@/lib/telefone";
 
 const IGNORAR = "__ignorar__";
 
@@ -113,11 +114,13 @@ export function LeadsImport({ open, onOpenChange, onImported }: { open: boolean;
     }
     setImporting(true); setErro("");
     try {
-      // Dedupe: e-mails já existentes na org (RLS já filtra por org).
-      const { data: existentes } = await supabase.from("leads").select("email");
+      // Dedupe: e-mails e telefones já existentes na org (RLS já filtra por org).
+      const { data: existentes } = await supabase.from("leads").select("email, telefone");
       const jaTem = new Set(((existentes as any[]) ?? []).map((l) => stripLower(l.email || "")).filter(Boolean));
+      const jaTemTel = new Set(((existentes as any[]) ?? []).map((l) => normalizarTelefone(l.telefone)).filter(Boolean));
 
       const vistos = new Set<string>();
+      const vistosTel = new Set<string>();
       const registros: any[] = [];
       let pulados = 0;
       for (const cells of rows) {
@@ -132,7 +135,12 @@ export function LeadsImport({ open, onOpenChange, onImported }: { open: boolean;
           else std[campo] = val;
         });
         const email = stripLower(std.email || "");
-        if (email) { if (jaTem.has(email) || vistos.has(email)) { pulados++; continue; } vistos.add(email); }
+        const tel = normalizarTelefone(std.telefone || "");
+        // Dedup por telefone normalizado primeiro, depois por e-mail.
+        if (tel && (jaTemTel.has(tel) || vistosTel.has(tel))) { pulados++; continue; }
+        if (email && (jaTem.has(email) || vistos.has(email))) { pulados++; continue; }
+        if (tel) vistosTel.add(tel);
+        if (email) vistos.add(email);
         if (!std.nome && !std.email && !std.telefone) continue;
         registros.push({ ...std, custom, crm_origem: "csv_import", data_lead: std.data_lead || new Date().toISOString() });
       }
@@ -142,7 +150,8 @@ export function LeadsImport({ open, onOpenChange, onImported }: { open: boolean;
       let inseridos = 0;
       for (let i = 0; i < registros.length; i += 500) {
         const chunk = registros.slice(i, i + 500);
-        const { error } = await supabase.from("leads").insert(chunk as any);
+        // upsert com ignoreDuplicates: rede de segurança do índice único (org_id, telefone_norm).
+        const { error } = await supabase.from("leads").upsert(chunk as any, { onConflict: "org_id,telefone_norm", ignoreDuplicates: true });
         if (error) throw new Error(error.message);
         inseridos += chunk.length;
       }

@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Normaliza telefone BR p/ chave de dedup (últimos 11 díg., tira 55). Espelha _shared/telefone.ts.
+function normalizarTelefone(raw?: string | null): string | null {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (!d) return null;
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  if (d.length > 11) d = d.slice(-11);
+  return d || null;
+}
+
 // Webhook do Meta Lead Ads (leadgen). Fluxo:
 //  GET  -> verificação do webhook (hub.challenge) usando META_WEBHOOK_VERIFY_TOKEN.
 //  POST -> evento leadgen: busca o lead na Graph API com o token da página e insere em `leads`.
@@ -103,11 +112,16 @@ Deno.serve(async (req) => {
 
         const m = mapMetaFields(lead.field_data || []);
         const email = m.email ? String(m.email) : null;
+        const telefoneNorm = normalizarTelefone(m.telefone ? String(m.telefone) : (m.whatsapp ? String(m.whatsapp) : null));
 
-        // Dedup por leadgen_id ou email.
+        // Dedup por leadgen_id, telefone normalizado ou email.
         let existe = false;
         const { data: porExt } = await supabase.from("leads").select("id").eq("org_id", orgId).eq("crm_external_id", leadgenId).maybeSingle();
         if (porExt) existe = true;
+        if (!existe && telefoneNorm) {
+          const { data: porTel } = await supabase.from("leads").select("id").eq("org_id", orgId).eq("telefone_norm", telefoneNorm).limit(1).maybeSingle();
+          if (porTel) existe = true;
+        }
         if (!existe && email) {
           const { data: porEmail } = await supabase.from("leads").select("id").eq("org_id", orgId).eq("email", email).maybeSingle();
           if (porEmail) existe = true;

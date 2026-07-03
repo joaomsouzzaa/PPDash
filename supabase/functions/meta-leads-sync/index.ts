@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Normaliza telefone BR p/ chave de dedup (últimos 11 díg., tira 55). Espelha _shared/telefone.ts.
+function normalizarTelefone(raw?: string | null): string | null {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (!d) return null;
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  if (d.length > 11) d = d.slice(-11);
+  return d || null;
+}
+
 // Pull/sincronização do Meta Lead Ads (espelha o "Sincronizar agora" do CRM, mas via Graph API).
 // Para cada org com página ativa em meta_lead_paginas:
 //   - lista os formulários da página (requer pages_manage_ads) e puxa os leads do período;
@@ -16,6 +25,22 @@ function svc() {
 }
 const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const fmtBRdt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// Busca TODOS os leads (paginado). PostgREST devolve no máx. 1000 linhas/request;
+// sem paginar, o snapshot de dedup fica incompleto e o sync duplica os leads
+// além da linha 1000.
+async function fetchAllLeads(supabase: any, cols: string, orgId: string | null): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    let q = supabase.from("leads").select(cols).range(from, from + 999);
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data, error } = await q;
+    if (error || !data || !data.length) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
 
 // ---- Mapeia os campos do formulário do Meta (mesma lógica do webhook meta-leads) ----
 function mapMetaFields(fd: { name: string; values: string[] }[]) {
@@ -167,12 +192,14 @@ async function syncOrg(supabase: any, orgId: string, dias: number, dry: boolean)
   if (!paginas?.length) return { recebidos: 0, ja_tinha: 0, inseridos: 0, atualizados: 0, total: 0, detalhes: "✅ Nenhuma página Meta ativa.", periodo: "", avisos: ["sem página ativa"] };
 
   // Snapshot dos leads da org p/ dedupe e enriquecimento.
-  const { data: nossos } = await supabase.from("leads").select("id, email, crm_external_id, crm_origem, utm_campaign, utm_content, utm_medium").eq("org_id", orgId);
+  const nossos = await fetchAllLeads(supabase, "id, email, telefone, crm_external_id, crm_origem, utm_campaign, utm_content, utm_medium", orgId);
   const porExt = new Map<string, any>();
   const porEmail = new Map<string, any>();
+  const porTel = new Map<string, any>();
   for (const l of nossos || []) {
     if (l.crm_external_id) porExt.set(String(l.crm_external_id), l);
     const e = norm(l.email || ""); if (e && !porEmail.has(e)) porEmail.set(e, l);
+    const t = normalizarTelefone(l.telefone); if (t && !porTel.has(t)) porTel.set(t, l);
   }
 
   const avisos: string[] = [];
@@ -192,7 +219,8 @@ async function syncOrg(supabase: any, orgId: string, dias: number, dry: boolean)
       for (const lead of leads) {
         const { row, email } = montarLead(orgId, lead);
         const ext = String(lead.id);
-        const existente = porExt.get(ext) || (email ? porEmail.get(norm(email)) : null);
+        const tel = normalizarTelefone(row.telefone);
+        const existente = porExt.get(ext) || (tel ? porTel.get(tel) : null) || (email ? porEmail.get(norm(email)) : null);
         if (existente) {
           jaTinha++;
           // Enriquece se faltar rastreio.
@@ -210,7 +238,7 @@ async function syncOrg(supabase: any, orgId: string, dias: number, dry: boolean)
           continue;
         }
         rowsToInsert.push(row);
-        porExt.set(ext, row); if (email) porEmail.set(norm(email), row);
+        porExt.set(ext, row); if (email) porEmail.set(norm(email), row); if (tel) porTel.set(tel, row);
         inseridosInfo.push({ nome: String(row.nome || "(sem nome)"), email: email || "", ad: String(row.ad_name || "") });
       }
     }
@@ -220,7 +248,9 @@ async function syncOrg(supabase: any, orgId: string, dias: number, dry: boolean)
   const det: string[] = [];
   if (!dry) {
     if (rowsToInsert.length) {
-      const { error } = await supabase.from("leads").insert(rowsToInsert);
+      // upsert com ignoreDuplicates: o índice único (org_id, telefone_norm) é a rede
+      // de segurança — um conflito ignora a linha em vez de derrubar o lote inteiro.
+      const { error } = await supabase.from("leads").upsert(rowsToInsert, { onConflict: "org_id,telefone_norm", ignoreDuplicates: true });
       if (error) det.push(`⚠️ erro ao inserir: ${error.message}`); else inseridos = rowsToInsert.length;
     }
     for (const u of updates) {

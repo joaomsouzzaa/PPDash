@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Normaliza telefone BR p/ chave de dedup (últimos 11 díg., tira 55). Espelha _shared/telefone.ts.
+function normalizarTelefone(raw?: string | null): string | null {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (!d) return null;
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  if (d.length > 11) d = d.slice(-11);
+  return d || null;
+}
+
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 
 const CLINT = "https://api.clint.digital/v1";
@@ -15,6 +24,22 @@ function svc() {
 }
 const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
 const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+// Busca TODOS os leads (paginado). O PostgREST devolve no máx. 1000 linhas por
+// request; sem paginar, o snapshot de dedup fica incompleto e o sync duplica/
+// não vincula os leads além da linha 1000.
+async function fetchAllLeads(supabase: any, cols: string, orgId: string | null): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    let q = supabase.from("leads").select(cols).range(from, from + 999);
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data, error } = await q;
+    if (error || !data || !data.length) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
 
 async function clintGet(path: string): Promise<any> {
   const r = await fetch(`${CLINT}${path}`, { headers: { "api-token": Deno.env.get("CLINT_API_TOKEN") || "" } });
@@ -74,12 +99,12 @@ Deno.serve(async (req) => {
     for (const d of deals) if (d.id && !candidatos.has(d.id)) candidatos.set(d.id, d);
 
     // 2) Snapshot do nosso banco: já-temos por deal_id e leads por email (p/ vincular o que o webhook salvou).
-    let q2 = supabase.from("leads").select("id, email, data_lead, clint_deal_id");
-    if (orgId) q2 = q2.eq("org_id", orgId);
-    const { data: nossos } = await q2;
+    const nossos = await fetchAllLeads(supabase, "id, email, telefone, data_lead, clint_deal_id", orgId);
     const existSet = new Set((nossos || []).map((l: any) => l.clint_deal_id).filter(Boolean));
     const porEmail = new Map<string, any[]>();
     for (const l of nossos || []) { const e = norm(l.email || ""); if (!e) continue; (porEmail.get(e) || porEmail.set(e, []).get(e)).push(l); }
+    const porTel = new Map<string, any[]>();
+    for (const l of nossos || []) { const t = normalizarTelefone(l.telefone); if (!t) continue; (porTel.get(t) || porTel.set(t, []).get(t)).push(l); }
 
     // 3) Para cada negócio: vincular (backfill deal_id num lead do webhook) ou inserir.
     const inseridos: { nome: string; email: string; stage: string; motivo: string; origem: string; criado: string; utm_source: string | null }[] = [];
@@ -90,11 +115,23 @@ Deno.serve(async (req) => {
     let vinculados = 0;
     for (const d of candidatos.values()) {
       if (existSet.has(d.id)) continue; // já temos esse negócio
-      // Já temos o lead (via webhook) mas sem deal_id? Vincula em vez de duplicar.
-      const pool = (porEmail.get(norm(d.contact?.email || "")) || [])
-        .filter((l) => !l.clint_deal_id && !claimed.has(l.id))
-        .sort((a, b) => Math.abs(+new Date(a.data_lead) - +new Date(d.created_at)) - Math.abs(+new Date(b.data_lead) - +new Date(d.created_at)));
-      if (pool.length) { claimed.add(pool[0].id); vinculos.push({ id: pool[0].id, deal: d.id }); vinculados++; continue; }
+      // Já temos esse contato (por telefone ou email)? Não duplica.
+      // Se ainda não tiver deal_id, vincula (backfill); se já tiver outro deal
+      // (contato com 2º negócio), apenas pula a inserção.
+      const telDeal = normalizarTelefone(d.contact?.fullPhone || d.contact?.phone || null);
+      const emailNorm = norm(d.contact?.email || "");
+      const mesmos: any[] = [];
+      const seen = new Set<string>();
+      for (const l of [...(telDeal ? porTel.get(telDeal) || [] : []), ...(emailNorm ? porEmail.get(emailNorm) || [] : [])]) {
+        if (!seen.has(l.id)) { seen.add(l.id); mesmos.push(l); }
+      }
+      if (mesmos.length) {
+        const semDeal = mesmos
+          .filter((l) => !l.clint_deal_id && !claimed.has(l.id))
+          .sort((a, b) => Math.abs(+new Date(a.data_lead) - +new Date(d.created_at)) - Math.abs(+new Date(b.data_lead) - +new Date(d.created_at)));
+        if (semDeal.length) { claimed.add(semDeal[0].id); vinculos.push({ id: semDeal[0].id, deal: d.id }); vinculados++; }
+        continue; // já temos o contato — não insere duplicata
+      }
 
       // Busca o contato completo (campos/utm). Só quando há email — sem email a busca não filtra e fica lenta.
       let f: any = {};
@@ -139,6 +176,10 @@ Deno.serve(async (req) => {
         is_venda_realizada: /venda|ganho/.test(st) ? "Sim" : null,
         custom,
       });
+      // Registra o contato para não duplicar dentro da mesma execução (ex.: 2 negócios do mesmo lead novo).
+      const marcador = { id: `pending:${d.id}`, clint_deal_id: d.id, data_lead: d.created_at };
+      if (telDeal) (porTel.get(telDeal) || porTel.set(telDeal, []).get(telDeal))!.push(marcador);
+      if (emailNorm) (porEmail.get(emailNorm) || porEmail.set(emailNorm, []).get(emailNorm))!.push(marcador);
       inseridos.push({ nome: d.contact?.name || "(sem nome)", email: d.contact?.email || "", stage: d.stage || "", motivo, origem: d._origem || "?", criado: d.created_at, utm_source: f.utm_source || null });
     }
 
@@ -148,7 +189,8 @@ Deno.serve(async (req) => {
     }
 
     if (!dry && rowsToInsert.length) {
-      const { error } = await supabase.from("leads").insert(rowsToInsert);
+      // upsert com ignoreDuplicates: rede de segurança do índice único (org_id, telefone_norm).
+      const { error } = await supabase.from("leads").upsert(rowsToInsert, { onConflict: "org_id,telefone_norm", ignoreDuplicates: true });
       if (error) {
         for (const i of inseridos) naoInseridos.push({ nome: i.nome, email: i.email, motivo: "erro ao inserir: " + error.message });
         inseridos.length = 0;

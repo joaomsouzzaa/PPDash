@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Normaliza telefone BR p/ chave de dedup (últimos 11 díg., tira 55). Espelha _shared/telefone.ts.
+function normalizarTelefone(raw?: string | null): string | null {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (!d) return null;
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  if (d.length > 11) d = d.slice(-11);
+  return d || null;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -153,11 +162,12 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (data) existingId = data.id;
     }
-    if (!existingId && telefone) {
+    const telefoneNorm = normalizarTelefone(telefone);
+    if (!existingId && telefoneNorm) {
       const { data } = await supabase
         .from("leads")
         .select("id")
-        .eq("telefone", telefone)
+        .eq("telefone_norm", telefoneNorm)
         .eq("org_id", orgId)
         .order("data_lead", { ascending: false })
         .limit(1)
